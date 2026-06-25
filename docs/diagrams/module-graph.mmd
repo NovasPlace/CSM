@@ -1,0 +1,62 @@
+```mermaid
+flowchart TD
+    %% Entry Point
+    index["index.ts\n(Plugin Main)"]
+    
+    %% Core Modules
+    index --> Config["config.ts\n(PluginConfig, AutoDocsConfig)"]
+    index --> Types["types.ts\n(All interfaces)"]
+    index --> DB["database.ts\n(PostgreSQL Pool)"]
+    
+    %% Memory System
+    index --> MemMgr["memory-manager.ts\n(MemoryManager)"]
+    MemMgr --> Extractor["memory-extractor.ts\n(MemoryExtractor)"]
+    Extractor --> Distiller["tool-distiller.ts\n(ToolDistiller)"]
+    
+    %% Context System
+    index --> Cache["context-cache.ts\n(ContextCache)"]
+    index --> Compactor["context-compactor.ts\n(ContextCompactor)"]
+    index --> Recall["context-recall.ts\n(ContextRecall)"]
+    
+    %% Background Processing
+    index --> Subconscious["subconscious.ts\n(Subconscious Processor)"]
+    Subconscious --> Compactor
+    Subconscious --> MemMgr
+    
+    %% Hooks
+    index --> Hooks["hooks/\n(tool-execute, system-transform,\nsession-compaction, auto-docs)"]
+    Hooks --> ToolExec["tool-execute.ts"]
+    Hooks --> SysTrans["system-transform.ts"]
+    Hooks --> SessComp["session-compaction.ts"]
+    Hooks --> AutoDocs["auto-docs.ts"]
+    
+    %% Supporting
+    index --> GitWatch["git-watcher.ts\n(GitWatcher)"]
+    index --> LoopDetect["loop-detector.ts\n(LoopDetector)"]
+    index --> Priming["priming-engine.ts\n(PrimingEngine)"]
+    index --> CtxCtx["plugin-context.ts\n(PluginContext)"]
+    
+    %% External
+    DB -.->|pg| Postgres[("PostgreSQL")]
+    MemMgr -.->|vector| Embeddings[("Embedding API")]
+    
+    %% Config drives behavior
+    Config -.-> MemMgr
+    Config -.-> Cache
+    Config -.-> Compactor
+    Config -.-> Recall
+    Config -.-> Subconscious
+    Config -.-> AutoDocs
+    
+    classDef core fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef memory fill:#1e3a5f,stroke:#22d3ee,stroke-width:2px,color:#fff
+    classDef context fill:#1e293b,stroke:#f59e0b,stroke-width:2px,color:#fff
+    classDef hooks fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff
+    classDef external fill:#450a0a,stroke:#ef4444,stroke-width:2px,color:#fff,stroke-dasharray: 5 5
+    
+    class index,Config,Types,DB core
+    class MemMgr,Extractor,Distiller memory
+    class Cache,Compactor,Recall context
+    class Hooks,ToolExec,SysTrans,SessComp,AutoDocs hooks
+    class Postgres,Embeddings external
+```

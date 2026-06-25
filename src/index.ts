@@ -13,6 +13,7 @@ import { ContextRecallDaemon } from './context-recall.js';
 import { SubconsciousWatcher } from './subconscious.js';
 import { GitWatcher } from './git-watcher.js';
 import { LoopDetector } from './loop-detector.js';
+import { flushDocUpdates } from './hooks/auto-docs.js';
 import { ContextPressure } from './context-pressure.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
@@ -696,6 +697,7 @@ export default async (
       
       await memoryManager.cleanup();
       await database.disconnect();
+      await flushDocUpdates(pluginCtx);
       
       console.log('[CrossSessionMemory] Disposed');
     },

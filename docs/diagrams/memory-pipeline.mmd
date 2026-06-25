@@ -1,0 +1,50 @@
+```mermaid
+flowchart TD
+    %% Input
+    Input[("User/Tool Events")]
+    
+    %% Extraction
+    Input --> Extractor["MemoryExtractor\n(LLM-based)"]
+    Extractor -->|analyzes| ToolCalls["Tool Calls\n+ Results"]
+    Extractor -->|analyzes| Errors["Errors\n+ Fixes"]
+    Extractor -->|analyzes| Patterns["Patterns\n+ Decisions"]
+    
+    %% Output: Structured Memories
+    Extractor --> Episodic["Episodic\n(what happened"]
+    Extractor --> Procedural["how we did it"]
+    Extractor --> Semantic["facts/conventions"]
+    Extractor --> Lessons["lessons learned"]
+    
+    %% Storage
+    Episodic --> PG[("PostgreSQL\nmemories table")]
+    Procedural --> PG
+    Semantic --> PG
+    Lessons --> PG
+    
+    %% Retrieval
+    PG --> Recall["ContextRecall\n(recallMemories)"]
+    Recall -->|semantic search| Results["Relevant Memories"]
+    
+    %% Injection
+    Results --> Priming["PrimingEngine\n(buildPrimingContext)"]
+    Priming --> Injected[("Injected into\nAgent Context")]
+    
+    %% Background Processing
+    PG -.-> Subconscious["Subconscious\n(periodic)"]
+    Subconscious -->|distills| Distilled["Distilled Summaries"]
+    Subconscious -->|extracts| Lessons
+    Distilled --> PG
+    
+    %% TTL Cleanup
+    PG -.->|TTL expiry| Cleanup["cleanup()\ndeletes old"]
+    
+    classDef proc fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef mem fill:#1e3a5f,stroke:#22d3ee,stroke-width:2px,color:#fff
+    classDef store fill:#450a0a,stroke:#ef4444,stroke-width:2px,color:#fff,stroke-dasharray: 5 5
+    classDef bg fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff
+    
+    class Extractor,Recall,Priming proc
+    class Episodic,Procedural,Semantic,Lessons,Results,Distilled mem
+    class PG store
+    class Subconscious,Cleanup bg
+```

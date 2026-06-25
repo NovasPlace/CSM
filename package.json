@@ -9,7 +9,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "test": "node --experimental-strip-types --test test/compaction.test.ts test/assistant-compactor.test.ts test/checkpoint.test.ts test/auto-checkpoint.test.ts test/context-compiler.test.ts test/context-cache.test.ts test/context-cache-store.test.ts test/context-cache-runtime.test.ts"
+    "test": "node --experimental-strip-types --test test/compaction.test.ts test/assistant-compactor.test.ts test/checkpoint.test.ts test/auto-checkpoint.test.ts test/context-compiler.test.ts test/context-cache.test.ts test/context-cache-store.test.ts test/context-cache-runtime.test.ts test/auto-docs.test.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.17.0",

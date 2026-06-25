@@ -1,0 +1,53 @@
+```mermaid
+flowchart TD
+    %% Trigger
+    ToolCall["tool.execute\n(write/edit)"] --> Hook["tool-execute.ts\nafter hook"]
+    
+    %% Queue
+    Hook --> Queue["queueDocUpdate\n(filePath, changeType)"]
+    
+    %% Noise Guard
+    Queue --> Enabled{"autoDocs\nenabled?"}
+    Enabled -->|no| End[("skip")]
+    Enabled -->|yes| Ignored{"path in\nignoredPaths?"}
+    Ignored -->|yes| End
+    Ignored -->|no| Dedup["Deduplicate\nby filePath"]
+    
+    %% Pending Updates
+    Dedup --> Pending["pendingUpdates\nMap<filePath, Update>"]
+    
+    %% Session End
+    SessionEnd["session dispose"] --> Flush["flushDocUpdates\n(pluginCtx)"]
+    
+    %% Flush Logic
+    Flush --> Group["Group by\nfile type/dir"]
+    Group --> Changelog["Update\nCHANGELOG_LIVE.md"]
+    Group --> SystemMap["Update\nSYSTEM_MAP.md\n(if arch change)"]
+    Group --> Decisions["Update\nDECISIONS.md\n(if decision)"]
+    Group --> Debug["Update\nDEBUG_NOTES.md\n(if error)"]
+    Group --> AgentMem["Update\nAGENT_MEMORY.md\n(if lesson)"]
+    Group --> Runbook["Update\nRUNBOOK.md\n(if cmd change)"]
+    
+    %% Caps
+    Changelog --> Cap{"entries <\nmaxChangelog\nEntries?"}
+    Cap -->|no| Trim["Trim oldest"]
+    Cap -->|yes| Write["Write files"]
+    Trim --> Write
+    
+    %% Verification
+    Write --> Verify{"build +\ntests pass?"}
+    Verify -->|yes| Done[("docs current")]
+    Verify -->|no| Alert[("test fail\nreported")]
+    
+    classDef hook fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef guard fill:#7c2d12,stroke:#ef4444,stroke-width:2px,color:#fff
+    classDef update fill:#1e293b,stroke:#f59e0b,stroke-width:2px,color:#fff
+    classDef doc fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff
+    classDef verify fill:#450a0a,stroke:#ef4444,stroke-width:2px,color:#fff
+    
+    class Hook,Queue hook
+    class Enabled,Ignored,Dedup,Cap guard
+    class Pending,Group update
+    class Changelog,SystemMap,Decisions,Debug,AgentMem,Runbook doc
+    class Verify,Alert verify
+```

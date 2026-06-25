@@ -199,6 +199,15 @@ export interface ContextCompilationEntry {
   pinnedCategories: Record<string, number> | null;
 }
 
+export interface AutoDocsConfig {
+  enabled: boolean;
+  ignoredPaths: string[];
+  maxChangelogEntriesPerSession: number;
+  maxEntryLength: number;
+  deduplicateEdits: boolean;
+  groupMultipleEdits: boolean;
+}
+
 export interface PluginConfig {
   databaseUrl: string;
   embeddingModel: string;
@@ -235,6 +244,8 @@ export interface PluginConfig {
   contextCache: ContextCacheConfig;
   // Phase 6 — Context rollover (cumulative token tracker + soft rollover)
   contextRollover: RolloverConfig;
+  // Phase 3 — Auto-docs noise guard
+  autoDocs: AutoDocsConfig;
 }
 
 export interface CompactorConfig {

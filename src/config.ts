@@ -101,4 +101,12 @@ export const DEFAULT_CONFIG: PluginConfig = {
     retentionDays: 30,
   },
   contextRollover: DEFAULT_ROLLOVER_CONFIG,
+  autoDocs: {
+    enabled: true,
+    ignoredPaths: ["docs/", "dist/", "node_modules/", "coverage/", ".git/"],
+    maxChangelogEntriesPerSession: 50,
+    maxEntryLength: 200,
+    deduplicateEdits: true,
+    groupMultipleEdits: true,
+  },
 };

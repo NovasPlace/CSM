@@ -1,0 +1,53 @@
+```mermaid
+flowchart TD
+    %% OpenCode Entry Points
+    OpenCode[("OpenCode Session")] --> UserMsg["onUserMessage Hook"]
+    OpenCode --> ToolCall["onToolCall Hook"]
+    
+    %% Memory Capture
+    UserMsg --> Capture["Memory Capture"]
+    ToolCall --> Capture
+    Capture -->|"Extract & Classify"| Extractor["Memory Extractor\n(distill tool calls → structured memories)"]
+    
+    %% Storage
+    Extractor --> PG[("PostgreSQL\nPersistent Memories\n14,385+ entries")]
+    
+    %% Context Cache (Short/Medium-term)
+    PG --> Cache["Context Cache\n(Working History\n~200 messages)"]
+    ToolCall --> Cache
+    
+    %% Compaction Pipeline
+    Cache --> Compactor["Context Compactor\n(93% reduction\n~151k tokens saved)"]
+    Compactor -->|"Compressed + Pinned"| Rollover["Context Rollover\n(Pressure Control)"]
+    
+    %% Recall
+    Rollover --> Recall["Context Recall\n(Relevant memories\nfor current task)"]
+    PG --> Recall
+    Cache --> Recall
+    
+    %% Injected Context
+    Recall --> Injected["Injected Context\n(System prompt +\nworking history +\nrelevant memories)"]
+    
+    %% Live Docs
+    Injected --> LiveDocs["Live Documentation\n(SYSTEM_MAP, CHANGELOG,\nDECISIONS, DEBUG, AGENT_MEM,\nRUNBOOK)"]
+    ToolCall -->|"Auto-docs Hook"| LiveDocs
+    
+    %% Auto-docs Flow
+    LiveDocs --> Queue["Queue Doc Updates\n(dedup, group, cap)"]
+    Queue --> Flush["Session Dispose\n→ Flush Docs"]
+    
+    %% Checkpoints
+    Cache --> Checkpoints["Checkpoints\n(Recovery Points)"]
+    Checkpoints -.-> Recall
+    
+    %% Styling
+    classDef storage fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef process fill:#0f172a,stroke:#22d3ee,stroke-width:2px,color:#fff
+    classDef hook fill:#1e293b,stroke:#f59e0b,stroke-width:2px,color:#fff
+    classDef output fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff
+    
+    class PG,Cache,Checkpoints storage
+    class Capture,Extractor,Compactor,Rollover,Recall,Queue,Flush process
+    class UserMsg,ToolCall hook
+    class Injected,LiveDocs output
+```

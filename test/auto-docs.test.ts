@@ -1,0 +1,198 @@
+import { describe, it, beforeEach, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import {
+  queueDocUpdate,
+  getPendingUpdates,
+  clearPendingUpdates,
+  isIgnoredPath,
+  flushDocUpdates,
+  DEFAULT_AUTO_DOCS_CONFIG,
+} from "../dist/hooks/auto-docs.js";
+import { promises as fs } from "fs";
+import { join } from "path";
+
+const TMP_DOCS = join(process.cwd(), "docs");
+const CHANGELOG_PATH = join(TMP_DOCS, "CHANGELOG_LIVE.md");
+
+describe("auto-docs", () => {
+  beforeEach(() => {
+    clearPendingUpdates();
+  });
+
+  describe("queueDocUpdate", () => {
+    it("queues a write update", () => {
+      queueDocUpdate("src/index.ts", "write");
+      const pending = getPendingUpdates();
+      assert.equal(pending.length, 1);
+      assert.equal(pending[0].filePath, "src/index.ts");
+      assert.equal(pending[0].changeType, "write");
+    });
+
+    it("queues an edit update", () => {
+      queueDocUpdate("src/config.ts", "edit");
+      const pending = getPendingUpdates();
+      assert.equal(pending.length, 1);
+      assert.equal(pending[0].changeType, "edit");
+    });
+
+    it("ignores docs/ paths", () => {
+      queueDocUpdate("docs/CHANGELOG_LIVE.md", "write");
+      const pending = getPendingUpdates();
+      assert.equal(pending.length, 0);
+    });
+
+    it("ignores dist/ paths", () => {
+      queueDocUpdate("dist/index.js", "write");
+      assert.equal(getPendingUpdates().length, 0);
+    });
+
+    it("ignores node_modules/ paths", () => {
+      queueDocUpdate("node_modules/foo/index.js", "write");
+      assert.equal(getPendingUpdates().length, 0);
+    });
+
+    it("ignores .git/ paths", () => {
+      queueDocUpdate(".git/config", "write");
+      assert.equal(getPendingUpdates().length, 0);
+    });
+
+    it("deduplicates same file edits", () => {
+      queueDocUpdate("src/index.ts", "write");
+      queueDocUpdate("src/index.ts", "edit");
+      const pending = getPendingUpdates();
+      assert.equal(pending.length, 1);
+      assert.equal(pending[0].changeType, "edit");
+    });
+
+    it("respects maxChangelogEntriesPerSession cap", () => {
+      const config = {
+        config: {
+          autoDocs: {
+            ...DEFAULT_AUTO_DOCS_CONFIG,
+            maxChangelogEntriesPerSession: 2,
+          },
+        },
+      };
+      queueDocUpdate("src/a.ts", "write", config as any);
+      queueDocUpdate("src/b.ts", "write", config as any);
+      queueDocUpdate("src/c.ts", "write", config as any);
+      assert.equal(getPendingUpdates().length, 2);
+    });
+
+    it("skips when enabled=false in config", () => {
+      const config = {
+        config: {
+          autoDocs: { ...DEFAULT_AUTO_DOCS_CONFIG, enabled: false },
+        },
+      };
+      queueDocUpdate("src/index.ts", "write", config as any);
+      assert.equal(getPendingUpdates().length, 0);
+    });
+
+    it("allows different files to be queued", () => {
+      queueDocUpdate("src/a.ts", "write");
+      queueDocUpdate("src/b.ts", "edit");
+      assert.equal(getPendingUpdates().length, 2);
+    });
+  });
+
+  describe("isIgnoredPath", () => {
+    const ignored = ["docs/", "dist/", "node_modules/", ".git/"];
+
+    it("matches docs/ path", () => {
+      assert.equal(isIgnoredPath("docs/SYSTEM_MAP.md", ignored), true);
+    });
+
+    it("matches nested docs/ path", () => {
+      assert.equal(isIgnoredPath("project/docs/foo.md", ignored), true);
+    });
+
+    it("matches dist/ path", () => {
+      assert.equal(isIgnoredPath("dist/index.js", ignored), true);
+    });
+
+    it("does not match src/ path", () => {
+      assert.equal(isIgnoredPath("src/index.ts", ignored), false);
+    });
+
+    it("handles Windows backslash paths", () => {
+      assert.equal(isIgnoredPath("docs\\SYSTEM_MAP.md", ignored), true);
+    });
+  });
+
+  describe("flushDocUpdates", () => {
+    const testChangelog = `# CHANGELOG_LIVE.md
+
+## Development Log
+
+### 2026-06-24 — Old entry
+- old stuff
+`;
+
+    beforeEach(async () => {
+      clearPendingUpdates();
+      await fs.mkdir(TMP_DOCS, { recursive: true });
+      await fs.writeFile(CHANGELOG_PATH, testChangelog, "utf-8");
+    });
+
+    afterEach(async () => {
+      clearPendingUpdates();
+      try {
+        const original = `# CHANGELOG_LIVE.md
+
+## Development Log
+
+### 2026-06-24 — Old entry
+- old stuff
+`;
+        await fs.writeFile(CHANGELOG_PATH, original, "utf-8");
+      } catch {}
+    });
+
+    it("writes changelog entry on flush", async () => {
+      queueDocUpdate("src/new-feature.ts", "write");
+      await flushDocUpdates();
+
+      const content = await fs.readFile(CHANGELOG_PATH, "utf-8");
+      assert.ok(content.includes("new-feature.ts"));
+      assert.ok(content.includes("Auto-Documented"));
+    });
+
+    it("groups multiple edits of same changeType", async () => {
+      queueDocUpdate("src/a.ts", "write");
+      queueDocUpdate("src/b.ts", "write");
+      await flushDocUpdates();
+
+      const content = await fs.readFile(CHANGELOG_PATH, "utf-8");
+      assert.ok(content.includes("`src/a.ts`"));
+      assert.ok(content.includes("`src/b.ts`"));
+    });
+
+    it("does not flush twice", async () => {
+      queueDocUpdate("src/a.ts", "write");
+      await flushDocUpdates();
+      await flushDocUpdates();
+
+      const content = await fs.readFile(CHANGELOG_PATH, "utf-8");
+      const count = content.split("Auto-Documented").length - 1;
+      assert.equal(count, 1);
+    });
+
+    it("handles empty queue gracefully", async () => {
+      await flushDocUpdates();
+
+      const content = await fs.readFile(CHANGELOG_PATH, "utf-8");
+      assert.ok(!content.includes("Auto-Documented"));
+    });
+
+    it("prevents recursive doc-update loops by ignoring docs/", async () => {
+      queueDocUpdate("docs/CHANGELOG_LIVE.md", "write");
+      queueDocUpdate("src/real-file.ts", "write");
+      await flushDocUpdates();
+
+      const content = await fs.readFile(CHANGELOG_PATH, "utf-8");
+      assert.ok(!content.includes("`docs/CHANGELOG_LIVE.md`"));
+      assert.ok(content.includes("`src/real-file.ts`"));
+    });
+  });
+});

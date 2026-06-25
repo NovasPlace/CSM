@@ -1,5 +1,6 @@
 import type { PluginContext } from '../plugin-context.js';
 import type { ToolCallRecord } from '../types.js';
+import { queueDocUpdate, flushDocUpdates } from './auto-docs.js';
 
 /**
  * tool.execute.before — Fires before any tool call.
@@ -159,9 +160,10 @@ async function logToolUsage(
     });
   }
 
-  // Log file operations
+  // Log file operations + queue doc updates
   if (input.tool === 'write' || input.tool === 'edit') {
     const filePath = input.args?.filePath ?? input.args?.path ?? 'unknown';
+    queueDocUpdate(filePath, input.tool === 'write' ? 'write' : 'edit');
     await ctx.memoryManager.saveMemory({
       content: `File ${input.tool === 'write' ? 'written' : 'edited'}: ${filePath}`,
       type: 'episodic',

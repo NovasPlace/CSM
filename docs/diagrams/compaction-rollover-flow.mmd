@@ -1,0 +1,55 @@
+```mermaid
+flowchart TD
+    %% Context Entry
+    Session["Active Session"] --> Context["Context Cache\n(ToolCallRecord[])"]
+    
+    %% Compaction Trigger
+    Context --> CheckTokens{"tokens >\ncompaction\nthreshold?"}
+    CheckTokens -->|no| Continue[("continue")]
+    CheckTokens -->|yes| Compactor["ContextCompactor"]
+    
+    %% Compaction Process
+    Compactor --> Analyze["Analyze tool calls\nfor patterns"]
+    Analyze --> Group["Group consecutive\ncalls by intent"]
+    Group --> Distill["ToolDistiller\n→ summary"]
+    Distill --> Compress["Replace raw calls\nwith distilled refs"]
+    Compress --> Summary["CompactionSummary\n(tokens saved, cuts)"]
+    
+    %% Rollover Trigger
+    Context --> CheckRollover{"tokens >\nrollover\nthreshold?"}
+    CheckRollover -->|no| Continue2[("continue")]
+    CheckRollover -->|yes| Rollover["ContextRollover"]
+    
+    %% Rollover Process
+    Rollover --> Classify["Classify memories\nby type/importance"]
+    Classify --> Promote["Promote important\nto pinned category"]
+    Promote --> Archive["Archive others\nto external store"]
+    Archive --> Prune["Prune low-importance\nfrom context"]
+    Prune --> RolloverSummary["RolloverSummary\n(memories moved)"]
+    
+    %% Subconscious (Background)
+    Session --> Subconscious["Subconscious\n(background)"]
+    Subconscious -->|periodic| ExtractMem["Extract memories\nfrom recent turns"]
+    ExtractMem --> Classify2["Classify:\nEpisodic/Procedural/Semantic"]
+    Classify2 --> Store["Store in\nPostgreSQL"]
+    
+    %% Recovery
+    Session --> Checkpoint["Checkpoint\n(risky edits)"]
+    Checkpoint --> Save["Save raw tool\noutput + state"]
+    Save --> Recover["expand_checkpoint_ref\n→ full detail"]
+    
+    %% Output
+    Summary --> Context
+    RolloverSummary --> Context
+    Store --> PostgreSQL[("PostgreSQL\nMemory DB")]
+    
+    classDef trigger fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef process fill:#1e293b,stroke:#f59e0b,stroke-width:2px,color:#fff
+    classDef storage fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff
+    classDef recovery fill:#7c2d12,stroke:#ef4444,stroke-width:2px,color:#fff
+    
+    class CheckTokens,CheckRollover trigger
+    class Compactor,Analyze,Group,Distill,Compress,Rollover,Classify,Promote,Archive,Prune,ExtractMem,Classify2 process
+    class PostgreSQL,Summary,RolloverSummary storage
+    class Checkpoint,Save,Recover recovery
+```
