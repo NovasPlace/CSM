@@ -22,7 +22,8 @@
 | `src/subconscious.ts` | Background memory consolidation, distillation | `Subconscious` class |
 | `src/context-compactor.ts` | Compresses tool outputs for context window. Budget cap, expandable refs, telemetry. | `ContextCompactor` class, `createContextCompactor()` |
 | `src/tool-distiller.ts` | Distills tool activity into structured summaries | `ToolDistiller` class |
-| `src/hooks/auto-docs.ts` | Auto-updates live docs on file edits, flushes on session end. Noise guard: dedup, grouping, ignored paths, caps, config toggle. | `queueDocUpdate()`, `flushDocUpdates()`, `isIgnoredPath()`, `DEFAULT_AUTO_DOCS_CONFIG` |
+| `src/hooks/auto-docs.ts` | Auto-updates live docs on file edits, flushes on session end. Noise guard: dedup, grouping, ignored paths, caps, config toggle. | `queueDocUpdate()`, `flushDocUpdates()`, `isIgnoredPath()`, `DEFAULT_AUTO_DOCS_CONFIG`, `resetFlushedFlag()` |
+| `src/hooks/doc-analyzer.ts` | LLM-powered code change analyzer; categorizes changes and updates all live docs (SYSTEM_MAP, DECISIONS, DEBUG_NOTES, DEBUG_NOTES, AGENT_MEMORY, RUNBOOK) | `autoDocumentChange()`, `analyzeChange()`, `updateAllDocs()` |
 | `src/database.ts` | PostgreSQL schema + migrations (project_id, tracking fields) | `migrateProjectIsolation()` |
 | `src/hooks/tool-execute.ts` | Tool execution hook — logs to memory + queues doc updates | `registerToolExecuteHook()` |
 | `src/hooks/system-transform.ts` | System prompt transformation hook | `registerSystemTransformHook()` |
@@ -30,6 +31,81 @@
 
 ---
 
+
+**src/new-feature.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/new-feature.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/new-feature.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/new-feature.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/new-feature.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/new-feature.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/a.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/b.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/a.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/real-file.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/new-feature.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/a.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/b.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/a.ts**
+- Exports: none
+- Imports: 
+- Type: source
+
+**src/real-file.ts**
+- Exports: none
+- Imports: 
+- Type: source
 ## Data Flow
 
 ```
