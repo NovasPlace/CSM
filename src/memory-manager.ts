@@ -116,15 +116,29 @@ export class MemoryManager {
   async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     const pool = this.database.getPool();
     
+    // Get project_id from session if available
+    let projectId: string | null = null;
+    if (options.sessionId) {
+      const sessionResult = await pool.query(
+        'SELECT project_id FROM sessions WHERE id = $1',
+        [options.sessionId]
+      );
+      if (sessionResult.rows.length > 0) {
+        const row = sessionResult.rows[0] as { project_id: string | null };
+        projectId = row.project_id ?? null;
+      }
+    }
+    
     // Insert memory
     const result = await pool.query(
       `INSERT INTO memories (
-        session_id, memory_type, content, importance, emotion,
+        session_id, project_id, memory_type, content, importance, emotion,
         confidence, source, tags, linked_memory_ids, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         options.sessionId,
+        projectId,
         options.type,
         options.content,
         options.importance ?? 0.5,
@@ -226,7 +240,7 @@ export class MemoryManager {
     const queryEmbedding = await this.embeddings.generate(options.query);
     const embeddingString = `[${queryEmbedding.join(',')}]`;
 
-    // Build query
+    // Build query with project scoping
     let query = `
       SELECT m.*, 
         1 - (mc.embedding <=> $1::vector) AS similarity
@@ -236,6 +250,20 @@ export class MemoryManager {
     `;
     const params: unknown[] = [embeddingString];
     let paramIndex = 2;
+
+    // Project scoping logic
+    const searchMode = options.searchMode ?? 'project';
+    
+    if (searchMode === 'project' && options.projectId) {
+      query += ` AND m.project_id = $${paramIndex}`;
+      params.push(options.projectId);
+      paramIndex++;
+    } else if (searchMode === 'legacy') {
+      query += ` AND (m.project_id = $${paramIndex} OR m.project_id IS NULL)`;
+      params.push(options.projectId);
+      paramIndex++;
+    }
+    // 'global' mode: no project filter
 
     if (options.type) {
       query += ` AND m.memory_type = $${paramIndex}`;
@@ -287,6 +315,17 @@ export class MemoryManager {
     let query = 'SELECT * FROM memories WHERE 1=1';
     const params: unknown[] = [];
     let paramIndex = 1;
+
+    if (options.projectId) {
+      query += ` AND project_id = $${paramIndex}`;
+      params.push(options.projectId);
+      paramIndex++;
+    } else if (options.searchMode === 'project') {
+      // Default to current project if available
+      // This would need context awareness - for now skip
+    } else if (options.searchMode === 'legacy') {
+      query += ` AND project_id IS NULL`;
+    }
 
     if (options.type) {
       query += ` AND memory_type = $${paramIndex}`;
@@ -341,16 +380,15 @@ export class MemoryManager {
   /**
    * Get recent memories for a project
    */
-  async getRecentProjectMemories(projectPath: string, limit: number = 20): Promise<Memory[]> {
+  async getRecentProjectMemories(projectId: string, limit: number = 20): Promise<Memory[]> {
     const pool = this.database.getPool();
     
     const result = await pool.query(
-      `SELECT m.* FROM memories m
-       JOIN sessions s ON m.session_id = s.id
-       WHERE s.directory = $1 OR s.project_id = $1
-       ORDER BY m.created_at DESC
+      `SELECT * FROM memories 
+       WHERE project_id = $1
+       ORDER BY created_at DESC
        LIMIT $2`,
-      [projectPath, limit]
+      [projectId, limit]
     );
 
     return result.rows.map(row => this.mapMemory(row as Record<string, unknown>));
@@ -514,6 +552,7 @@ export class MemoryManager {
     return {
       id: row.id as number,
       sessionId: row.session_id as string | undefined,
+      projectId: row.project_id as string | undefined,
       memoryType: row.memory_type as MemoryType,
       content: row.content as string,
       importance: row.importance as number,

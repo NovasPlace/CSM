@@ -1,0 +1,37 @@
+```mermaid
+flowchart TD
+    %% Project Detection
+    Workspace["Workspace Root Path"] --> Hash["Stable Hash\n(project_id)"]
+    Hash --> Session["OpenCode Session"]
+    
+    %% Memory Operations
+    Session --> SaveMem["saveMemory()\nwith project_id"]
+    Session --> Recall["contextRecall\nproject-scoped"]
+    Session --> Search["searchMemories()\nproject-scoped"]
+    
+    %% Scoped Recall
+    Recall --> Query["SELECT * FROM memories\nWHERE project_id = $1\nORDER BY importance DESC"]
+    Query -->|Current Project| Results["Project Memories"]
+    Query -->|Legacy Fallback| Legacy["NULL project_id\n(high importance)"]
+    
+    %% Search Modes
+    Search --> Mode{"searchMode"}
+    Mode -->|project| ProjQ["WHERE project_id = $1"]
+    Mode -->|legacy| LegQ["WHERE project_id IS NULL"]
+    Mode -->|global| GlobQ["No project filter"]
+    
+    %% Database
+    subgraph DB["PostgreSQL"]
+        ProjQ --> Memories["memories table\n+ project_id index"]
+        LegQ --> Memories
+        GlobQ --> Memories
+        SaveMem --> Memories
+    end
+    
+    %% Legacy Preservation
+    Legacy -.->|Preserved, not deleted| Memories
+    
+    style Session fill:#e8f5e9
+    style Memories fill:#fff3e0
+    style Legacy fill:#fce4ec
+```

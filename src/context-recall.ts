@@ -13,7 +13,7 @@ export class ContextRecallDaemon {
   private interval: number; // seconds
   private timer: ReturnType<typeof setInterval> | null = null;
   private currentSessionId: string | null = null;
-  private currentProjectPath: string | null = null;
+  private currentProjectId: string | null = null;
 
   constructor(database: Database, interval: number = 90) {
     this.database = database;
@@ -58,16 +58,16 @@ export class ContextRecallDaemon {
   /**
    * Set current session context
    */
-  setSession(sessionId: string, projectPath: string): void {
+  setSession(sessionId: string, projectId: string): void {
     this.currentSessionId = sessionId;
-    this.currentProjectPath = projectPath;
+    this.currentProjectId = projectId;
   }
 
   /**
    * Refresh context for a known active session immediately.
    */
-  async refreshSession(sessionId: string, projectPath: string): Promise<ContextBrief> {
-    this.setSession(sessionId, projectPath);
+  async refreshSession(sessionId: string, projectId: string): Promise<ContextBrief> {
+    this.setSession(sessionId, projectId);
     return this.buildContext();
   }
 
@@ -187,12 +187,9 @@ export class ContextRecallDaemon {
     const params: unknown[] = [];
     let paramIndex = 1;
 
-    if (this.currentProjectPath) {
-      query += ` AND session_id IN (
-        SELECT id FROM sessions
-        WHERE directory = $${paramIndex} OR project_id = $${paramIndex}
-      )`;
-      params.push(this.currentProjectPath);
+    if (this.currentProjectId) {
+      query += ` AND project_id = $${paramIndex}`;
+      params.push(this.currentProjectId);
       paramIndex++;
     }
 
@@ -215,12 +212,9 @@ export class ContextRecallDaemon {
     const params: unknown[] = [];
     let paramIndex = 1;
 
-    if (this.currentProjectPath) {
-      query += ` AND session_id IN (
-        SELECT id FROM sessions
-        WHERE directory = $${paramIndex} OR project_id = $${paramIndex}
-      )`;
-      params.push(this.currentProjectPath);
+    if (this.currentProjectId) {
+      query += ` AND project_id = $${paramIndex}`;
+      params.push(this.currentProjectId);
       paramIndex++;
     }
 
@@ -243,12 +237,9 @@ export class ContextRecallDaemon {
     const params: unknown[] = [];
     let paramIndex = 1;
 
-    if (this.currentProjectPath) {
-      query += ` AND session_id IN (
-        SELECT id FROM sessions
-        WHERE directory = $${paramIndex} OR project_id = $${paramIndex}
-      )`;
-      params.push(this.currentProjectPath);
+    if (this.currentProjectId) {
+      query += ` AND project_id = $${paramIndex}`;
+      params.push(this.currentProjectId);
       paramIndex++;
     }
 

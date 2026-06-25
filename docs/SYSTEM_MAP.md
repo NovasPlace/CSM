@@ -23,6 +23,7 @@
 | `src/context-compactor.ts` | Compresses tool outputs for context window | `ContextCompactor` class |
 | `src/tool-distiller.ts` | Distills tool activity into structured summaries | `ToolDistiller` class |
 | `src/hooks/auto-docs.ts` | Auto-updates live docs on file edits, flushes on session end. Noise guard: dedup, grouping, ignored paths, caps, config toggle. | `queueDocUpdate()`, `flushDocUpdates()`, `isIgnoredPath()`, `DEFAULT_AUTO_DOCS_CONFIG` |
+| `src/database.ts` | PostgreSQL schema + migrations (project_id, tracking fields) | `migrateProjectIsolation()` |
 | `src/hooks/tool-execute.ts` | Tool execution hook — logs to memory + queues doc updates | `registerToolExecuteHook()` |
 | `src/hooks/system-transform.ts` | System prompt transformation hook | `registerSystemTransformHook()` |
 | `src/hooks/session-compaction.ts` | Session compaction hook | `registerSessionCompactionHook()` |
@@ -74,9 +75,29 @@ Write updated docs to /docs
 - `created_at` TIMESTAMPTZ DEFAULT NOW()
 - `updated_at` TIMESTAMPTZ DEFAULT NOW()
 - `accessed_at` TIMESTAMPTZ
+- `last_accessed_at` TIMESTAMPTZ
+- `access_count` INTEGER DEFAULT 0
+- `archived_at` TIMESTAMPTZ
+- `project_id` TEXT — nullable (NULL = legacy/global)
 - `embedding` VECTOR(1536) — for semantic search (pgvector)
 
-**Indexes**: GIN on tags, IVFFLAT on embedding, BTREE on type/importance/created_at
+**Indexes**: GIN on tags, IVFFLAT on embedding, BTREE on type/importance/created_at, BTREE on project_id, BTREE on (project_id, type, created_at)
+
+---
+
+## Project Isolation (Phase 5)
+
+**Default behavior**: Memory recall is scoped to the current project only.
+- Project ID = normalized workspace root path (stable hash)
+- `NULL` project_id = legacy/global memories (preserved, not deleted)
+- Global/legacy search requires explicit opt-in (`searchMode: 'global'`)
+
+**Recall priority**:
+1. Current project memories (exact project_id match)
+2. Legacy/global memories (NULL project_id) — only if high importance or explicitly requested
+3. Global memories — only with explicit opt-in
+
+**Tables updated**: `memories`, `session_contexts` with nullable `project_id` columns + indexes.
 
 ---
 

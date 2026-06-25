@@ -73,3 +73,12 @@
 - **Why**: Prevents recursive loops, changelog spam, meaningless entries; keeps docs signal-to-noise high
 - **Trade-off**: Slight complexity; some minor edits won't appear individually
 - **Status**: ✅ Implemented — `src/hooks/auto-docs.ts` + 20 tests in `test/auto-docs.test.ts`
+
+### 13. Project Isolation for Memory Hygiene (Phase 5)
+- **Decision**: Add nullable `project_id` to `memories` and `session_contexts`; default recall scoped to current project; legacy NULL project_id memories preserved; global/legacy search requires explicit opt-in
+- **Why**: Prevents cross-project memory pollution (Locus ↔ OpenCode plugin ↔ game projects); 14k+ memories need scope
+- **Trade-off**: Migration complexity; nullable column for backward compatibility
+- **Status**: ✅ Schema migration in `database.ts`; query paths updated in `MemoryManager`, `ContextRecall`, `index.ts`
+- **Project ID**: Stable hash of normalized workspace root path (local-first, no Git dependency)
+- **Recall modes**: `project` (default) | `legacy` (NULL project_id only) | `global` (explicit opt-in)
+- **Retention**: Not automated yet — tracking fields added (`last_accessed_at`, `access_count`, `archived_at`), policy design in docs only

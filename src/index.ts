@@ -93,10 +93,12 @@ export default async (
   let messageCount = 0;
   const capturedMessageSizes = new Map<string, number>();
 
+  const projectId = ctx.directory;
+
   const syncActiveSession = (sessionId?: string): string | null => {
     if (!sessionId) return currentSessionId;
     currentSessionId = sessionId;
-    contextRecall.setSession(sessionId, ctx.directory);
+    contextRecall.setSession(sessionId, projectId);
     subconscious.setSession(sessionId);
     gitWatcher.setSession(sessionId);
     return sessionId;
@@ -105,7 +107,7 @@ export default async (
   const refreshActiveContext = async (sessionId?: string): Promise<void> => {
     const activeSessionId = syncActiveSession(sessionId);
     if (!activeSessionId) return;
-    await contextRecall.refreshSession(activeSessionId, ctx.directory);
+    await contextRecall.refreshSession(activeSessionId, projectId);
   };
 
   // recordCompactionMetric and hasToolDiscardMarker extracted to helpers/compaction-metrics.ts

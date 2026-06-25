@@ -86,6 +86,8 @@ export type MemorySource =
 
 export type SortBy = 'recent' | 'important' | 'accessed';
 
+export type MemorySearchMode = 'project' | 'legacy' | 'global';
+
 export interface Session {
   id: string;
   projectId?: string;
@@ -101,6 +103,7 @@ export interface Session {
 export interface Memory {
   id: number;
   sessionId?: string;
+  projectId?: string;
   memoryType: MemoryType;
   content: string;
   importance: number;
@@ -114,6 +117,8 @@ export interface Memory {
   updatedAt: Date;
   accessedAt: Date;
   accessCount: number;
+  lastAccessedAt?: Date;
+  archivedAt?: Date;
 }
 
 export interface MemoryChunk {
@@ -138,6 +143,7 @@ export interface MemoryEvent {
 export interface SessionContext {
   id: number;
   sessionId: string;
+  projectId?: string;
   contextBrief: string;
   episodicMemories: Memory[];
   proceduralMemories: Memory[];
@@ -374,6 +380,8 @@ export interface MemorySearchOptions {
   limit?: number;
   minImportance?: number;
   tags?: string[];
+  projectId?: string;
+  searchMode?: MemorySearchMode;
 }
 
 export interface MemoryListOptions {
@@ -381,6 +389,8 @@ export interface MemoryListOptions {
   limit?: number;
   sortBy?: SortBy;
   tags?: string[];
+  projectId?: string;
+  searchMode?: MemorySearchMode;
 }
 
 export interface DatabasePool {

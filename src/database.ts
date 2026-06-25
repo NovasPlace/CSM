@@ -64,6 +64,7 @@ export class Database {
       CREATE TABLE IF NOT EXISTS memories (
         id BIGSERIAL PRIMARY KEY,
         session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
+        project_id TEXT,
         memory_type TEXT NOT NULL CHECK (memory_type IN (
           'conversation', 'workspace', 'repo', 'preference',
           'lesson', 'episodic', 'procedural'
@@ -81,7 +82,9 @@ export class Database {
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         accessed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        access_count INT DEFAULT 0
+        access_count INT DEFAULT 0,
+        last_accessed_at TIMESTAMPTZ,
+        archived_at TIMESTAMPTZ
       )
     `);
 
@@ -116,6 +119,7 @@ export class Database {
       CREATE TABLE IF NOT EXISTS session_contexts (
         id BIGSERIAL PRIMARY KEY,
         session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
+        project_id TEXT,
         context_brief TEXT NOT NULL,
         episodic_memories JSONB DEFAULT '[]',
         procedural_memories JSONB DEFAULT '[]',
@@ -155,6 +159,18 @@ export class Database {
 
     await this.pool.query(
       `CREATE INDEX IF NOT EXISTS idx_memories_tags ON memories USING GIN(tags)
+    `);
+
+    await this.pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id)
+    `);
+
+    await this.pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived_at)
+    `);
+
+    await this.pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_session_contexts_project ON session_contexts(project_id)
     `);
 
     await this.pool.query(
@@ -221,6 +237,9 @@ export class Database {
     await this.pool.query(
       `CREATE INDEX IF NOT EXISTS idx_project_scopes_last_active ON project_scopes(last_active_at DESC)
     `);
+
+    // Migration: Add project_id and tracking columns to existing tables
+    await this.migrateProjectIsolation();
 
     // Create distilled_summaries table (Tool Call Distiller)
     await this.pool.query(
@@ -292,6 +311,86 @@ export class Database {
     await initializeGoalSchema(this.pool);
 
     console.log('[Database] Schema initialized');
+  }
+
+  private async migrateProjectIsolation(): Promise<void> {
+    if (!this.pool) return;
+    // Add project_id to memories table (nullable for backward compatibility)
+    await this.pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'memories' AND column_name = 'project_id'
+        ) THEN
+          ALTER TABLE memories ADD COLUMN project_id TEXT;
+        END IF;
+      END $$;
+    `);
+
+    // Add project_id to session_contexts table
+    await this.pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'session_contexts' AND column_name = 'project_id'
+        ) THEN
+          ALTER TABLE session_contexts ADD COLUMN project_id TEXT;
+        END IF;
+      END $$;
+    `);
+
+    // Add tracking columns to memories
+    await this.pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'memories' AND column_name = 'last_accessed_at'
+        ) THEN
+          ALTER TABLE memories ADD COLUMN last_accessed_at TIMESTAMPTZ;
+        END IF;
+      END $$;
+    `);
+
+    await this.pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'memories' AND column_name = 'access_count'
+        ) THEN
+          ALTER TABLE memories ADD COLUMN access_count INTEGER DEFAULT 0;
+        END IF;
+      END $$;
+    `);
+
+    await this.pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'memories' AND column_name = 'archived_at'
+        ) THEN
+          ALTER TABLE memories ADD COLUMN archived_at TIMESTAMPTZ;
+        END IF;
+      END $$;
+    `);
+
+    // Create project_id from sessions
+    await this.pool.query(`
+      UPDATE memories m
+      SET project_id = s.project_id
+      FROM sessions s
+      WHERE m.project_id IS NULL
+        AND m.session_id = s.session_id
+        AND s.project_id IS NOT NULL
+    `);
+
+    await this.pool.query(`
+      UPDATE session_contexts sc
+      SET project_id = s.project_id
+      FROM sessions s
+      WHERE sc.project_id IS NULL
+        AND sc.session_id = s.session_id
+        AND s.project_id IS NOT NULL
+    `);
   }
 
   getPool(): DatabasePool {
