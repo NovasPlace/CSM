@@ -234,6 +234,31 @@ export class AlchemistEngine {
     };
   }
 
+  store(lessons: Partial<AlchemistLesson>[]): void {
+    const DEFAULT_TYPE: AlchemistLessonType = 'procedure';
+    const DEFAULT_SOURCE: AlchemistSource = 'repo_scan';
+    for (const l of lessons) {
+      const id = l.id ?? `stored_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const lesson: AlchemistLesson = {
+        id,
+        type: l.type ?? DEFAULT_TYPE,
+        title: l.title ?? 'Stored lesson',
+        description: l.description ?? '',
+        trigger: l.trigger ?? '',
+        action: l.action ?? '',
+        evidence: l.evidence ?? [],
+        source: l.source ?? DEFAULT_SOURCE,
+        verified: l.verified ?? false,
+        verificationCount: l.verificationCount ?? 0,
+        confidence: l.confidence ?? 0.5,
+        retention: l.retention ?? 0.8,
+        createdAt: l.createdAt instanceof Date ? l.createdAt : new Date(l.createdAt ?? Date.now()),
+        tags: l.tags ?? [],
+      };
+      this.lessons.set(id, lesson);
+    }
+  }
+
   recall(context: string): AlchemistLesson[] {
     const contextLower = (context ?? '').toLowerCase();
     const words = contextLower.split(/\s+/);
@@ -295,6 +320,8 @@ export class AlchemistEngine {
       source,
       verified: false,
       verificationCount: 0,
+      confidence: 0.5,
+      retention: 0.8,
       createdAt: new Date(),
       tags: [type, cap.type, cap.name],
     };

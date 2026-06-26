@@ -11,7 +11,7 @@
 | `src/index.ts` | none | source | Module |
 | `src/plugin-context.ts` | AutoCheckpointFn, PluginState, PluginContext | source | Module |
 | `src/config.ts` | DEFAULT_CONFIG | source | Configuration |
-| `src/types.ts` | MemoryType, MemoryCandidateStatus, MemoryCandidate, MemoryApproval, TTLConfig, ProjectScope, ExtractorConfig, MemoryEmotion, MemorySource, SortBy, MemorySearchMode, Session, Memory, MemoryChunk, MemoryEvent, SessionContext, BudgetMode, ContextCompilerConfig, ContextCacheConfig, CompressedPartDetail, ContextCompilationEntry, ProviderPricing, CompactionReport, ToolDominanceTrendPoint, SessionAnalytics, AutoDocsConfig, PluginConfig, CompactorConfig, AssistantCompactorConfig, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics, CompactionQualityConfig, DEFAULT_COMPACTION_QUALITY_CONFIG, DistillerConfig, ToolCallRecord, ToolCallGroup, ToolCallSummary, ContextBrief, LoopDetectionResult, ContextPressureResult, RecallResult, MemorySaveOptions, MemorySearchOptions, MemoryListOptions, DatabasePool, DatabaseClient, PruneRiskLevel, PruneSignal, PruneCandidate, PruneReport, PruneConfig, AlchemistLessonType, AlchemistSource, AlchemistIngest, ExtractedCapability, AlchemistLesson, Blueprint, GapReport, AlchemistConfig, DEFAULT_PRUNE_CONFIG | source | Context compaction engine |
+| `src/types.ts` | MemoryType, MemoryCandidateStatus, MemoryCandidate, MemoryApproval, TTLConfig, ProjectScope, ExtractorConfig, MemoryEmotion, MemorySource, SortBy, MemorySearchMode, Session, Memory, MemoryChunk, MemoryEvent, SessionContext, BudgetMode, ContextCompilerConfig, ContextCacheConfig, CompressedPartDetail, ContextCompilationEntry, ProviderPricing, CompactionReport, ToolDominanceTrendPoint, SessionAnalytics, AutoDocsConfig, PluginConfig, CompactorConfig, AssistantCompactorConfig, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics, CompactionQualityConfig, DEFAULT_COMPACTION_QUALITY_CONFIG, DistillerConfig, ToolCallRecord, ToolCallGroup, ToolCallSummary, ContextBrief, LoopDetectionResult, ContextPressureResult, RecallResult, MemorySaveOptions, MemorySearchOptions, MemoryListOptions, DatabasePool, DatabaseClient, PruneRiskLevel, PruneSignal, PruneCandidate, PruneReport, PruneConfig, AlchemistLessonType, AlchemistSource, AlchemistIngest, ExtractedCapability, LessonTelemetry, AlchemistLesson, Blueprint, GapReport, AlchemistConfig, DEFAULT_PRUNE_CONFIG | source | Context compaction engine |
 | `src/tools.ts` | memorySaveTool, memorySearchTool, memoryDeleteTool, memoryContextTool, memoryLessonTool, memoryListTool, memoryTranscriptTool, memoryCandidateListTool, memoryCandidateApproveTool, memoryCandidateRejectTool, memoryProjectListTool, memoryCleanupTool, memoryDistillTool, memoryDistilledViewTool, memoryCompactTool | source | Tool registration |
 | `src/database.ts` | Database | source | PostgreSQL connection & schema |
 | `src/embeddings.ts` | EmbeddingChunk, EmbeddingConfig, EmbeddingGenerator | source | Module |
@@ -27,7 +27,7 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
-| `src/context-compiler.ts` | CompileResult, scoreCriticality, compileContext, formatStatusLine | source | Module |
+| `src/context-compiler.ts` | CompileResult, formatLessonBlock, compileContextWithLessons, scoreCriticality, compileContext, formatStatusLine | source | Module |
 | `src/context-compactor.ts` | ContextCompactor, createContextCompactor | source | Context compaction engine |
 | `src/context-pressure.ts` | Message, ContextPressure | source | Module |
 | `src/context-recall.ts` | ContextRecallDaemon | source | Memory & recall subsystem |
@@ -106,3 +106,4 @@
 - **Ollama** — local embedding generation, no external API
 - **RRF hybrid search** — vector (0.35) + text (0.25) + entity (0.35) with exact-match boosting
 - **Compaction quality gate** — entity_retention×0.35 + decision_retention×0.25 + error_retention×0.25 + similarity×0.15, reject if < 0.6
+- **Lesson-recall integration** — `compileContextWithLessons()` recalls verified past lessons via `AlchemistEngine.recall()`, ranks by type priority + confidence (threshold ≥ 0.5), injects matching lessons into future task context, and exposes what was injected via `CompileResult.injectedLessons` + `lessonTelemetry`. Bulk-load lessons via `AlchemistEngine.store()`. Makes the agent less likely to repeat old mistakes.

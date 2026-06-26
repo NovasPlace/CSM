@@ -8,7 +8,7 @@
  * Transparency: every compression produces a CompressedPartDetail with risk + preserved signals
  */
 import { estimateTokens } from './token-bucket-analyzer.js';
-import type { ContextCompilerConfig, BudgetMode, CompressedPartDetail } from './types.js';
+import type { ContextCompilerConfig, BudgetMode, CompressedPartDetail, AlchemistLesson, LessonTelemetry } from './types.js';
 
 export interface CompileResult {
   beforeTokens: number;
@@ -19,6 +19,114 @@ export interface CompileResult {
   mode: BudgetMode;
   compressedDetails: CompressedPartDetail[];
   pinnedCategories: Record<string, number>;
+  lessonTelemetry?: LessonTelemetry;
+  injectedLessons?: AlchemistLesson[];
+}
+
+const LESSON_TYPE_PRIORITY: Record<string, number> = {
+  risk_rule: 6,
+  anti_pattern: 5,
+  repair_recipe: 4,
+  validation_checklist: 3,
+  verified_pattern: 2,
+  procedure: 1,
+};
+
+function extractTaskConcepts(messages: { info?: { role?: string }; parts?: any[] }[]): string {
+  const concepts: string[] = [];
+  for (const msg of messages) {
+    const role = msg.info?.role ?? '';
+    if (role !== 'user' && role !== 'assistant') continue;
+    for (const part of msg.parts ?? []) {
+      const text = String(part.text ?? '');
+      if (text.length > 10) concepts.push(text.slice(0, 200));
+      const tool = String(part.tool ?? '');
+      if (tool) concepts.push(tool);
+      const cmd = String(part.state?.input?.command ?? '');
+      if (cmd) concepts.push(cmd.slice(0, 100));
+      const fp = String(part.state?.input?.filePath ?? part.state?.input?.pattern ?? '');
+      if (fp) concepts.push(fp);
+    }
+  }
+  return concepts.join(' ').slice(0, 2000);
+}
+
+interface LessonRecallResult {
+  lessons: AlchemistLesson[];
+  injected: AlchemistLesson[];
+  tokensUsed: number;
+}
+
+function rankLessons(lessons: AlchemistLesson[], tokenBudget: number): LessonRecallResult {
+  const CONFIDENCE_THRESHOLD = 0.5;
+  const ranked = lessons
+    .filter(l => (l.confidence ?? 1) >= CONFIDENCE_THRESHOLD)
+    .map(l => ({
+      lesson: l,
+      priority: (LESSON_TYPE_PRIORITY[l.type] ?? 0) * 10 + (l.verified ? 5 : 0) + Math.min((l.confidence ?? 0.5) * 4, 4),
+    }))
+    .sort((a, b) => b.priority - a.priority);
+
+  const injected: AlchemistLesson[] = [];
+  let tokensUsed = 0;
+  for (const { lesson } of ranked) {
+    if (injected.length >= 10) break;
+    const est = estimateTokens(`- [${lesson.type}] ${lesson.action}`);
+    if (tokensUsed + est > tokenBudget) break;
+    injected.push(lesson);
+    tokensUsed += est;
+  }
+  return { lessons: ranked.map(r => r.lesson), injected, tokensUsed };
+}
+
+export function formatLessonBlock(injected: AlchemistLesson[]): string {
+  if (injected.length === 0) return '';
+  const lines = injected.map(l => `- [${l.type}] ${l.action}`);
+  return `## Relevant Verified Lessons\n${lines.join('\n')}`;
+}
+
+export function compileContextWithLessons(
+  messages: { info?: { role?: string }; parts?: any[] }[],
+  config: ContextCompilerConfig,
+  alchemist?: { recall: (context: string) => AlchemistLesson[] },
+  lessonTokenBudget: number = 300,
+): CompileResult {
+  let telemetry: LessonTelemetry = { hits: 0, misses: 0, tokensUsed: 0, lessonsQueried: 0 };
+  let injectedLessons: AlchemistLesson[] = [];
+
+  if (alchemist) {
+    try {
+      const concepts = extractTaskConcepts(messages);
+      if (concepts.length > 10) {
+        const allRecalled = alchemist.recall(concepts);
+        telemetry.lessonsQueried = allRecalled.length;
+        if (allRecalled.length > 0) {
+          const { lessons, injected, tokensUsed } = rankLessons(allRecalled, lessonTokenBudget);
+          telemetry.hits = injected.length;
+          telemetry.misses = lessons.length - injected.length;
+          telemetry.tokensUsed = tokensUsed;
+          injectedLessons = injected;
+          if (injected.length > 0) {
+            const lessonBlock = formatLessonBlock(injected);
+            const lessonPart = { type: 'text', text: lessonBlock };
+            const lastAssistant = [...messages].reverse().find(m => m.info?.role === 'assistant');
+            if (lastAssistant) {
+              lastAssistant.parts = [...(lastAssistant.parts ?? []), lessonPart];
+            } else {
+              messages.push({ info: { role: 'assistant' }, parts: [lessonPart] });
+            }
+          }
+        }
+      }
+    } catch {
+      telemetry.misses = -1;
+    }
+  }
+
+  const result = compileContext(messages, config);
+  result.lessonTelemetry = telemetry;
+  result.injectedLessons = injectedLessons;
+  return result;
 }
 
 const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]'];

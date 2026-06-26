@@ -594,6 +594,13 @@ export interface ExtractedCapability {
   confidence: number;
 }
 
+export interface LessonTelemetry {
+  hits: number;
+  misses: number;
+  tokensUsed: number;
+  lessonsQueried: number;
+}
+
 export interface AlchemistLesson {
   id: string;
   type: AlchemistLessonType;
@@ -605,6 +612,8 @@ export interface AlchemistLesson {
   source: AlchemistSource;
   verified: boolean;
   verificationCount: number;
+  confidence: number;
+  retention: number;
   lastVerified?: Date;
   createdAt: Date;
   tags: string[];
