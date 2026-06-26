@@ -209,6 +209,57 @@ export interface ContextCompilationEntry {
   pinnedCategories: Record<string, number> | null;
 }
 
+export interface ProviderPricing {
+  inputPerMtok: number;
+  outputPerMtok: number;
+  cacheWritePerMtok: number;
+  cacheReadPerMtok: number;
+}
+
+export interface CompactionReport {
+  sessionId: string;
+  cycleId: string;
+  timestamp: Date;
+  tokensBefore: number;
+  tokensAfter: number;
+  tokensSaved: number;
+  reductionPercent: number;
+  toolTokensBefore: number;
+  toolTokensAfter: number;
+  toolDominanceBefore: number;
+  toolDominanceAfter: number;
+  compressionCount: number;
+  unsafeCompactionsRejected: number;
+  qualityScore: number;
+  estimatedCostSaved: number;
+  effectiveContextMultiplier: number;
+  budgetMode: BudgetMode;
+  budget: number;
+  pressureRatio: number;
+  details: CompressedPartDetail[] | null;
+  providerPricing?: ProviderPricing;
+}
+
+export interface ToolDominanceTrendPoint {
+  cycle: number;
+  before: number;
+  after: number;
+}
+
+export interface SessionAnalytics {
+  sessionId: string;
+  totalCycles: number;
+  totalTokensSaved: number;
+  totalCostSaved: number;
+  totalUnsafeRejected: number;
+  avgQualityScore: number;
+  avgReductionPercent: number;
+  peakPressureRatio: number;
+  effectiveContextMultiplier: number;
+  toolDominanceTrend: ToolDominanceTrendPoint[];
+  reports: CompactionReport[];
+}
+
 export interface AutoDocsConfig {
   enabled: boolean;
   ignoredPaths: string[];
