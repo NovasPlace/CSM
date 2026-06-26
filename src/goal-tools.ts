@@ -38,7 +38,7 @@ export function goalSetTool(deps: GoalToolDeps) {
           `Goal set: ${goal.description}`,
           `ID: ${goal.id}`,
           `Status: ${goal.status}`,
-          `Created: ${new Date(goal.created_at).toISOString()}`,
+          `Created: ${new Date(Number(goal.created_at)).toISOString()}`,
         ].join('\n'),
         metadata: { goalId: goal.id, status: goal.status, description: goal.description },
       };
@@ -102,7 +102,7 @@ export function goalUpdateTool(deps: GoalToolDeps) {
           `Goal updated: ${updated.description}`,
           `Status: ${updated.status}`,
           updated.achieved_at
-            ? `Completed: ${new Date(updated.achieved_at).toISOString()}`
+            ? `Completed: ${new Date(Number(updated.achieved_at)).toISOString()}`
             : null,
         ].filter(Boolean).join('\n'),
         metadata: { goalId: updated.id, status: updated.status },
@@ -138,7 +138,7 @@ export function goalListTool(deps: GoalToolDeps) {
         };
       }
       const lines = goals.map((g) => {
-        const ts = new Date(g.created_at).toISOString();
+        const ts = new Date(Number(g.created_at)).toISOString();
         const mark = g.status === 'active' ? '●' : g.status === 'achieved' ? '✓' : '✗';
         return `${mark} [${g.id.slice(0, 8)}] ${g.description} (${g.status}, ${ts})`;
       });
