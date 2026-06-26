@@ -21,10 +21,10 @@
 - **Status**: ✅ Schema ready; embedding generation in extractor
 
 ### 4. Memory Types as Fixed Enum
-- **Decision**: `conversation | workspace | repo | preference | lesson`
+- **Decision**: `conversation | workspace | repo | preference | lesson | episodic | procedural | concept | code | config | error`
 - **Why**: Predictable filtering; lessons get higher default importance (0.75)
 - **Trade-off**: Less flexible than free-form tags
-- **Status**: ✅ Enforced in `types.ts` and `config.ts`
+- **Status**: ✅ Enforced in `types.ts` and DB CHECK constraint (with ALTER migration)
 
 ### 5. Background Subconscious Processing
 - **Decision**: `Subconscious` class runs distillation periodically, not on every turn
@@ -56,11 +56,11 @@
 - **Trade-off**: Users must enable explicitly
 - **Status**: ✅ In `config.ts:DEFAULT_CONFIG`
 
-### 10. No Automation for Live Docs (Phase 1)
-- **Decision**: Manual doc updates per turn; automation deferred to Phase 2
-- **Why**: Validate value first; avoid premature abstraction
-- **Trade-off**: Human discipline required
-- **Status**: ✅ Completed — Phase 1 done
+### 10. No CLI (Phase 1–11)
+- **Decision**: No CLI; plugin is runtime/API-first; TUI is optional adapter
+- **Why**: Plugin integrates via hooks, tools, and API; CLI adds packaging complexity
+- **Trade-off**: No standalone CLI usage
+- **Status**: ✅ Stable — TUI adapter optional, graceful failure if unavailable
 
 ### 11. Auto-Documentation via Tool Hooks (Phase 2)
 - **Decision**: Hook into `tool.execute.after` to queue doc updates; flush at session end via `dispose`
@@ -69,25 +69,46 @@
 - **Status**: ✅ Implemented — `src/hooks/auto-docs.ts`, integrated in `tool-execute.ts` + `index.ts`
 
 ### 12. Auto-Docs Noise Guard (Phase 3)
-- **Decision**: Filter auto-doc updates with: ignored paths (`docs/`, `dist/`, `node_modules/`, `coverage/`, `.git/`), deduplicate repeated edits to same file, group multiple edits into single changelog entry, cap max entries per session (50), cap max entry length (500 chars), config toggle `autoDocs.enabled`
-- **Why**: Prevents recursive loops, changelog spam, meaningless entries; keeps docs signal-to-noise high
-- **Trade-off**: Slight complexity; some minor edits won't appear individually
-- **Status**: ✅ Implemented — `src/hooks/auto-docs.ts` + 20 tests in `test/auto-docs.test.ts`
+- **Decision**: Filter auto-doc updates with: ignored paths, deduplicate, group edits, cap entries, config toggle
+- **Why**: Prevents recursive loops, changelog spam, meaningless entries
+- **Trade-off**: Some minor edits won't appear individually
+- **Status**: ✅ Implemented
 
 ### 13. Project Isolation for Memory Hygiene (Phase 5)
-- **Decision**: Add nullable `project_id` to `memories` and `session_contexts`; default recall scoped to current project; legacy NULL project_id memories preserved; global/legacy search requires explicit opt-in
-- **Why**: Prevents cross-project memory pollution (Locus ↔ OpenCode plugin ↔ game projects); 14k+ memories need scope
+- **Decision**: Add nullable `project_id` to `memories` and `session_contexts`
+- **Why**: Prevents cross-project memory pollution
 - **Trade-off**: Migration complexity; nullable column for backward compatibility
-- **Status**: ✅ Schema migration in `database.ts`; query paths updated in `MemoryManager`, `ContextRecall`, `index.ts`
-- **Project ID**: Stable hash of normalized workspace root path (local-first, no Git dependency)
-- **Recall modes**: `project` (default) | `legacy` (NULL project_id only) | `global` (explicit opt-in)
-- **Retention**: Not automated yet — tracking fields added (`last_accessed_at`, `access_count`, `archived_at`), policy design in docs only
+- **Status**: ✅ Schema migration + query paths updated
 
-### 14. Tool Call Context Firewall — Context Compactor v2 (Phase 5 continued)
-- **Decision**: Rewrite `ContextCompactor` with: budget cap (configurable % of context, default 30%), expandable refs for compacted calls (`[TOOL_REF id=... type=...]`), telemetry (tokens before/after, % from tool calls, top bloating types, compactions run, signals preserved, reprocessing count), last N calls raw, older calls compacted, critical signals preserved (errors, warnings, failed tests, changed files)
-- **Why**: Tool calls were ~80% of context; raw output is evidence not conversation; need firewall between evidence and working context
-- **Trade-off**: More complex compaction logic; expandable refs require checkpoint linkage
-- **Status**: ✅ Implemented — `src/context-compactor.ts` rewrite, 21 tests in `test/compaction.test.ts`
-- **Config**: `budgetCapEnabled`, `budgetCapPercent`, `budgetCapPressureThreshold`, `budgetCapMaxIterations` in `CompactorConfig`
-- **Preservation rules**: Errors/warnings never compacted; running/pending calls never compacted; last `workingMemoryWindow` calls always raw
-- **Expandable refs**: Link to raw output in `context_cache` / checkpoints via `expand_checkpoint_ref`
+### 14. Tool Call Context Firewall (Phase 5)
+- **Decision**: Rewrite `ContextCompactor` with budget cap, expandable refs, telemetry
+- **Why**: Tool calls were ~80% of context; raw output is evidence not conversation
+- **Trade-off**: More complex compaction logic
+- **Status**: ✅ Implemented
+
+### 15. Automatic Concept Extraction + Memory Graph (Phase 8)
+- **Decision**: `extractConcepts()` via LLM generates concept nodes; `MemoryGraph` stores bidirectional links between concepts and memories
+- **Why**: Enables concept-based recall (not just keyword/semantic); builds knowledge graph over time
+- **Trade-off**: LLM call per extraction; graph adds DB complexity
+- **Status**: ✅ Implemented — `src/concept-extractor.ts`, `src/memory-graph.ts`, `memory_list` enhanced with concept filtering
+
+### 16. Hybrid Search: Vector + Text + Entity RRF (Phase 9)
+- **Decision**: `hybridSearch()` combines vector similarity, full-text search, and entity-match boosting via Reciprocal Rank Fusion
+- **Why**: Pure vector search misses exact code matches (function names, file paths, error names); pure text misses semantic links
+- **Trade-off**: Three queries per search; more complex scoring
+- **Status**: ✅ Implemented + benchmarked — 5/5 queries won vs vector-only (exact code: ~47x score advantage, semantic: no regression)
+- **Weights**: `vector=0.35, text=0.25, entity=0.35, recency=0.05`
+- **Bug fix**: `$2` parameter conflict between `LIMIT` and JSONB entity match; `metadata.extracted_concepts` missing from WHERE clause
+
+### 17. Compaction Quality Metrics Gate (Phase 11)
+- **Decision**: `CompactionQualityMetrics` measures: compression_ratio, entity_retention, decision_retention, warning_error_retention, embedding_drift, quality_score; reject if quality_score < 0.6
+- **Why**: "Reduces tokens without damaging continuity" must be provable, not assumed
+- **Trade-off**: Adds overhead to compaction; threshold may need tuning per project
+- **Status**: ✅ Implemented — `src/compaction-quality.ts`, 34 tests passing
+- **Formula**: `quality_score = entity_retention×0.35 + decision_retention×0.25 + error_retention×0.25 + similarity×0.15`
+
+### 18. Doc-Analyzer Dedup + Stub Filtering (Phase 11+)
+- **Decision**: `doc-analyzer.ts` must check: (1) entry doesn't already exist for same file, (2) file has real exports/imports (not a stub), (3) file exists on disk
+- **Why**: Previous version produced 530-line SYSTEM_MAP.md full of `src/a.ts`, `src/new-feature.ts` stubs
+- **Trade-off**: Doc updates are slower (disk reads); some legitimate stubs won't appear
+- **Status**: ✅ Implemented — `isStubContent()`, `isIgnoredForAnalysis()`, dedup in `applyDocUpdate()`

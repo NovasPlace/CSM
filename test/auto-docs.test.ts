@@ -8,7 +8,14 @@ import {
   flushDocUpdates,
   DEFAULT_AUTO_DOCS_CONFIG,
   resetFlushedFlag,
+  autoDocumentChange,
 } from "../dist/hooks/auto-docs.js";
+import {
+  isIgnoredForAnalysis,
+  isStubContent,
+  updateDocContent,
+  shouldSkipEntry,
+} from "../dist/hooks/doc-analyzer.js";
 import { promises as fs } from "fs";
 import { join } from "path";
 
@@ -191,6 +198,47 @@ describe("auto-docs", () => {
       // docs/ should be ignored at queue time
       assert.ok(!content.includes("docs/CHANGELOG_LIVE.md"));
       assert.ok(content.includes("src/real-file.ts"));
+    });
+  });
+
+  describe("doc-analyzer guards", () => {
+    it("isIgnoredForAnalysis rejects coverage/", () => {
+      assert.equal(isIgnoredForAnalysis("coverage/lcov.info"), true);
+    });
+
+    it("isIgnoredForAnalysis rejects test fixtures", () => {
+      assert.equal(isIgnoredForAnalysis("test/fixtures/mock.ts"), true);
+    });
+
+    it("isIgnoredForAnalysis accepts src/ files", () => {
+      assert.equal(isIgnoredForAnalysis("src/database.ts"), false);
+    });
+
+    it("isStubContent detects empty exports", () => {
+      assert.equal(isStubContent("export {}"), true);
+    });
+
+    it("isStubContent detects comment-only files", () => {
+      assert.equal(isStubContent("// just a comment\n"), true);
+    });
+
+    it("isStubContent accepts real modules", () => {
+      assert.equal(isStubContent("export function hello() { return 42; }"), false);
+    });
+
+    it("updateDocContent deduplicates file entries in SYSTEM_MAP", () => {
+      let doc = "## src\n| File | Exports | Type | Role |\n|------|---------|------|------|\n| `src/database.ts` | Database | source | DB layer |\n";
+      doc = updateDocContent(doc, "src", "| `src/database.ts` | Database, DatabasePool | source | DB layer (updated) |", "src/database.ts");
+      const count = (doc.match(/src\/database\.ts/g) || []).length;
+      assert.equal(count, 1, "should not duplicate entry");
+    });
+
+    it("shouldSkipEntry rejects files with no exports or imports", () => {
+      assert.equal(shouldSkipEntry([], []), true);
+    });
+
+    it("shouldSkipEntry accepts files with real exports", () => {
+      assert.equal(shouldSkipEntry(["measureCompactionQuality"], ["./types.js"]), false);
     });
   });
 });

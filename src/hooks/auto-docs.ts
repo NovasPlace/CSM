@@ -1,6 +1,6 @@
 import { PluginContext } from "../plugin-context.js";
 import { promises as fs } from "fs";
-import { join, normalize, sep } from "path";
+import { join, normalize } from "path";
 import { autoDocumentChange } from "./doc-analyzer.js";
 
 export const DEFAULT_AUTO_DOCS_CONFIG = {
@@ -37,26 +37,26 @@ export function queueDocUpdate(
 }
 
 export function isIgnoredPath(filePath: string): boolean {
-  const normalized = normalize(filePath);
-  const ignoredPatterns = [
-    "docs/",
-    "dist/",
-    "node_modules/",
-    "coverage/",
-    ".git/",
-    "*.log",
-    "*.tmp",
-  ];
-  return ignoredPatterns.some(pattern => {
-    if (pattern.endsWith("/")) {
-      return normalized.includes(pattern.replace("/", sep));
-    }
-    if (pattern.startsWith("*.")) {
-      return normalized.endsWith(pattern.slice(1));
-    }
-    return normalized.includes(pattern);
-  });
-}
+    const normalized = filePath.replace(/\\/g, "/");
+    const ignoredPatterns = [
+      "docs/",
+      "dist/",
+      "node_modules/",
+      "coverage/",
+      ".git/",
+      "*.log",
+      "*.tmp",
+    ];
+    return ignoredPatterns.some(pattern => {
+      if (pattern.endsWith("/")) {
+        return normalized.includes(pattern);
+      }
+      if (pattern.startsWith("*.")) {
+        return normalized.endsWith(pattern.slice(1));
+      }
+      return normalized.includes(pattern);
+    });
+  }
 
 export async function flushDocUpdates(context?: PluginContext): Promise<void> {
   if (flushed) return;

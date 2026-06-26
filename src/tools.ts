@@ -111,44 +111,6 @@ export function memorySearchTool(memoryManager: MemoryManager, primingEngine: Pr
 }
 
 /**
- * memory_list - List recent memories
- */
-export function memoryListTool(memoryManager: MemoryManager) {
-  return tool({
-    description: 'List recent memories with optional filtering and sorting.',
-    args: {
-      type: tool.schema.enum(['conversation', 'workspace', 'repo', 'preference', 'lesson']).optional().describe('Filter by memory type'),
-      limit: tool.schema.number().optional().describe('Max results (default 20)'),
-      sortBy: tool.schema.enum(['recent', 'important', 'accessed']).optional().describe('Sort order (default recent)'),
-    },
-    async execute(args, context) {
-      const memories = await memoryManager.listMemories({
-        type: args.type as MemoryType | undefined,
-        limit: args.limit ?? 20,
-        sortBy: args.sortBy as 'recent' | 'important' | 'accessed' | undefined,
-      });
-
-      let output = `Found ${memories.length} memories:\n\n`;
-      
-      for (const memory of memories) {
-        const preview = memory.content.substring(0, 100).replace(/\n/g, ' ');
-        output += `#${memory.id} [${memory.memoryType}] ${preview}\n`;
-        output += `  Importance: ${memory.importance.toFixed(2)} | Created: ${memory.createdAt.toLocaleDateString()}\n\n`;
-      }
-
-      return {
-        title: 'Memory List',
-        output,
-        metadata: {
-          count: memories.length,
-          memories: memories.map(m => ({ id: m.id, type: m.memoryType })),
-        },
-      };
-    },
-  });
-}
-
-/**
  * memory_delete - Delete a memory
  */
 export function memoryDeleteTool(memoryManager: MemoryManager) {
@@ -293,6 +255,64 @@ export function memoryLessonTool(memoryManager: MemoryManager) {
           importance: memory.importance,
           emotion: memory.emotion,
         },
+      };
+    },
+  });
+}
+
+/**
+ * memory_list - List memories with filters
+ */
+export function memoryListTool(memoryManager: MemoryManager) {
+  return tool({
+    description: 'List memories with optional filtering by session, type, tags, entities, and date range.',
+    args: {
+      sessionId: tool.schema.string().optional().describe('Filter by session ID'),
+      projectId: tool.schema.string().optional().describe('Filter by project ID'),
+      type: tool.schema.enum(['conversation', 'code', 'fact', 'error', 'decision', 'lesson', 'summary', 'reference', 'workspace', 'repo', 'preference']).optional().describe('Filter by memory type'),
+      tags: tool.schema.array(tool.schema.string()).optional().describe('Filter by tags (AND)'),
+      entityType: tool.schema.enum(['file', 'function', 'error', 'decision', 'tool', 'concept', 'dependency']).optional().describe('Filter by extracted entity type'),
+      entityValue: tool.schema.string().optional().describe('Filter by specific entity value'),
+      startDate: tool.schema.string().optional().describe('Filter memories after this date (ISO 8601)'),
+      endDate: tool.schema.string().optional().describe('Filter memories before this date (ISO 8601)'),
+      sortBy: tool.schema.enum(['recent', 'important', 'accessed']).optional().describe('Sort order (default: recent)'),
+      limit: tool.schema.number().optional().describe('Max results (default 20, max 100)'),
+    },
+    async execute(args, context) {
+      const memories = await memoryManager.listMemories({
+        sessionId: args.sessionId,
+        projectId: args.projectId,
+        type: args.type as any,
+        tags: args.tags,
+        entityType: args.entityType,
+        entityValue: args.entityValue,
+        dateFrom: args.startDate ? new Date(args.startDate) : undefined,
+        dateTo: args.endDate ? new Date(args.endDate) : undefined,
+        sortBy: args.sortBy,
+        limit: Math.min(args.limit ?? 20, 100),
+      });
+
+      if (memories.length === 0) {
+        return {
+          title: 'No Memories Found',
+          output: 'No memories match the specified filters.',
+          metadata: { count: 0 },
+        };
+      }
+
+      let output = `Found ${memories.length} memories:\n\n`;
+      for (const m of memories) {
+        const date = new Date(m.createdAt).toLocaleString();
+        const tags = m.tags.length ? ` [${m.tags.join(', ')}]` : '';
+        const concepts = (m.metadata as any)?.extractedConcepts ?? [];
+        const conceptStr = concepts.length ? ` | ${concepts.map((c: any) => `${c.type}:${c.value}`).join(', ')}` : '';
+        output += `#${m.id} ${m.memoryType} (${m.importance.toFixed(2)})${tags}${conceptStr}\n  ${date} — ${m.content.substring(0, 120)}${m.content.length > 120 ? '...' : ''}\n\n`;
+      }
+
+      return {
+        title: 'Memory List',
+        output,
+        metadata: { count: memories.length },
       };
     },
   });

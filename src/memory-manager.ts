@@ -3,6 +3,9 @@
 
 import { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
+import { extractConcepts } from './concept-extractor.js';
+import { buildLinksForMemory, findSharedEntities } from './memory-graph.js';
+import { hybridSearch, DEFAULT_WEIGHTS, type HybridWeights } from './hybrid-search.js';
 import {
   Memory,
   MemoryType,
@@ -113,71 +116,93 @@ export class MemoryManager {
   /**
    * Save a memory with dual-write (structured data + embeddings)
    */
-  async saveMemory(options: MemorySaveOptions): Promise<Memory> {
-    const pool = this.database.getPool();
-    
-    // Get project_id from session if available
-    let projectId: string | null = null;
-    if (options.sessionId) {
-      const sessionResult = await pool.query(
-        'SELECT project_id FROM sessions WHERE id = $1',
-        [options.sessionId]
-      );
-      if (sessionResult.rows.length > 0) {
-        const row = sessionResult.rows[0] as { project_id: string | null };
-        projectId = row.project_id ?? null;
-      }
-    }
-    
-    // Insert memory
-    const result = await pool.query(
-      `INSERT INTO memories (
-        session_id, project_id, memory_type, content, importance, emotion,
-        confidence, source, tags, linked_memory_ids, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING *`,
-      [
-        options.sessionId,
-        projectId,
-        options.type,
-        options.content,
-        options.importance ?? 0.5,
-        options.emotion ?? 'neutral',
-        options.confidence ?? 1.0,
-        options.source ?? 'manual',
-        options.tags ?? [],
-        options.linkedMemoryIds ?? [],
-        options.metadata ?? {},
-      ]
-    );
-
-    const memory = this.mapMemory(result.rows[0] as Record<string, unknown>);
-
-    // Dual-write: Generate and store embeddings
-    try {
-      const embedding = await this.embeddings.generate(options.content);
+async saveMemory(options: MemorySaveOptions): Promise<Memory> {
+      const pool = this.database.getPool();
       
-      await pool.query(
-        `INSERT INTO memory_chunks (memory_id, chunk_index, content, token_count, embedding, embedding_model)
-         VALUES ($1, 0, $2, $3, $4, $5)`,
+      // Get project_id from session if available
+      let projectId: string | null = null;
+      if (options.sessionId) {
+        const sessionResult = await pool.query(
+          'SELECT project_id FROM sessions WHERE id = $1',
+          [options.sessionId]
+        );
+        if (sessionResult.rows.length > 0) {
+          const row = sessionResult.rows[0] as { project_id: string | null };
+          projectId = row.project_id ?? null;
+        }
+      }
+      
+      // Extract concepts from content
+      const extraction = extractConcepts(options.content);
+      const extracted = extraction.concepts;
+      const mergedMetadata = { ...(options.metadata ?? {}), extracted_concepts: extracted };
+      const mergedTags = Array.from(new Set([...(options.tags ?? []), ...extracted.map(c => c.value)]));
+  
+      // Generate embedding first
+      let embedding: number[] | null = null;
+      try {
+        embedding = await this.embeddings.generate(options.content);
+      } catch (error) {
+        console.error('[MemoryManager] Failed to generate embedding:', error);
+      }
+  
+      // Insert memory with embedding
+      const result = await pool.query(
+        `INSERT INTO memories (
+          session_id, project_id, memory_type, content, importance, emotion,
+          confidence, source, tags, linked_memory_ids, metadata, embedding
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING *`,
         [
-          memory.id,
+          options.sessionId,
+          projectId,
+          options.type,
           options.content,
-          Math.ceil(options.content.length / 4), // Rough token estimate
-          `[${embedding.join(',')}]`,
-          'hash-fallback', // Will be replaced with actual model name
+          options.importance ?? 0.5,
+          options.emotion ?? 'neutral',
+          options.confidence ?? 1.0,
+          options.source ?? 'manual',
+          mergedTags,
+          options.linkedMemoryIds ?? [],
+          mergedMetadata,
+          embedding ? `[${embedding.join(',')}]` : null,
         ]
       );
-    } catch (error) {
-      console.error('[MemoryManager] Failed to generate embedding:', error);
-      // Continue without embedding - memory is still saved
+  
+      const memory = this.mapMemory(result.rows[0] as Record<string, unknown>);
+  
+      // Dual-write: Store embedding in memory_chunks too
+      if (embedding) {
+        try {
+          await pool.query(
+            `INSERT INTO memory_chunks (memory_id, chunk_index, content, token_count, embedding, embedding_model)
+             VALUES ($1, 0, $2, $3, $4, $5)`,
+            [
+              memory.id,
+              options.content,
+              Math.ceil(options.content.length / 4), // Rough token estimate
+              `[${embedding.join(',')}]`,
+              'hash-fallback', // Will be replaced with actual model name
+            ]
+          );
+        } catch (error) {
+          console.error('[MemoryManager] Failed to store embedding chunk:', error);
+        }
+      }
+  
+      // Emit event
+      await this.emitEvent('memory.created', { memoryId: memory.id, type: options.type });
+  
+      // Build graph links for this memory
+      try {
+        const extracted = extractConcepts(options.content);
+        await buildLinksForMemory(this.database, memory.id, extracted.concepts);
+      } catch (error) {
+        console.error('[MemoryManager] Failed to build graph links:', error);
+      }
+  
+      return memory;
     }
-
-    // Emit event
-    await this.emitEvent('memory.created', { memoryId: memory.id, type: options.type });
-
-    return memory;
-  }
 
   /**
    * Get memory by ID
@@ -235,13 +260,37 @@ export class MemoryManager {
    */
   async searchMemories(options: MemorySearchOptions): Promise<{ memory: Memory; score: number }[]> {
     const pool = this.database.getPool();
-    
-    // Generate query embedding
     const queryEmbedding = await this.embeddings.generate(options.query);
-    const embeddingString = `[${queryEmbedding.join(',')}]`;
 
-    // Build query with project scoping
-    let query = `
+    try {
+      const results = await hybridSearch(
+        this.database,
+        options.query,
+        queryEmbedding,
+        options.limit ?? 10,
+        { projectId: options.projectId, type: options.type, weights: (options as any).weights },
+      );
+
+      const memories: { memory: Memory; score: number }[] = [];
+      for (const r of results) {
+        const row = await pool.query(
+          `SELECT * FROM memories WHERE id = $1`,
+          [r.id],
+        );
+        if (row.rows.length > 0) {
+          const memory = this.mapMemory(row.rows[0] as Record<string, unknown>);
+          await this.touchMemory(memory.id);
+          memories.push({ memory, score: r.score });
+        }
+      }
+      return memories;
+    } catch (err) {
+      console.warn('[MemoryManager] Hybrid search failed, falling back to vector-only:', err);
+    }
+
+    // Fallback: vector-only search
+    const embeddingString = `[${queryEmbedding.join(',')}]`;
+    let sql = `
       SELECT m.*, 
         1 - (mc.embedding <=> $1::vector) AS similarity
       FROM memories m
@@ -251,58 +300,43 @@ export class MemoryManager {
     const params: unknown[] = [embeddingString];
     let paramIndex = 2;
 
-    // Project scoping logic
     const searchMode = options.searchMode ?? 'project';
-    
     if (searchMode === 'project' && options.projectId) {
-      query += ` AND m.project_id = $${paramIndex}`;
+      sql += ` AND m.project_id = $${paramIndex}`;
       params.push(options.projectId);
       paramIndex++;
     } else if (searchMode === 'legacy') {
-      query += ` AND (m.project_id = $${paramIndex} OR m.project_id IS NULL)`;
+      sql += ` AND (m.project_id = $${paramIndex} OR m.project_id IS NULL)`;
       params.push(options.projectId);
       paramIndex++;
     }
-    // 'global' mode: no project filter
-
     if (options.type) {
-      query += ` AND m.memory_type = $${paramIndex}`;
+      sql += ` AND m.memory_type = $${paramIndex}`;
       params.push(options.type);
       paramIndex++;
     }
-
     if (options.minImportance !== undefined) {
-      query += ` AND m.importance >= $${paramIndex}`;
+      sql += ` AND m.importance >= $${paramIndex}`;
       params.push(options.minImportance);
       paramIndex++;
     }
-
     if (options.tags && options.tags.length > 0) {
-      query += ` AND m.tags && $${paramIndex}`;
+      sql += ` AND m.tags && $${paramIndex}`;
       params.push(options.tags);
       paramIndex++;
     }
 
-    query += ` ORDER BY similarity DESC`;
-    
-    const limit = options.limit ?? 10;
-    query += ` LIMIT $${paramIndex}`;
-    params.push(limit);
+    sql += ` ORDER BY similarity DESC LIMIT $${paramIndex}`;
+    params.push(options.limit ?? 10);
 
-    const result = await pool.query(query, params);
-
-    // Touch returned memories (reinforcement)
+    const result = await pool.query(sql, params);
     const memories: { memory: Memory; score: number }[] = [];
-    
     for (const row of result.rows) {
       const memory = this.mapMemory(row as Record<string, unknown>);
       const score = (row as Record<string, unknown>).similarity as number;
-      
       await this.touchMemory(memory.id);
-      
       memories.push({ memory, score });
     }
-
     return memories;
   }
 
@@ -336,6 +370,30 @@ export class MemoryManager {
     if (options.tags && options.tags.length > 0) {
       query += ` AND tags && $${paramIndex}`;
       params.push(options.tags);
+      paramIndex++;
+    }
+
+    if (options.sessionId) {
+      query += ` AND session_id = $${paramIndex}`;
+      params.push(options.sessionId);
+      paramIndex++;
+    }
+
+    if (options.dateFrom) {
+      query += ` AND created_at >= $${paramIndex}`;
+      params.push(options.dateFrom);
+      paramIndex++;
+    }
+
+    if (options.dateTo) {
+      query += ` AND created_at <= $${paramIndex}`;
+      params.push(options.dateTo);
+      paramIndex++;
+    }
+
+    if (options.entityType && options.entityValue) {
+      query += ` AND metadata->'concepts' @> $${paramIndex}`;
+      params.push(JSON.stringify([{ type: options.entityType, value: options.entityValue }]));
       paramIndex++;
     }
 

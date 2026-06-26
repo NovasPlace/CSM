@@ -4,6 +4,7 @@
 import pg from 'pg';
 import { DatabasePool, PluginConfig } from './types.js';
 import { initializeCheckpointSchema } from './checkpoint-schema.js';
+import { initializeGraphSchema } from './memory-graph.js';
 import { initializeContextCompilationSchema } from './context-compilation-schema.js';
 import { initializeContextCacheSchema } from './context-cache-schema.js';
 import { initializeRolloverSchema } from './context-rollover-schema.js';
@@ -56,24 +57,41 @@ export class Database {
     // Enable pgvector extension
     await this.pool.query('CREATE EXTENSION IF NOT EXISTS vector');
 
-    // Note: sessions table already exists with text ID
-    // We'll use it as-is and reference it with text type
+    // Create sessions table (referenced by memories, memory_events, session_contexts)
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        directory TEXT,
+        title TEXT,
+        name TEXT,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        ended_at TIMESTAMPTZ
+      )
+    `);
 
-    // Create memories table (Cognitive Memory Engine)
+    // Add missing columns to existing sessions table
+    await this.pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS directory TEXT`);
+    await this.pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS title TEXT`);
+
+// Create memories table (Cognitive Memory Engine)
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS memories (
         id BIGSERIAL PRIMARY KEY,
         session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
         project_id TEXT,
         memory_type TEXT NOT NULL CHECK (memory_type IN (
-          'conversation', 'workspace', 'repo', 'preference',
-          'lesson', 'episodic', 'procedural'
+            'conversation', 'workspace', 'repo', 'preference',
+            'lesson', 'episodic', 'procedural', 'concept', 'code', 'config', 'error'
         )),
         content TEXT NOT NULL,
+        embedding VECTOR(768),
+        search_vector TSVECTOR,
         importance FLOAT DEFAULT 0.5 CHECK (importance BETWEEN 0 AND 1),
         emotion TEXT DEFAULT 'neutral' CHECK (emotion IN (
-          'neutral', 'frustration', 'success', 'curiosity', 'concern'
-        )),
+            'neutral', 'frustration', 'frustrated', 'success', 'curiosity', 'concern'
+          )),
         confidence FLOAT DEFAULT 1.0 CHECK (confidence BETWEEN 0 AND 1),
         source TEXT DEFAULT 'manual',
         tags TEXT[] DEFAULT '{}',
@@ -88,7 +106,35 @@ export class Database {
       )
     `);
 
-    // Create memory_chunks table (for embeddings)
+    // Update memory_type check constraint to include 'concept'
+    await this.pool.query(`
+      ALTER TABLE memories
+DROP CONSTRAINT IF EXISTS memories_memory_type_check,
+ADD CONSTRAINT memories_memory_type_check
+            CHECK (memory_type IN (
+                'conversation', 'workspace', 'repo', 'preference',
+                'lesson', 'episodic', 'procedural', 'concept', 'code', 'config', 'error'
+              ))
+        `);
+
+      // Update emotion check constraint to include 'frustrated'
+      await this.pool.query(`
+        ALTER TABLE memories
+        DROP CONSTRAINT IF EXISTS memories_emotion_check,
+        ADD CONSTRAINT memories_emotion_check
+CHECK (emotion IN (
+            'neutral', 'frustration', 'frustrated', 'success', 'curiosity', 'concern'
+          ))
+        `);
+
+        // Add embedding and search_vector columns to memories table
+        await this.pool.query(`
+          ALTER TABLE memories
+          ADD COLUMN IF NOT EXISTS embedding VECTOR(1536),
+          ADD COLUMN IF NOT EXISTS search_vector TSVECTOR
+        `);
+
+        // Create memory_chunks table (for embeddings)
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS memory_chunks (
         id BIGSERIAL PRIMARY KEY,
@@ -169,6 +215,23 @@ export class Database {
       `CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived_at)
     `);
 
+    // Hybrid search: FTS tsvector column + GIN index (additive)
+    try {
+      await this.pool.query(
+        `ALTER TABLE memories ADD COLUMN IF NOT EXISTS search_vector tsvector
+        GENERATED ALWAYS AS (
+          setweight(to_tsvector('english', coalesce(content, '')), 'A') ||
+          setweight(to_tsvector('english', coalesce(array_to_string(tags, ' '), '')), 'B') ||
+          setweight(to_tsvector('english', coalesce(metadata::text, '')), 'C')
+        ) STORED
+      `);
+      await this.pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_memories_search ON memories USING GIN(search_vector)
+      `);
+    } catch (_e) {
+      console.warn('[Database] FTS column/index skipped (may already exist or unsupported)');
+    }
+
     await this.pool.query(
       `CREATE INDEX IF NOT EXISTS idx_session_contexts_project ON session_contexts(project_id)
     `);
@@ -192,9 +255,9 @@ export class Database {
         )),
         content TEXT NOT NULL,
         importance FLOAT DEFAULT 0.5 CHECK (importance BETWEEN 0 AND 1),
-        emotion TEXT DEFAULT 'neutral' CHECK (emotion IN (
-          'neutral', 'frustration', 'success', 'curiosity', 'concern'
-        )),
+emotion TEXT DEFAULT 'neutral' CHECK (emotion IN (
+            'neutral', 'frustration', 'frustrated', 'success', 'curiosity', 'concern'
+          )),
         confidence FLOAT DEFAULT 1.0 CHECK (confidence BETWEEN 0 AND 1),
         tags TEXT[] DEFAULT '{}',
         metadata JSONB NOT NULL DEFAULT '{}',
@@ -310,6 +373,9 @@ export class Database {
     // Goal system schema (additive)
     await initializeGoalSchema(this.pool);
 
+    // Phase 7 — Memory graph relationships (additive)
+    await initializeGraphSchema(this);
+
     console.log('[Database] Schema initialized');
   }
 
@@ -379,7 +445,7 @@ export class Database {
       SET project_id = s.project_id
       FROM sessions s
       WHERE m.project_id IS NULL
-        AND m.session_id = s.session_id
+        AND m.session_id = s.id
         AND s.project_id IS NOT NULL
     `);
 
@@ -388,7 +454,7 @@ export class Database {
       SET project_id = s.project_id
       FROM sessions s
       WHERE sc.project_id IS NULL
-        AND sc.session_id = s.session_id
+        AND sc.session_id = s.id
         AND s.project_id IS NOT NULL
     `);
   }
@@ -396,5 +462,12 @@ export class Database {
   getPool(): DatabasePool {
     if (!this.pool) throw new Error('Database not connected');
     return this.pool;
+  }
+
+  async close(): Promise<void> {
+    if (this.pool) {
+      await this.pool.end();
+      this.pool = null;
+    }
   }
 }

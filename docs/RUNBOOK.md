@@ -1,163 +1,135 @@
 # RUNBOOK.md
 
-## Build Commands
+> Operational runbook. Updated by auto-docs hook.
 
+## Startup
+
+1. Ensure PostgreSQL is running (`docker ps` or `pg_isready`)
+2. Set `DATABASE_URL` env var (default: `postgresql://postgres:postgres@localhost:5432/cross_session_memory`)
+3. Ensure pgvector extension exists: `CREATE EXTENSION IF NOT EXISTS vector;`
+4. Plugin auto-migrates schema on connect (sessions, memories, memory_chunks, memory_events, session_contexts)
+
+## Health Checks
+
+### Database Connectivity
 ```bash
-# Install dependencies
-npm install
-
-# Type-check
-npm run typecheck
-
-# Lint
-npm run lint
-
-# Build (compile TypeScript)
-npm run build
-
-# Clean build artifacts
-npm run clean
+node -e "const {Pool}=require('pg');new Pool({connectionString:process.env.DATABASE_URL}).query('SELECT 1').then(r=>console.log('OK:',r.rows)).catch(e=>console.error('FAIL:',e.message))"
 ```
 
----
-
-## Test Commands
-
-```bash
-# Unit tests (Vitest)
-npm test
-
-# Run specific test file
-node --experimental-strip-types --test test/auto-docs.test.ts
-
-# Watch mode
-npm run test:watch
-
-# Coverage
-npm run test:coverage
+### Schema Integrity
+```sql
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+-- Expected: sessions, memories, memory_chunks, memory_events, session_contexts, goals
 ```
 
----
-
-## Database Setup
-
-### Local PostgreSQL (Docker)
-```bash
-docker run -d \
-  --name opencode-memory \
-  -e POSTGRES_USER=opencode_memory \
-  -e POSTGRES_PASSWORD=opencode_memory \
-  -e POSTGRES_DB=opencode_memory \
-  -p 5432:5432 \
-  pgvector/pgvector:pg16
+### Embedding Coverage
+```sql
+SELECT COUNT(*) as total, COUNT(embedding) as with_embedding FROM memories;
+-- with_embedding should approach total
 ```
 
-### Local PostgreSQL (Native)
+### Compaction Quality
+- Check `ContextCompactor.getLastQuality()` after compaction
+- `quality_score < 0.6` → compaction was rejected
+- `entityRetentionPolicy < 0.8` → critical code entities being lost
+
+### Hybrid Search Sanity
 ```bash
-# Create user & DB
-psql -U postgres -c "CREATE USER opencode_memory WITH PASSWORD 'opencode_memory';"
-psql -U postgres -c "CREATE DATABASE opencode_memory OWNER opencode_memory;"
-psql -U postgres -d opencode_memory -c "CREATE EXTENSION vector;"
+npx tsx test/benchmark-hybrid.ts
+# All 5 queries should show hybrid winning over vector-only
 ```
 
-### Connection String
+## Common Operations
+
+### Backup Memories
 ```bash
-export DATABASE_URL="postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory"
+pg_dump -Fc "$DATABASE_URL" > memories_backup.dump
 ```
 
----
-
-## Smoke Tests
-
+### Restore Memories
 ```bash
-# 1. Verify PostgreSQL connection
-psql "$DATABASE_URL" -c "SELECT 1;"
-
-# 2. Verify pgvector extension
-psql "$DATABASE_URL" -c "SELECT extname FROM pg_extension WHERE extname = 'vector';"
-
-# 3. Verify tables exist
-psql "$DATABASE_URL" -c "\dt"
-
-# 4. Verify migrations applied
-psql "$DATABASE_URL" -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
-
-# 5. Test plugin load (in OpenCode)
-# Add to opencode.json:
-# {
-#   "plugins": ["./cross-session-memory"]
-# }
-# Then: opencode --plugin ./cross-session-memory
-
-# 6. Test memory write/read
-# In OpenCode session: save a memory, then search it
+pg_restore -Fc -d cross_session_memory memories_backup.dump
 ```
 
----
-
-## Recovery Steps
-
-### PostgreSQL Down
-```bash
-# Check status
-docker ps -a | grep opencode-memory
-# or
-systemctl status postgresql
-
-# Restart
-docker restart opencode-memory
-# or
-systemctl restart postgresql
+### Full Data Reset
+```sql
+DROP TABLE IF EXISTS memories, memory_chunks, sessions, memory_events, session_contexts, goals CASCADE;
+-- Restart plugin; auto-migrates
 ```
 
-### Migration Failed / Schema Drift
-```bash
-# Check migration status
-psql "$DATABASE_URL" -c "SELECT * FROM schema_migrations;"
-
-# Manual migration (if needed)
-psql "$DATABASE_URL" -f src/migrations/001_initial.sql
+### Fix Stale Constraints
+```sql
+ALTER TABLE memories DROP CONSTRAINT IF EXISTS memories_memory_type_check;
+ALTER TABLE memories ADD CONSTRAINT memories_memory_type_check
+  CHECK (memory_type IN ('conversation','workspace','repo','preference','lesson','episodic','procedural','concept','code','config','error'));
+ALTER TABLE memories DROP CONSTRAINT IF EXISTS memories_emotion_check;
+ALTER TABLE memories ADD CONSTRAINT memories_emotion_check
+  CHECK (emotion IN ('neutral','frustration','frustrated','success','curiosity','concern'));
 ```
 
-### Memory Corruption / Bad Data
-```bash
-# Soft reset: delete memories, keep schema
-psql "$DATABASE_URL" -c "TRUNCATE memories, distillation_log, project_identity;"
-
-# Hard reset: drop & recreate
-psql -U postgres -c "DROP DATABASE opencode_memory;"
-psql -U postgres -c "CREATE DATABASE opencode_memory OWNER opencode_memory;"
-psql -U postgres -d opencode_memory -c "CREATE EXTENSION vector;"
-# Plugin will re-run migrations on next load
+### Add Missing Columns
+```sql
+ALTER TABLE memories ADD COLUMN IF NOT EXISTS embedding vector(1536);
+ALTER TABLE memories ADD COLUMN IF NOT EXISTS search_vector tsvector;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS directory TEXT;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS title TEXT;
 ```
 
-### Plugin Not Loading
-```bash
-# Check OpenCode plugin path
-opencode plugin list
+## Monitoring Queries
 
-# Verify build output exists
-ls -la dist/
-
-# Check TypeScript errors
-npm run typecheck
-
-# Check plugin entry point
-cat dist/index.js | head -20
+### Memory Distribution by Type
+```sql
+SELECT memory_type, COUNT(*), AVG(importance) FROM memories GROUP BY memory_type ORDER BY COUNT(*) DESC;
 ```
 
----
+### Session Memory Volume
+```sql
+SELECT s.id, s.project_id, COUNT(m.id) as memory_count
+FROM sessions s LEFT JOIN memories m ON m.session_id = s.id
+GROUP BY s.id ORDER BY memory_count DESC LIMIT 20;
+```
 
-## Public Release Checklist
+### Quality Score History
+```sql
+-- After enabling quality tracking
+SELECT session_id, AVG(importance) as avg_importance
+FROM memories GROUP BY session_id ORDER BY avg_importance;
+```
 
-- [ ] `npm run typecheck` passes
-- [ ] `npm run lint` passes
-- [ ] `npm test` passes (100% critical path coverage)
-- [ ] `node --experimental-strip-types --test test/auto-docs.test.ts` passes
-- [ ] `npm run build` produces clean `dist/`
-- [ ] Migration `001_initial.sql` runs on fresh DB
-- [ ] Smoke tests pass on fresh DB
-- [ ] `package.json` version bumped
-- [ ] `CHANGELOG.md` updated (not CHANGELOG_LIVE.md)
-- [ ] README.md has install/config instructions
-- [ ] Publish: `npm publish`
+### Concept Graph Density
+```sql
+-- After enabling concept extraction
+SELECT mc.concept, COUNT(mc.memory_id) as links
+FROM memory_concepts mc GROUP BY mc.concept ORDER BY links DESC LIMIT 20;
+```
+
+## Troubleshooting
+
+| Problem | Check | Fix |
+|---------|-------|-----|
+| DB connection fails | `pg_isready -h localhost -p 5432` | Start PostgreSQL |
+| Empty search results | `SELECT COUNT(*) FROM memories` | Verify data loaded |
+| Low quality scores | `ContextCompactor.getLastQuality()` | Increase budget cap |
+| Constraint violation | Check memory_type/emotion values | Run ALTER TABLE fix |
+| Stale docs | `docs/SYSTEM_MAP.md` has stubs | Delete spam; dedup now active |
+| Hybrid search empty | `embedding` column null | Re-generate embeddings |
+
+## Test Suites
+
+| Suite | Tests | DB Required | Focus |
+|-------|-------|-------------|-------|
+| auto-docs | 20 | No | Doc queue, flush, dedup |
+| compaction | 13 | No | Tool output compression |
+| compaction-quality | 34 | No | Entity/decision/error retention |
+| context-compiler | 8 | No | Context budget, pinning |
+| hybrid-search | 7 | Yes (PostgreSQL) | Vector+text+entity RRF |
+| goal | 5 | Yes (PostgreSQL) | Goal tracking |
+| checkpoint | 6 | No | Session snapshots |
+| auto-checkpoint | 6 | No | Auto checkpoint triggers |
+| context-cache | 5 | No | Cache hit/miss |
+| context-rollover | 7 | No | Budget rollover |
+| assistant-compactor | 3 | No | Assistant compaction |
+| context-cache-store | 4 | No | Cache persistence |
+| context-cache-runtime | 2 | No | Runtime cache |
+| tui-adapter | 4 | No | TUI rendering |
+| **Total** | **124** | | |

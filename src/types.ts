@@ -3,6 +3,7 @@
 
 import type { CheckpointConfig } from './checkpoint-types.js';
 import type { RolloverConfig } from './context-rollover-config.js';
+import type { ExtractedConcept } from './concept-extractor.js';
 
 export type MemoryType =
   | 'conversation' // Key decisions, problems solved, user preferences
@@ -296,9 +297,47 @@ export interface CumulativeCompactionStats {
   totalSemanticSignalsPreserved: number;
   firstCompactedAt: Date | null;
   lastCompactedAt: Date | null;
-}
+  }
 
-export interface DistillerConfig {
+  export interface CompactionQualityMetrics {
+    compressionRatio: number;
+    embeddingDrift: number;
+    entityRetention: number;
+    decisionRetention: number;
+    warningErrorRetention: number;
+    restoreSuccessRate: number;
+    recallSuccessAfterCompaction: number;
+    tokensSavedTotal: number;
+    tokensSavedPerSession: number;
+    qualityScore: number;
+    safe: boolean;
+    entitiesBefore: string[];
+    entitiesAfter: string[];
+    decisionsBefore: string[];
+    decisionsAfter: string[];
+    warningsErrorsBefore: string[];
+    warningsErrorsAfter: string[];
+  }
+
+  export interface CompactionQualityConfig {
+    entityRetentionWeight: number;
+    decisionRetentionWeight: number;
+    warningErrorRetentionWeight: number;
+    semanticSimilarityWeight: number;
+    qualityThreshold: number;
+    embeddingDriftWarningThreshold: number;
+  }
+
+  export const DEFAULT_COMPACTION_QUALITY_CONFIG: CompactionQualityConfig = {
+    entityRetentionWeight: 0.35,
+    decisionRetentionWeight: 0.25,
+    warningErrorRetentionWeight: 0.25,
+    semanticSimilarityWeight: 0.15,
+    qualityThreshold: 0.6,
+    embeddingDriftWarningThreshold: 0.3,
+  };
+
+  export interface DistillerConfig {
   enabled: boolean;
   groupWindowMs: number;       // Max ms between calls to group together (default 30000)
   maxSummaryLength: number;    // Max chars per summary (default 200)
@@ -396,6 +435,11 @@ export interface MemoryListOptions {
   tags?: string[];
   projectId?: string;
   searchMode?: MemorySearchMode;
+  entityType?: ExtractedConcept["type"];
+  entityValue?: string;
+  sessionId?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
 }
 
 export interface DatabasePool {

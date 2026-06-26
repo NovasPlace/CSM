@@ -1,210 +1,104 @@
-# SYSTEM_MAP.md
+# System Map
 
-## Project: Cross-Session Memory Plugin for OpenCode
+> Auto-generated architecture reference. Updated on file edits via `auto-docs` hook.
 
-**Purpose**: Persistent cross-session memory using PostgreSQL, surviving OpenCode reinstalls.
+## Core
 
----
+| File | Exports | Type | Role |
+|------|---------|------|------|
+| `src/index.ts` | CrossSessionMemoryPlugin | plugin | Entry point — registers hooks, tools, DB |
+| `src/plugin-context.ts` | PluginContext | context | Shared state container for all subsystems |
+| `src/config.ts` | resolveConfig | config | Plugin config defaults + validation |
+| `src/types.ts` | All interfaces & types | types | Shared type definitions |
+| `src/tools.ts` | defaultTools | tools | Tool registration (CLI-facing) |
+| `src/database.ts` | Database | database | PostgreSQL connection, schema init, migrations |
+| `src/embeddings.ts` | EmbeddingGenerator | embeddings | Ollama embedding generation |
+| `src/memory-manager.ts` | MemoryManager | memory | CRUD + search for memories |
+| `src/memory-graph.ts` | MemoryGraph | graph | Concept extraction + link storage |
+| `src/memory-extractor.ts` | MemoryExtractor | extractor | Raw text → semantic memory extraction |
+| `src/concept-extractor.ts` | extractConcepts | concept | LLM-based concept extraction |
+| `src/hybrid-search.ts` | hybridSearch, vectorSearch, fullTextSearch, entityMatchBoost | search | RRF-based hybrid search (vector + text + entity) |
+| `src/compaction-quality.ts` | measureCompactionQuality, extractEntities, extractDecisions, extractWarningsErrors, computeRetention | metrics | Compaction quality scoring (entity/decision/error retention + drift) |
 
-## Module Inventory
+## Context Pipeline
 
-| File | Responsibility | Key Exports |
-|------|---------------|-------------|
-| `src/index.ts` | Plugin entry point, registers all tools, hooks, subagents | `plugin` (OpenCode plugin object) |
-| `src/database.ts` | PostgreSQL connection pool, schema migrations, CRUD for memories | `Database`, `getDatabase()`, `closeDatabase()` |
-| `src/config.ts` | Configuration schema, defaults, validation | `Config`, `DEFAULT_CONFIG`, `validateConfig()` |
-| `src/types.ts` | TypeScript interfaces for memories, tools, config | `Memory`, `MemoryType`, `ToolCall`, `ContextBrief`, etc. |
-| `src/memory-manager.ts` | High-level memory operations (save, search, list, delete) | `MemoryManager` class |
-| `src/memory-extractor.ts` | Extracts structured memories from conversation turns | `MemoryExtractor` class, `extractMemories()` |
-| `src/tools.ts` | OpenCode tool definitions (memory_save, memory_search, etc.) | `memoryTools` array |
-| `src/context-recall.ts` | Builds context brief from relevant memories | `ContextRecall` class, `buildContextBrief()` |
-| `src/priming-engine.ts` | Primes agent with relevant memories at session start | `PrimingEngine` class, `prime()` |
-| `src/subconscious.ts` | Background memory consolidation, distillation | `Subconscious` class |
-| `src/context-compactor.ts` | Compresses tool outputs for context window. Budget cap, expandable refs, telemetry. | `ContextCompactor` class, `createContextCompactor()` |
-| `src/tool-distiller.ts` | Distills tool activity into structured summaries | `ToolDistiller` class |
-| `src/hooks/auto-docs.ts` | Auto-updates live docs on file edits, flushes on session end. Noise guard: dedup, grouping, ignored paths, caps, config toggle. | `queueDocUpdate()`, `flushDocUpdates()`, `isIgnoredPath()`, `DEFAULT_AUTO_DOCS_CONFIG`, `resetFlushedFlag()` |
-| `src/hooks/doc-analyzer.ts` | LLM-powered code change analyzer; categorizes changes and updates all live docs (SYSTEM_MAP, DECISIONS, DEBUG_NOTES, DEBUG_NOTES, AGENT_MEMORY, RUNBOOK) | `autoDocumentChange()`, `analyzeChange()`, `updateAllDocs()` |
-| `src/database.ts` | PostgreSQL schema + migrations (project_id, tracking fields) | `migrateProjectIsolation()` |
-| `src/hooks/tool-execute.ts` | Tool execution hook — logs to memory + queues doc updates | `registerToolExecuteHook()` |
-| `src/hooks/system-transform.ts` | System prompt transformation hook | `registerSystemTransformHook()` |
-| `src/hooks/session-compaction.ts` | Session compaction hook | `registerSessionCompactionHook()` |
+| File | Exports | Type | Role |
+|------|---------|------|------|
+| `src/context-compiler.ts` | ContextCompiler | compiler | Builds context manifest from memories |
+| `src/context-compactor.ts` | ContextCompactor | compactor | Distills tool-call output, runs quality measurement |
+| `src/context-pressure.ts` | ContextPressure | pressure | Token budget tracking |
+| `src/context-recall.ts` | ContextRecall | recall | Recall search tools |
+| `src/context-rollover.ts` | ContextRollover | rollover | Session rollover with brief handoff |
+| `src/context-rollover-config.ts` | RolloverConfig | config | Rollover configuration |
+| `src/context-rollover-brief.ts` | generateRolloverBrief | brief | Generates next-session brief |
+| `src/context-rollover-schema.ts` | rolloverSchema | schema | Rollover SQL schema |
+| `src/context-compilation-log.ts` | CompilationLog | log | Compilation event logging |
+| `src/context-compilation-schema.ts` | compilationSchema | schema | Compilation SQL schema |
 
----
+## Context Cache
 
+| File | Exports | Type | Role |
+|------|---------|------|------|
+| `src/context-cache-store.ts` | ContextCacheStore | store | Persist/restore cached context items |
+| `src/context-cache-runtime.ts` | ContextCacheRuntime | runtime | Runtime read-through cache |
+| `src/context-cache-manifest.ts` | ContextCacheManifest | manifest | Manifest builder for cached items |
+| `src/context-cache-tools.ts` | ContextCacheTool | tools | Cache-aware tool registration |
+| `src/context-cache-schema.ts` | cacheSchema | schema | Cache SQL schema |
+| `src/context-review-tool.ts` | ContextReviewTool | review | Context review + compaction trigger |
 
-**src/new-feature.ts**
-- Exports: none
-- Imports: 
-- Type: source
+## Checkpoint System
 
-**src/new-feature.ts**
-- Exports: none
-- Imports: 
-- Type: source
+| File | Exports | Type | Role |
+|------|---------|------|------|
+| `src/checkpoint-builder.ts` | CheckpointBuilder | builder | Builds checkpoint from session state |
+| `src/checkpoint-capture.ts` | captureCheckpoint | capture | Captures tool outputs for checkpoint |
+| `src/checkpoint-inject.ts` | injectCheckpoint | inject | Restores checkpoint into context |
+| `src/checkpoint-store.ts` | CheckpointStore | store | PostgreSQL checkpoint persistence |
+| `src/checkpoint-schema.ts` | checkpointSchema | schema | Checkpoint SQL schema |
+| `src/checkpoint-markdown.ts` | checkpointToMarkdown | markdown | Checkpoint → Markdown renderer |
+| `src/checkpoint-telemetry.ts` | CheckpointTelemetry | telemetry | Checkpoint event tracking |
+| `src/checkpoint-tool.ts` | CheckpointTool | tool | CLI checkpoint tool |
+| `src/checkpoint-types.ts` | Checkpoint types | types | Checkpoint interface definitions |
 
-**src/new-feature.ts**
-- Exports: none
-- Imports: 
-- Type: source
+## Compaction Helpers
 
-**src/new-feature.ts**
-- Exports: none
-- Imports: 
-- Type: source
+| File | Exports | Type | Role |
+|------|---------|------|------|
+| `src/compaction-utils.ts` | compaction utils | utils | Shared compaction helper functions |
+| `src/compaction-types.ts` | compaction types | types | Compaction-specific interfaces |
+| `src/compaction-tracker.ts` | CompactionTracker | tracker | Cumulative compaction statistics |
+| `src/helpers/compaction-metrics.ts` | compactionMetrics | metrics | Compaction telemetry helpers |
+| `src/helpers/auto-checkpoint.ts` | autoCheckpoint | helper | Auto-checkpoint on risky edits |
 
-**src/new-feature.ts**
-- Exports: none
-- Imports: 
-- Type: source
+## Hooks
 
-**src/new-feature.ts**
-- Exports: none
-- Imports: 
-- Type: source
+| File | Exports | Type | Role |
+|------|---------|------|------|
+| `src/hooks/auto-docs.ts` | queueDocUpdate, flushDocUpdates, isIgnoredPath | hook | Queues doc updates on file edits, flushes on session end |
+| `src/hooks/doc-analyzer.ts` | analyzeChange, applyDocUpdate, isIgnoredForAnalysis, isStubContent | analyzer | File change → doc section update (dedup, stub-filtered) |
+| `src/hooks/tool-execute.ts` | afterToolExecute | hook | Post-tool execution: auto-docs, auto-checkpoint |
+| `src/hooks/session-compaction.ts` | sessionCompactionHook | hook | Session-end compaction trigger |
+| `src/hooks/system-transform.ts` | systemTransformHook | hook | System prompt injection |
 
-**src/a.ts**
-- Exports: none
-- Imports: 
-- Type: source
+## Other Subsystems
 
-**src/b.ts**
-- Exports: none
-- Imports: 
-- Type: source
+| File | Exports | Type | Role |
+|------|---------|------|------|
+| `src/goal-schema.ts` | goalSchema | schema | Goals SQL schema |
+| `src/goal-tools.ts` | GoalTools | tools | Goal CRUD tools |
+| `src/git-watcher.ts` | GitWatcher | watcher | Git change detection |
+| `src/loop-detector.ts` | LoopDetector | detector | Repeated tool-call loop detection |
+| `src/priming-engine.ts` | PrimingEngine | engine | Context priming on session start |
+| `src/subconscious.ts` | Subconscious | subconscious | Background context maintenance |
+| `src/token-bucket-analyzer.ts` | TokenBucketAnalyzer | analyzer | Token budget analysis |
+| `src/tool-distiller.ts` | ToolDistiller | distiller | Distills tool-call output |
+| `src/tui.ts` | TUI | tui | Solid-PRG TUI (optional adapter) |
+| `src/assistant-text-compactor.ts` | AssistantTextCompactor | compactor | Compacts assistant response text |
 
-**src/a.ts**
-- Exports: none
-- Imports: 
-- Type: source
+## Key Decisions
 
-**src/real-file.ts**
-- Exports: none
-- Imports: 
-- Type: source
-
-**src/new-feature.ts**
-- Exports: none
-- Imports: 
-- Type: source
-
-**src/a.ts**
-- Exports: none
-- Imports: 
-- Type: source
-
-**src/b.ts**
-- Exports: none
-- Imports: 
-- Type: source
-
-**src/a.ts**
-- Exports: none
-- Imports: 
-- Type: source
-
-**src/real-file.ts**
-- Exports: none
-- Imports: 
-- Type: source
-## Data Flow
-
-```
-User Message → OpenCode
-    ↓
-Plugin hooks: onUserMessage, onToolCall
-    ↓
-Tool Distiller → Context Compactor → Subconscious (background)
-    ↓
-Memory Extractor → structured memories
-    ↓
-Memory Manager → PostgreSQL (memories table)
-    ↓
-Context Recall → builds ContextBrief for agent
-    ↓
-Priming Engine → injects relevant memories at session start
-```
-
-### Auto-Documentation Flow (Phase 2)
-```
-Tool Execute (write/edit) → tool-execute.after hook
-    ↓
-queueDocUpdate(filePath, changeType)
-    ↓
-Session End (dispose) → flushDocUpdates(pluginCtx)
-    ↓
-Read changed source files → Update relevant docs
-    ↓
-Write updated docs to /docs
-```
-
----
-
-## Database Schema (PostgreSQL)
-
-**Table: `memories`**
-- `id` SERIAL PRIMARY KEY
-- `content` TEXT NOT NULL
-- `type` VARCHAR(50) NOT NULL (conversation, workspace, repo, preference, lesson)
-- `importance` REAL DEFAULT 0.5
-- `tags` TEXT[] DEFAULT '{}'
-- `linked_memory_ids` INTEGER[] DEFAULT '{}'
-- `created_at` TIMESTAMPTZ DEFAULT NOW()
-- `updated_at` TIMESTAMPTZ DEFAULT NOW()
-- `accessed_at` TIMESTAMPTZ
-- `last_accessed_at` TIMESTAMPTZ
-- `access_count` INTEGER DEFAULT 0
-- `archived_at` TIMESTAMPTZ
-- `project_id` TEXT — nullable (NULL = legacy/global)
-- `embedding` VECTOR(1536) — for semantic search (pgvector)
-
-**Indexes**: GIN on tags, IVFFLAT on embedding, BTREE on type/importance/created_at, BTREE on project_id, BTREE on (project_id, type, created_at)
-
----
-
-## Project Isolation (Phase 5)
-
-**Default behavior**: Memory recall is scoped to the current project only.
-- Project ID = normalized workspace root path (stable hash)
-- `NULL` project_id = legacy/global memories (preserved, not deleted)
-- Global/legacy search requires explicit opt-in (`searchMode: 'global'`)
-
-**Recall priority**:
-1. Current project memories (exact project_id match)
-2. Legacy/global memories (NULL project_id) — only if high importance or explicitly requested
-3. Global memories — only with explicit opt-in
-
-**Tables updated**: `memories`, `session_contexts` with nullable `project_id` columns + indexes.
-
----
-
-## Diagrams
-
-| Diagram | File | Purpose |
-|---------|------|---------|
-| **Module Graph** | [`diagrams/module-graph.mmd`](diagrams/module-graph.mmd) | Module imports & responsibilities |
-| **Data Flow** | [`diagrams/data-flow.mmd`](diagrams/data-flow.mmd) | End-to-end data pipeline |
-| **Memory Pipeline** | [`diagrams/memory-pipeline.mmd`](diagrams/memory-pipeline.mmd) | Extraction → distillation → storage |
-| **Auto-Docs Flow** | [`diagrams/auto-docs-flow.mmd`](diagrams/auto-docs-flow.mmd) | Hook → queue → flush → docs |
-| **Compaction & Rollover** | [`diagrams/compaction-rollover-flow.mmd`](diagrams/compaction-rollover-flow.mmd) | Context pressure → compress → archive |
-
-Render in GitHub, VS Code (Mermaid preview), or `npx @mermaid-js/mermaid-cli -i diagrams/*.mmd -o diagrams/`.
-
----
-
-## External Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `pg` | PostgreSQL client |
-| `pgvector` | Vector embeddings for semantic search |
-| `zod` | Config validation |
-| `@opencode/plugin` | OpenCode plugin types |
-
----
-
-## Affected Systems
-
-- **OpenCode core**: Plugin registers tools, hooks, subagents
-- **PostgreSQL**: External DB survives reinstalls (unlike built-in SQLite)
-- **Agent context**: Memories injected via priming + context recall
-- **Background processing**: Subconscious runs distillation periodically
+- **No CLI** — plugin is runtime/API-first; TUI is optional adapter
+- **PostgreSQL + pgvector** — vector search via DB, not in-process
+- **Ollama** — local embedding generation, no external API
+- **RRF hybrid search** — vector (0.35) + text (0.25) + entity (0.35) with exact-match boosting
+- **Compaction quality gate** — entity_retention×0.35 + decision_retention×0.25 + error_retention×0.25 + similarity×0.15, reject if < 0.6

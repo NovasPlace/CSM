@@ -6,18 +6,18 @@
 - **Symptom**: `ECONNREFUSED` or `ENOTFOUND` on plugin load
 - **Cause**: PostgreSQL not running, wrong host/port, auth failure
 - **Recovery**: 
-  - Verify `psql "postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory"` works
+  - Verify psql connection string works
   - Check `docker ps` if using container
   - Verify `pgvector` extension: `CREATE EXTENSION IF NOT EXISTS vector;`
-- **Config**: `database.url` in OpenCode config or `OPENCODE_MEMORY_DB_URL` env
+- **Config**: `database.url` in OpenCode config or `DATABASE_URL` env
 
 ### 2. Migration Failures
-- **Symptom**: `relation "memories" does not exist` or column mismatch
+- **Symptom**: `relation "sessions" does not exist` or column mismatch
 - **Cause**: Schema drift, partial migration, manual DB edits
 - **Recovery**: 
   - `DROP TABLE memories CASCADE;` then restart plugin (auto-migrates)
-  - Or run migrations manually from `src/database.ts:runMigrations()`
-- **Prevention**: Never edit schema manually; use `Database.migrate()`
+  - Or run migrations manually from `src/database.ts:initializeSchema()`
+- **Prevention**: Never edit schema manually; ALTER TABLE constraints in `initializeSchema`
 
 ### 3. Embedding Generation Errors
 - **Symptom**: `memory_search` returns empty or throws
@@ -35,36 +35,46 @@
   - Check `ContextCompactor` risk classification logic
   - Disable: `compactContext: false`
 
-### 5. Subconscious Distillation Stalls
-- **Symptom**: Memories not distilled after many turns
-- **Cause**: Interval too long, process crashed, queue backed up
+### 5. Hybrid Search Empty Results
+- **Symptom**: `hybridSearch()` returns empty despite matching memories
+- **Cause**: 
+  - `$2` parameter conflict (LIMIT vs JSONB cast) — fixed Phase 9
+  - `metadata.extracted_concepts` not in WHERE clause — fixed Phase 9
+  - Entity boost returning 0 because SQL query never matches
 - **Recovery**: 
-  - Call `Subconscious.forceDistill()` manually
-  - Check `subconsciousIntervalMs` config (default: 300000 = 5min)
-  - Review logs for `distill` errors
+  - Check `entityMatchBoost()` SQL in `hybrid-search.ts`
+  - Verify `$1`, `$2`, `$3` parameter indexing is correct
+  - Ensure `embedding` column populated in `memories` table
+- **Prevention**: Test entityMatchBoost independently; never reuse `$N` params
 
-### 6. Priming Returns Empty
-- **Symptom**: New session has no prior context
-- **Cause**: No memories match project, wrong `projectId`, recall threshold too high
-- **Recovery**: 
-  - Verify `projectId` matches (default: repo root hash)
-  - Lower `recallThreshold` in config (default: 0.7)
-  - Check `memory_list` returns data
+### 6. Sessions Table Missing
+- **Symptom**: `relation "sessions" does not exist` on database connect
+- **Cause**: `initializeSchema()` assumed sessions table pre-existed; fresh DB doesn't have it
+- **Recovery**: Schema now creates sessions table with `id, project_id, directory, title, created_at, updated_at`
+- **Prevention**: `CREATE TABLE IF NOT EXISTS sessions` + ALTER TABLE for missing columns
 
-### 7. Tool Distiller Misses Edits
-- **Symptom**: `CHANGELOG_LIVE.md` not updated after code changes
-- **Cause**: Distiller only groups `edit`/`write`/`bash` tools; misses `task` subagent edits
-- **Recovery**: 
-  - Expand `ToolDistiller.detectIntent()` to cover subagent file ops
-  - Manual doc update as fallback
+### 7. Check Constraint Violations
+- **Symptom**: `new row for relation "memories" violates check constraint "memories_memory_type_check"`
+- **Cause**: New memory types (concept, code, config, error) not in DB constraint
+- **Recovery**: ALTER TABLE in `initializeSchema()` now drops and recreates constraints with full type list
+- **Prevention**: Add new types to BOTH `CREATE TABLE` and `ALTER TABLE ... DROP + ADD CONSTRAINT`
 
-### 8. Memory Leak in Long Sessions
-- **Symptom**: OpenCode slows, memory usage grows
-- **Cause**: Unbounded `toolCallHistory` in context, distillation not keeping up
+### 8. Compaction Quality Below Threshold
+- **Symptom**: Compaction rejected with `quality_score < 0.6`
+- **Cause**: Critical entities, decisions, or errors dropped during compaction
+- **Recovery**:
+  - Check `CompactionQualityMetrics.warningErrorRetention` — should be > 0.8
+  - Reduce compaction aggressiveness (increase budget cap)
+  - Review preserved signals in `ContextCompactor`
+- **Prevention**: Monitor `lastQuality` on `ContextCompactor`; tune threshold per project
+
+### 9. Doc-Analyzer Spam
+- **Symptom**: SYSTEM_MAP.md fills with stub entries (`src/a.ts: Exports: none, Imports: , Type: source`)
+- **Cause**: No dedup, no stub filtering, no file-existence check in `applyDocUpdate()`
 - **Recovery**: 
-  - Restart OpenCode (flushes in-memory caches)
-  - Reduce `maxToolCallsInContext` config
-  - Enable `autoDistill: true`
+  - Delete spam entries manually
+  - Ensure `isStubContent()` and dedup guards are active in `doc-analyzer.ts`
+- **Prevention**: `isStubContent()` filters files with no exports/imports; `applyDocUpdate()` checks for existing entries
 
 ---
 
@@ -73,9 +83,12 @@
 | Error | Module | Frequency | Fix |
 |-------|--------|-----------|-----|
 | `password authentication failed` | database.ts | High | Check `.env` / config |
-| `vector dimension mismatch` | memory-extractor.ts | Medium | Recreate table with correct dim |
-| `context deadline exceeded` | context-compactor.ts | Low | Increase budget or disable |
-| `no session found` | tools.ts | Medium | Ensure session initialized |
+| `vector dimension mismatch` | embeddings.ts | Medium | Recreate table with correct dim |
+| `relation "sessions" does not exist` | database.ts | Medium | Run `initializeSchema()` |
+| `check constraint violation` | database.ts | Medium | ALTER TABLE to add new type values |
+| `column "embedding" does not exist` | database.ts | Low | ALTER TABLE to add embedding column |
+| `no session found` | memory-manager.ts | Medium | Ensure session initialized |
+| `quality_score below threshold` | compaction-quality.ts | Low | Check entity/error retention |
 
 ---
 
@@ -84,22 +97,21 @@
 ### Full Reset (Nuclear)
 ```bash
 # Drop all data, start fresh
-psql "postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory" \
-  -c "DROP TABLE IF EXISTS memories, distillation_log, tool_call_groups CASCADE;"
-# Restart OpenCode — plugin auto-migrates
+psql "$DATABASE_URL" -c "DROP TABLE IF EXISTS memories, memory_chunks, sessions, memory_events, session_contexts CASCADE;"
+# Restart plugin — auto-migrates
 ```
 
 ### Soft Reset (Keep Memories, Fix Schema)
 ```bash
-# Re-run migrations only
-psql "postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory" \
-  -f src/database.ts  # (extract migration SQL manually)
+# Re-run constraint updates
+psql "$DATABASE_URL" -c "ALTER TABLE memories DROP CONSTRAINT IF EXISTS memories_memory_type_check;"
+psql "$DATABASE_URL" -c "ALTER TABLE memories ADD CONSTRAINT memories_memory_type_check CHECK (memory_type IN ('conversation','workspace','repo','preference','lesson','episodic','procedural','concept','code','config','error'));"
 ```
 
 ### Verify DB Health
 ```sql
 -- Count memories by type
-SELECT type, COUNT(*) FROM memories GROUP BY type;
+SELECT memory_type, COUNT(*) FROM memories GROUP BY memory_type;
 
 -- Check embedding coverage
 SELECT COUNT(*) as total, 
@@ -107,6 +119,9 @@ SELECT COUNT(*) as total,
        COUNT(*) - COUNT(embedding) as missing
 FROM memories;
 
--- Recent distillation log
-SELECT * FROM distillation_log ORDER BY created_at DESC LIMIT 10;
+-- Check sessions
+SELECT id, project_id, directory, title FROM sessions LIMIT 10;
+
+-- Check vector extension
+SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
 ```

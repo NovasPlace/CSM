@@ -31,6 +31,7 @@ export interface PluginState {
   currentSessionId: string | null;
   messageCount: number;
   capturedMessageSizes: Map<string, number>;
+  stateChangeTracker?: Record<string, unknown>;
 }
 
 export interface PluginContext {

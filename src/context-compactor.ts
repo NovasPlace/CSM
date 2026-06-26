@@ -1,9 +1,20 @@
-﻿import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats } from './types.js';
+﻿import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics } from './types.js';
+import { measureCompactionQuality, extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeQualityScore } from './compaction-quality.js';
+
+const DEFAULT_QUALITY_CONFIG = {
+  entityRetentionWeight: 0.35,
+  decisionRetentionWeight: 0.25,
+  warningErrorRetentionWeight: 0.25,
+  semanticSimilarityWeight: 0.15,
+  qualityThreshold: 0.6,
+  embeddingDriftWarningThreshold: 0.3,
+};
 
 export class ContextCompactor {
   private config: CompactorConfig;
   private cumulativeStats: CumulativeCompactionStats;
   private lastResult: CompactionResult | null = null;
+  private lastQuality: CompactionQualityMetrics | null = null;
 
   constructor(config: CompactorConfig) {
     this.config = {
@@ -168,6 +179,54 @@ export class ContextCompactor {
       compactedAt: new Date(),
     };
 
+    this.lastResult = result;
+
+    // Measure compaction quality
+    const allTextBefore = beforeStr;
+    const allTextAfter = compacted;
+    if (compactable.length > 0) {
+      this.lastQuality = {
+        compressionRatio: afterTokens / (beforeTokens || 1),
+        embeddingDrift: -1,
+        entityRetention: computeRetention(
+          extractEntities(allTextBefore),
+          extractEntities(allTextAfter),
+        ),
+        decisionRetention: computeRetention(
+          extractDecisions(allTextBefore),
+          extractDecisions(allTextAfter),
+        ),
+        warningErrorRetention: computeRetention(
+          extractWarningsErrors(allTextBefore),
+          extractWarningsErrors(allTextAfter),
+        ),
+        restoreSuccessRate: 1.0,
+        recallSuccessAfterCompaction: computeRetention(
+          extractEntities(allTextBefore),
+          extractEntities(allTextAfter),
+        ),
+        tokensSavedTotal: tokensSaved,
+        tokensSavedPerSession: tokensSaved,
+        qualityScore: computeQualityScore(
+          computeRetention(extractEntities(allTextBefore), extractEntities(allTextAfter)),
+          computeRetention(extractDecisions(allTextBefore), extractDecisions(allTextAfter)),
+          computeRetention(extractWarningsErrors(allTextBefore), extractWarningsErrors(allTextAfter)),
+          0.5,
+          DEFAULT_QUALITY_CONFIG,
+        ),
+        safe: false,
+        entitiesBefore: extractEntities(allTextBefore),
+        entitiesAfter: extractEntities(allTextAfter),
+        decisionsBefore: extractDecisions(allTextBefore),
+        decisionsAfter: extractDecisions(allTextAfter),
+        warningsErrorsBefore: extractWarningsErrors(allTextBefore),
+        warningsErrorsAfter: extractWarningsErrors(allTextAfter),
+      };
+      this.lastQuality.safe = this.lastQuality.qualityScore >= DEFAULT_QUALITY_CONFIG.qualityThreshold;
+    } else {
+      this.lastQuality = null;
+    }
+
     return { compacted, result, compactedCount: compactable.length };
   }
 
@@ -216,6 +275,10 @@ export class ContextCompactor {
 
   getLastResult(): CompactionResult | null {
     return this.lastResult;
+  }
+
+  getLastQuality(): CompactionQualityMetrics | null {
+    return this.lastQuality;
   }
 
   getCompactionStats(): CumulativeCompactionStats {
