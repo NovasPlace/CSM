@@ -197,4 +197,83 @@ describe('Phase 5 — Context Compiler', () => {
     });
     assert.ok(result.partsCompressed > 0, `expected compressed parts, got ${result.partsCompressed}`);
   });
+
+  it('10. adaptive window shrinks under pressure', () => {
+    const shortOutputs = Array.from({ length: 20 }, (_, i) =>
+      toolPart('bash', `result ${i}: ok`, `/file${i}.ts`)
+    );
+    const messages = [
+      msg('user', [textPart('start')]),
+      msg('assistant', shortOutputs.slice(0, 10)),
+      ...Array.from({ length: 8 }, (_, i) => fillerMsg(i)),
+      msg('assistant', shortOutputs.slice(10)),
+      msg('user', [textPart('continue')]),
+      msg('assistant', [textPart('finish')]),
+    ];
+    const lowResult = compileContext(messages, {
+      ...DEFAULT_CONFIG,
+      modes: { cheap: 200000, normal: 200000, deep: 200000 },
+      defaultMode: 'normal',
+      recentTurnWindow: 5,
+    });
+    const highResult = compileContext(messages, {
+      ...DEFAULT_CONFIG,
+      modes: { cheap: 100, normal: 100, deep: 100 },
+      defaultMode: 'normal',
+      recentTurnWindow: 5,
+    });
+    assert.ok(
+      highResult.partsCompressed >= lowResult.partsCompressed,
+      `high pressure should compress at least as much: high=${highResult.partsCompressed} low=${lowResult.partsCompressed}`
+    );
+  });
+
+  it('11. iterative recompression when first pass insufficient', () => {
+    const outputs = Array.from({ length: 40 }, (_, i) =>
+      toolPart('bash', `command ${i} output: ${'x'.repeat(200)}`, `/file${i}.ts`)
+    );
+    const messages = [
+      msg('user', [textPart('start')]),
+      msg('assistant', outputs.slice(0, 20)),
+      ...Array.from({ length: 8 }, (_, i) => fillerMsg(i)),
+      msg('assistant', outputs.slice(20)),
+      msg('user', [textPart('go')]),
+      msg('assistant', [textPart('done')]),
+    ];
+    const result = compileContext(messages, {
+      ...DEFAULT_CONFIG,
+      modes: { cheap: 500, normal: 500, deep: 500 },
+      defaultMode: 'normal',
+      recentTurnWindow: 8,
+    });
+    assert.ok(result.partsCompressed > 0, 'should compress something');
+    assert.ok(result.afterTokens <= result.budget * 1.05, `should fit budget: after=${result.afterTokens} budget=${result.budget}`);
+  });
+
+  it('12. preserves errors even under extreme pressure', () => {
+    const errorPart = {
+      type: 'tool' as const,
+      tool: 'bash',
+      state: { status: 'error', error: 'fatal crash', input: { command: 'build' }, title: 'bash call', time: { start: 0, end: 100, duration: 100 } },
+      callID: 'call-err',
+      id: 'tool-err',
+    };
+    const bigOutputs = Array.from({ length: 30 }, (_, i) =>
+      toolPart('bash', 'x'.repeat(500), `/old${i}.ts`)
+    );
+    const messages = [
+      msg('user', [textPart('start')]),
+      msg('assistant', bigOutputs),
+      msg('assistant', [errorPart]),
+      msg('user', [textPart('fix it')]),
+      msg('assistant', [textPart('trying')]),
+    ];
+    const result = compileContext(messages, {
+      ...DEFAULT_CONFIG,
+      modes: { cheap: 200, normal: 200, deep: 200 },
+      defaultMode: 'normal',
+      recentTurnWindow: 1,
+    });
+    assert.equal(errorPart.state.error, 'fatal crash', 'error preserved even under pressure');
+  });
 });

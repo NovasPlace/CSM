@@ -163,7 +163,7 @@ function estimateTokensLocal(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-function printBreakdown(label: string, breakdown: ReturnType<typeof countTokensByPartType>) {
+function printBreakdown(label: string, breakdown: ReturnType<typeof countTokensByPartType>, budget?: number) {
   const pct = (n: number) => (n / breakdown.total * 100).toFixed(1);
   console.log(`\n=== ${label} ===`);
   console.log(`  Tool outputs:    ${breakdown.tool.toLocaleString().padStart(8)} tokens  (${pct(breakdown.tool)}%)`);
@@ -172,7 +172,7 @@ function printBreakdown(label: string, breakdown: ReturnType<typeof countTokensB
   console.log(`  User messages:   ${breakdown.user.toLocaleString().padStart(8)} tokens  (${pct(breakdown.user)}%)`);
   console.log(`  Assistant text:  ${breakdown.assistant.toLocaleString().padStart(8)} tokens  (${pct(breakdown.assistant)}%)`);
   console.log(`  TOTAL:           ${breakdown.total.toLocaleString().padStart(8)} tokens`);
-  console.log(`  Context usage:  ${(breakdown.total / BUDGET * 100).toFixed(1)}%`);
+  if (budget) console.log(`  Context usage:  ${(breakdown.total / budget * 100).toFixed(1)}% of ${budget.toLocaleString()}`);
 }
 
 function main() {
@@ -226,6 +226,69 @@ function main() {
 
   if (contextPctAfter < 50) {
     console.log(`✅ SESSION RECOVERED — context usage at ${contextPctAfter.toFixed(1)}%, well within budget`);
+  }
+
+  console.log('\n\n========== ADAPTIVE WINDOW PRESSURE TEST ==========\n');
+
+  const messages2 = simulateSession(877);
+  const messages3 = simulateSession(877);
+  const messages4 = simulateSession(877);
+
+  // LOW PRESSURE: budget = 2x current, so very little needs compression
+  const lowPressure: ContextCompilerConfig = {
+    enabled: true, defaultMode: 'normal',
+    modes: { normal: 200_000, deep: 400_000, emergency: 100_000 },
+    recentTurnWindow: 10,
+  };
+  // MEDIUM PRESSURE: budget = current size, need to compress ~50%
+  const medPressure: ContextCompilerConfig = {
+    enabled: true, defaultMode: 'normal',
+    modes: { normal: 50_000, deep: 100_000, emergency: 25_000 },
+    recentTurnWindow: 10,
+  };
+  // HIGH PRESSURE: budget = 15% of current, need to compress ~85%
+  const highPressure: ContextCompilerConfig = {
+    enabled: true, defaultMode: 'normal',
+    modes: { normal: 15_000, deep: 30_000, emergency: 7_500 },
+    recentTurnWindow: 10,
+  };
+
+  const lowResult = compileContext(messages2, lowPressure);
+  const medResult = compileContext(messages4, medPressure);
+  const highResult = compileContext(messages3, highPressure);
+
+  const lowBD = countTokensByPartType(messages2);
+  const medBD = countTokensByPartType(messages4);
+  const highBD = countTokensByPartType(messages3);
+
+  console.log('--- Low pressure (budget=200K, ~2x session) ---');
+  printBreakdown('After compaction (low pressure)', lowBD, 200_000);
+  const lowCtx = lowResult.afterTokens / lowResult.budget * 100;
+  const lowTool = lowBD.tool / lowBD.total * 100;
+  console.log(`  Context: ${lowCtx.toFixed(1)}% | Tool dominance: ${lowTool.toFixed(1)}%`);
+
+  console.log('\n--- Medium pressure (budget=50K, ~50% session) ---');
+  printBreakdown('After compaction (medium pressure)', medBD, 50_000);
+  const medCtx = medResult.afterTokens / medResult.budget * 100;
+  const medTool = medBD.tool / medBD.total * 100;
+  console.log(`  Context: ${medCtx.toFixed(1)}% | Tool dominance: ${medTool.toFixed(1)}%`);
+
+  console.log('\n--- High pressure (budget=15K, ~15% session) ---');
+  printBreakdown('After compaction (high pressure)', highBD, 15_000);
+  const highCtx = highResult.afterTokens / highResult.budget * 100;
+  const highTool = highBD.tool / highBD.total * 100;
+  console.log(`  Context: ${highCtx.toFixed(1)}% | Tool dominance: ${highTool.toFixed(1)}%`);
+
+  console.log('\n--- ADAPTIVE WINDOW VERIFICATION ---');
+  console.log(`  As pressure increases, the recent window should shrink,`);
+  console.log(`  compressing more tool outputs and lowering tool-output dominance.`);
+  console.log(`  Low  → Tool dominance: ${lowTool.toFixed(1)}% (large window, mostly raw)`);
+  console.log(`  Med  → Tool dominance: ${medTool.toFixed(1)}% (shrinking window, more compression)`);
+  console.log(`  High → Tool dominance: ${highTool.toFixed(1)}% (minimal window, aggressive compression)`);
+  if (highTool < lowTool) {
+    console.log(`\n✅ ADAPTIVE WINDOW WORKS — tool dominance drops from ${lowTool.toFixed(1)}% to ${highTool.toFixed(1)}% as pressure increases`);
+  } else {
+    console.log(`\n❌ ADAPTIVE WINDOW NOT WORKING — tool dominance unchanged across pressure levels`);
   }
 }
 

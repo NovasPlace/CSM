@@ -29,23 +29,46 @@ function isAlreadyCompressed(part: any): boolean {
   return ALREADY_COMPACTED.some(m => String(text).startsWith(m));
 }
 
+/** Compute pressure-aware recent window size */
+function adaptiveRecentWindow(
+  baseWindow: number, totalTokens: number, budget: number,
+): number {
+  if (budget <= 0) return 1;
+  const pressure = totalTokens / budget;
+  if (pressure <= 1.0) return baseWindow;
+  if (pressure <= 2.0) return Math.max(2, Math.floor(baseWindow * 0.5));
+  if (pressure <= 3.0) return Math.max(1, Math.floor(baseWindow * 0.3));
+  return 1;
+}
+
 /** Returns pinned category string or 'compressible' */
 function classifyPart(
-  part: any, msgIndex: number, totalMsgs: number, role: string, recentWindow: number,
+  part: any, msgIndex: number, totalMsgs: number, role: string,
+  adaptiveWindow: number, pressureRatio: number,
 ): string {
   if (isAlreadyCompressed(part)) return 'compressible';
   if (role === 'user') return 'user_message';
-  if (msgIndex >= totalMsgs - recentWindow) return 'recent_turn';
+  const isRecent = msgIndex >= totalMsgs - adaptiveWindow;
+  const isLastTurn = msgIndex >= totalMsgs - 2;
+  if (isRecent) {
+    if (part.type === 'tool' && (part.state?.status === 'error' || part.state?.type === 'error')) return 'error';
+    if (isLastTurn) return 'recent_turn';
+    if (pressureRatio > 1.5 && part.type === 'tool' && (part.state?.status === 'completed' || part.state?.type === 'completed')) return 'compressible';
+    if (pressureRatio > 2.0 && part.type === 'tool') return 'compressible';
+    return 'recent_turn';
+  }
   if (part.type === 'tool' && (part.state?.status === 'error' || part.state?.type === 'error')) return 'error';
   if (STEP_TYPES.includes(part.type)) return 'step_type';
   if (part.type === 'tool' && (part.state?.status === 'completed' || part.state?.type === 'completed')) {
     if (estimateTokens(String(part.state.output ?? '')) > 100) return 'compressible';
-    if (msgIndex < totalMsgs - recentWindow * 2) return 'compressible';
+    if (msgIndex < totalMsgs - adaptiveWindow * 2) return 'compressible';
+    if (pressureRatio > 1.5) return 'compressible';
     return 'short_tool_output';
   }
   if (part.type === 'text') {
     if (estimateTokens(String(part.text ?? '')) > 200) return 'compressible';
-    if (msgIndex < totalMsgs - recentWindow * 3) return 'compressible';
+    if (msgIndex < totalMsgs - adaptiveWindow * 3) return 'compressible';
+    if (pressureRatio > 1.5) return 'compressible';
     return 'short_text';
   }
   return 'other';
@@ -114,7 +137,7 @@ function compressTextPart(part: any): CompressedPartDetail | null {
 }
 
 function classifyAndCollect(
-  messages: { info?: { role?: string }; parts?: any[] }[], recentWindow: number,
+  messages: { info?: { role?: string }; parts?: any[] }[], adaptiveWindow: number, pressureRatio: number,
 ): { candidates: { part: any; tokens: number }[]; pinnedCategories: Record<string, number> } {
   const candidates: { part: any; tokens: number }[] = [];
   const pinnedCategories: Record<string, number> = {};
@@ -122,7 +145,7 @@ function classifyAndCollect(
   for (let i = 0; i < totalMsgs; i++) {
     const role = messages[i].info?.role ?? 'unknown';
     for (const part of messages[i].parts ?? []) {
-      const cls = classifyPart(part, i, totalMsgs, role, recentWindow);
+      const cls = classifyPart(part, i, totalMsgs, role, adaptiveWindow, pressureRatio);
       if (cls === 'compressible') {
         candidates.push({ part, tokens: estimateTokens(String(part.text ?? part.state?.output ?? '')) });
       } else {
@@ -161,12 +184,28 @@ export function compileContext(
   if (beforeTokens <= budget) {
     return { ...empty, beforeTokens, afterTokens: beforeTokens, budget, mode: config.defaultMode };
   }
-  const { candidates, pinnedCategories } = classifyAndCollect(messages, config.recentTurnWindow);
-  const { saved, details } = compressToFit(candidates, beforeTokens - budget);
+  let adaptiveWindow = adaptiveRecentWindow(config.recentTurnWindow, beforeTokens, budget);
+  let pressureRatio = beforeTokens / Math.max(budget, 1);
+  let allDetails: CompressedPartDetail[] = [];
+  let totalSaved = 0;
+  for (let pass = 0; pass < 3; pass++) {
+    const { candidates, pinnedCategories } = classifyAndCollect(messages, adaptiveWindow, pressureRatio);
+    const overBudget = beforeTokens - totalSaved - budget;
+    if (overBudget <= 0) break;
+    const { saved, details } = compressToFit(candidates, overBudget);
+    totalSaved += saved;
+    allDetails = allDetails.concat(details);
+    if (saved === 0) {
+      adaptiveWindow = Math.max(1, adaptiveWindow - 1);
+      pressureRatio = (beforeTokens - totalSaved) / Math.max(budget, 1);
+    }
+  }
+  const afterTokens = beforeTokens - totalSaved;
+  const { pinnedCategories: finalPinned } = classifyAndCollect(messages, adaptiveWindow, pressureRatio);
   return {
-    beforeTokens, afterTokens: beforeTokens - saved, budget,
-    partsCompressed: details.length, partsPinned: Object.values(pinnedCategories).reduce((a, b) => a + b, 0),
-    mode: config.defaultMode, compressedDetails: details, pinnedCategories,
+    beforeTokens, afterTokens, budget,
+    partsCompressed: allDetails.length, partsPinned: Object.values(finalPinned).reduce((a, b) => a + b, 0),
+    mode: config.defaultMode, compressedDetails: allDetails, pinnedCategories: finalPinned,
   };
 }
 
