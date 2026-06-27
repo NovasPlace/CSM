@@ -30,6 +30,12 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 - **Auto-checkpointing** - Queues checkpoints before risky operations.
 - **Checkpoint markdown** - Renders checkpoints into readable summaries for debugging and handoff.
 
+### Hydration Depth Scoring (Phase 25)
+- **Depth vs stability** - Separate metric from drift tracking: a self-model answer can be perfectly stable (no overclaim) but shallow (no evidence). These are orthogonal dimensions.
+- **5 dimensions** - record_citation, session_phase_naming, evidence_anchor_depth, causal_chain_reconstruction, gap_reporting.
+- **Verdicts** - shallow (< 0.3), moderate (0.3-0.55), deep (>= 0.55).
+- **Integration** - Feeds into drift tracking as an independent axis; high stability + high hydration = robust self-model.
+
 ### Causal Thread Hydration (Phase 24)
 - **Narrative continuity** - Reconstructs the causal thread around a recalled memory: problem → action → result → decision → lesson → downstream change.
 - **Causal vs temporal** - Distinguishes causal links (memory_links type=causal/reference) from pure temporal adjacency, reporting lower confidence for temporal-only chains.
@@ -66,7 +72,7 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 
 ## Test Suite
 
-Current source of truth is the test runner output. The suite includes fresh-schema and Phase 19b integration coverage for clean installs, explicit backfill, and hashed recall telemetry. 73 tests total across 13 suites.
+Current source of truth is the test runner output. The suite includes fresh-schema and Phase 19b integration coverage for clean installs, explicit backfill, and hashed recall telemetry. 87 tests total across 14 suites.
 
 | Suite | What It Covers |
 |-------|----------------|

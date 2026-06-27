@@ -177,3 +177,13 @@ Self-continuity records can surface naturally in silent mode, and later sessions
 - **Limits**: Max token budget enforced (default 2000 chars); max radius (default 3); failure falls back to empty thread (never blocks); redaction still applies.
 - **Test results**: 16 tests passing (73 total across all suites) — full chain, broken chain, partial chain, role classification, redaction, budget enforcement, graceful failure.
 - **Status**: ✅ LOCKED — 16 tests passing (73 total across all suites)
+
+### 25. Hydration Depth Scoring — Phase 25 ✅ LOCKED
+- **Decision**: Separate hydration depth scoring from drift tracking. Stability measures whether the self-model stays within epistemic bounds; hydration depth measures how richly it reconstructs evidence.
+- **Why**: A self-model answer can be perfectly stable (no overclaim) but shallow (no record citation, no session naming, no causal chain, no gap reporting). These are independent dimensions.
+- **Dimensions**: record_citation, session_phase_naming, evidence_anchor_depth, causal_chain_reconstruction, gap_reporting
+- **Verdicts**: shallow (< 0.3), moderate (0.3-0.55), deep (>= 0.55)
+- **Implementation**: `measureHydrationDepth(text)` in `src/hydration-depth-tracker.ts`
+- **Test results**: 14 tests — shallow/deep classification, dimension scoring, drift-independence proof, edge cases
+- **Key insight**: stable answer can be shallow; deep answer can also be stable; drift detection is orthogonal to hydration depth
+- **Status**: ✅ LOCKED — 14 tests passing (87 total across all suites)

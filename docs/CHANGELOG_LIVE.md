@@ -2,6 +2,13 @@
 
 ## Development Log
 
+### 2026-06-27 — Phase 25 LOCKED: Hydration Depth Scoring
+- Separate metric from drift tracking: stability ≠ reconstruction depth
+- `measureHydrationDepth(text)` in `src/hydration-depth-tracker.ts`
+- 5 dimensions: record_citation, session_phase_naming, evidence_anchor_depth, causal_chain_reconstruction, gap_reporting
+- Verdicts: shallow (< 0.3), moderate (0.3-0.55), deep (>= 0.55)
+- Tests: 14/14 passing (87 total across all suites)
+
 ### 2026-06-27 — Phase 24 LOCKED: Causal Thread Hydration
 - `CausalThreadHydrator` class: hydrateCausalThread({ memoryId, sessionId?, radius?, ... })
 - Role classification: lesson → decision → downstream_change → result → action → problem → unknown
