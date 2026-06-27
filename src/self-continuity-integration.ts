@@ -3,6 +3,7 @@ import type { HydratedSelfContinuityRecord } from './self-continuity-hydrator.js
 import type { HydratedCausalThread } from './self-continuity-causal-thread.js';
 import { measureDrift } from './self-drift-tracker.js';
 import { measureHydrationDepth } from './hydration-depth-tracker.js';
+import { buildPhaseNarrative, formatPhaseNarrative, type PhaseNarrativeResult } from './self-continuity-phase-narrative.js';
 
 export interface IntegratedRecord {
   record: HydratedSelfContinuityRecord;
@@ -17,6 +18,7 @@ export interface IntegratedRecallResult {
   totalThreads: number;
   avgStability: number;
   avgHydrationDepth: number;
+  phaseNarrative: PhaseNarrativeResult | null;
   summary: string;
   tokenBudget: number;
 }
@@ -120,12 +122,21 @@ export class SelfContinuityIntegration {
     }
 
     const count = integrated.length || 1;
+
+    let phaseNarrative: PhaseNarrativeResult | null = null;
+    try {
+      phaseNarrative = buildPhaseNarrative();
+    } catch {
+      // Phase narrative is supplementary — never block
+    }
+
     return {
       records: integrated,
       totalRecords: integrated.length,
       totalThreads,
       avgStability: totalStability / count,
       avgHydrationDepth: totalDepth / count,
+      phaseNarrative,
       summary: this.buildSummary(integrated, totalThreads),
       tokenBudget: budgetLeft,
     };
@@ -158,6 +169,11 @@ export class SelfContinuityIntegration {
       parts.push(lines.join('\n'));
     }
 
+    if (result.phaseNarrative) {
+      const narrativeText = formatPhaseNarrative(result.phaseNarrative);
+      parts.push(narrativeText);
+    }
+
     return parts.join('\n\n');
   }
 
@@ -174,6 +190,7 @@ export class SelfContinuityIntegration {
       totalThreads: 0,
       avgStability: 0,
       avgHydrationDepth: 0,
+      phaseNarrative: null,
       summary: 'No self-continuity records found.',
       tokenBudget: DEFAULT_MAX_TOKENS,
     };

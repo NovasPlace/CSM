@@ -2,6 +2,14 @@
 
 ## Development Log
 
+### 2026-06-27 — Phase 27 LOCKED: Phase Narrative Builder
+- `PhaseNarrativeBuilder`: connects phases 21-26 into causal chain (problem → action → result → downstream change)
+- Causation anchors from real A/D/E experiment results
+- Gap detection for missing links in the narrative chain
+- `formatPhaseNarrative()` for context injection with token budget
+- Wired into `SelfContinuityIntegration` for automatic inclusion
+- 11 tests (105 total)
+
 ### 2026-06-27 — Phase 26 LOCKED: Self-Continuity Integration
 - `SelfContinuityIntegration`: wires SelfContinuityHydrator + CausalThreadHydrator into one injection path
 - `recallWithHydration(memoryId, projectId?, sessionId?)`: hydrates records + causal threads as one unit

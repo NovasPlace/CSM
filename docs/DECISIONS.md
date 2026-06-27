@@ -189,4 +189,19 @@ Self-continuity records can surface naturally in silent mode, and later sessions
 - **Status**: ✅ LOCKED — 14 tests passing (87 total across all suites)
 
 ### 26. Self-Continuity Integration — Phase 26 ✅ LOCKED
-- **Decision**: Wire causal thread hydration into the self-continuity injection path, so context compilat...[truncated]
+- **Decision**: Wire causal thread hydration into the self-continuity injection path, so context compilation automatically includes the "why" behind each record.
+- **Why**: The individual hydrators (23, 24) existed but weren't connected. Integration wires them into a single injection path.
+- **Implementation**: `SelfContinuityIntegration` class with `recallIntegrated()`, `formatForInjection()`, dependency injection of hydrators and phase narrative builder.
+- **Test results**: 7 integration tests (105 total across all suites)
+- **Status**: ✅ LOCKED
+
+### 27. Phase Narrative Builder — Phase 27 ✅ LOCKED
+- **Decision**: Build a phase causation narrative that connects phases 21-26 into a causal chain: problem → action → result → downstream change.
+- **Why**: The agent could list phases but not explain why one led to the next. Phase narrative turns index-card continuity into narrative continuity.
+- **Causation anchors**: Real A/D/E experiment results as fixtures (Session D proved silent recall → Phase 22 drift tracking → Phase 23 evidence hydration → Phase 24 causal threads → Phase 25 depth scoring → Phase 26 integration).
+- **Gap detection**: Reports missing links in the chain instead of hallucinating causation.
+- **Token budget**: Respects max token limit for context injection.
+- **Graceful failure**: Phase narrative failure does not block normal self-continuity recall.
+- **Implementation**: `PhaseNarrativeBuilder` + `buildPhaseNarrative()` + `formatPhaseNarrative()` in `src/self-continuity-phase-narrative.ts`, wired into `SelfContinuityIntegration`.
+- **Test results**: 11 narrative tests (105 total across all suites)
+- **Status**: ✅ LOCKED

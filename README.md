@@ -30,6 +30,12 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 - **Auto-checkpointing** - Queues checkpoints before risky operations.
 - **Checkpoint markdown** - Renders checkpoints into readable summaries for debugging and handoff.
 
+### Phase Narrative Builder (Phase 27)
+- **Causal chain reconstruction** - Connects phases 21-26 into a narrative: problem → action → result → downstream change. Turns index-card continuity into narrative continuity.
+- **Causation anchors** - Uses real A/D/E experiment results as fixtures. Session D proved silent recall → Phase 22 drift tracking → Phase 23 evidence hydration → Phase 24 causal threads → Phase 25 depth scoring → Phase 26 integration.
+- **Gap detection** - Reports missing links in the chain instead of hallucinating causation.
+- **Token budget** - Respects max token limit for context injection.
+
 ### Self-Continuity Integration (Phase 26)
 - **Unified injection path** - Wires causal thread hydration into self-continuity record injection, so context compilation automatically includes the "why" behind each record.
 - **Two hydrators as one** - `SelfContinuityIntegration` combines `SelfContinuityHydrator` (canonical fields) and `CausalThreadHydrator` (problem/action/result chains) into a single call.
@@ -78,7 +84,7 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 
 ## Test Suite
 
-Current source of truth is the test runner output. The suite includes fresh-schema and Phase 19b integration coverage for clean installs, explicit backfill, and hashed recall telemetry. 94 tests total across 15 suites.
+Current source of truth is the test runner output. The suite includes fresh-schema and Phase 19b integration coverage for clean installs, explicit backfill, and hashed recall telemetry. 105 tests total across 16 suites.
 
 | Suite | What It Covers |
 |-------|----------------|
