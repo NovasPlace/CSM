@@ -81,8 +81,8 @@ function removeExistingEntry(docContent: string, filePath: string): string {
 }
 
 function detectModuleChanges(change: CodeChange): boolean {
-  return change.filePath.startsWith("src/") &&
-    (change.filePath.endsWith(".ts") || change.filePath.endsWith(".js"));
+  if (isIgnoredForAnalysis(change.filePath)) return false;
+  return (change.filePath.endsWith(".ts") || change.filePath.endsWith(".js"));
 }
 
 function isRootMarkdownDoc(change: CodeChange): boolean {
@@ -336,7 +336,7 @@ export async function autoDocumentChange(
 
 export async function reconcileSystemMap(docsDir?: string): Promise<{ added: number; updated: number; removed: number }> {
   const dir = docsDir ?? getDocsDir();
-  const srcDir = join(process.cwd(), "src");
+  const cwd = process.cwd();
   let added = 0, updated = 0, removed = 0;
 
   let systemMapContent: string;
@@ -346,18 +346,27 @@ export async function reconcileSystemMap(docsDir?: string): Promise<{ added: num
     return { added: 0, updated: 0, removed: 0 };
   }
 
-  const srcFiles = await scanSourceFiles(srcDir);
+  const sourceDirs = await detectSourceDirs(cwd);
+  const allSourceFiles: Array<{ relativePath: string; dirPrefix: string }> = [];
+  for (const srcDir of sourceDirs) {
+    const dirName = srcDir.relativeName;
+    const files = await scanSourceFiles(srcDir.absolutePath);
+    for (const sf of files) {
+      allSourceFiles.push({ relativePath: `${dirName}/${sf.relativePath}`, dirPrefix: dirName });
+    }
+  }
+
   const docEntries = parseSystemMapEntries(systemMapContent);
   const docFileSet = new Set(docEntries.map(e => e.filePath));
   const tableHeader = "| File | Exports | Type | Role |";
 
-  for (const sf of srcFiles) {
-    const relativePath = `src/${sf.relativePath}`;
+  for (const sf of allSourceFiles) {
+    const relativePath = sf.relativePath;
     const existing = docEntries.find(e => e.filePath === relativePath);
 
     let content: string;
     try {
-      content = await fs.readFile(join(srcDir, sf.relativePath), "utf-8");
+      content = await fs.readFile(join(cwd, relativePath), "utf-8");
     } catch {
       continue;
     }
@@ -386,15 +395,15 @@ export async function reconcileSystemMap(docsDir?: string): Promise<{ added: num
     }
   }
 
+  const knownFiles = new Set(allSourceFiles.map(sf => sf.relativePath));
   for (const entry of docEntries) {
-    if (!entry.filePath.startsWith("src/")) continue;
-    const relativePath = entry.filePath.replace("src/", "");
-    if (!srcFiles.some(sf => sf.relativePath === relativePath)) {
-      const rowPattern = new RegExp(`\\| \\\`${entry.filePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\\`[^\\n]*\\n?`, "g");
-      const before = systemMapContent;
-      systemMapContent = systemMapContent.replace(rowPattern, "");
-      if (systemMapContent !== before) removed++;
-    }
+    if (knownFiles.has(entry.filePath)) continue;
+    const relativeParts = entry.filePath.split("/");
+    if (relativeParts.length < 2) continue;
+    const rowPattern = new RegExp(`\\| \\\`${entry.filePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\\`[^\\n]*\\n?`, "g");
+    const before = systemMapContent;
+    systemMapContent = systemMapContent.replace(rowPattern, "");
+    if (systemMapContent !== before) removed++;
   }
 
   if (added > 0 || updated > 0 || removed > 0) {
@@ -407,6 +416,46 @@ export async function reconcileSystemMap(docsDir?: string): Promise<{ added: num
 
 interface SourceFile {
   relativePath: string;
+}
+
+interface SourceDir {
+  absolutePath: string;
+  relativeName: string;
+}
+
+async function detectSourceDirs(cwd: string): Promise<SourceDir[]> {
+  const results: SourceDir[] = [];
+  const alwaysInclude = ["src", "lib", "core", "harness", "distiller", "runtime", "vault", "engine", "modules", "packages"];
+  let entries;
+  try {
+    entries = await fs.readdir(cwd, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git" || entry.name === "coverage") continue;
+    const hasTsFiles = await dirHasCodeFiles(join(cwd, entry.name));
+    if (alwaysInclude.includes(entry.name) || hasTsFiles) {
+      results.push({ absolutePath: join(cwd, entry.name), relativeName: entry.name });
+    }
+  }
+  if (results.length === 0) {
+    try {
+      const stat = await fs.stat(join(cwd, "src"));
+      if (stat.isDirectory()) results.push({ absolutePath: join(cwd, "src"), relativeName: "src" });
+    } catch {}
+  }
+  return results;
+}
+
+async function dirHasCodeFiles(dir: string): Promise<boolean> {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    return entries.some(e => e.isFile() && (e.name.endsWith(".ts") || e.name.endsWith(".js") || e.name.endsWith(".tsx") || e.name.endsWith(".jsx")));
+  } catch {
+    return false;
+  }
 }
 
 async function scanSourceFiles(srcDir: string): Promise<SourceFile[]> {

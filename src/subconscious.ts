@@ -6,6 +6,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { MemoryManager } from './memory-manager.js';
 import { MemorySaveOptions } from './types.js';
+import { autoDocumentChange } from './hooks/doc-analyzer.js';
 
 export interface FileChangeEvent {
   filePath: string;
@@ -177,6 +178,14 @@ export class SubconsciousWatcher {
         }
         
         if (entry.isDirectory()) {
+          // Check if this is a newly created directory (no previous record)
+          const dirKey = `dir:${fullPath}`;
+          const dirLastChecked = this.watchedPaths.get(dirKey);
+          if (!dirLastChecked) {
+            // New directory detected - auto-generate docs
+            await this.handleNewDirectory(fullPath);
+            this.watchedPaths.set(dirKey, new Date());
+          }
           await this.walkDirectory(fullPath, since, changes);
         } else if (entry.isFile()) {
           // Skip build artifact files when filtering is enabled
@@ -201,6 +210,50 @@ export class SubconsciousWatcher {
       }
     } catch {
       // Directory might not exist
+    }
+  }
+
+  /**
+   * Handle newly detected directory - auto-generate documentation
+   */
+  private async handleNewDirectory(dirPath: string): Promise<void> {
+    try {
+      const readmePath = path.join(dirPath, 'README.md');
+      
+      // Check if README already exists
+      try {
+        await fs.access(readmePath);
+        return; // README exists, skip
+      } catch {
+        // README doesn't exist, create it
+      }
+
+      const dirName = path.basename(dirPath);
+      const relativePath = path.relative(process.cwd(), dirPath);
+      
+      const readmeContent = `# ${dirName}
+
+Auto-generated documentation for \`${relativePath}\`
+
+## Overview
+This directory was detected by the Cross-Session Memory plugin's subconscious watcher.
+
+## Contents
+- Files and subdirectories will be documented here as they are added.
+
+## Auto-Documentation
+This README is maintained by the auto-docs system. When files are added to this directory, they will be automatically documented in the central SYSTEM_MAP.md and CHANGELOG_LIVE.md.
+
+`;
+
+      await fs.writeFile(readmePath, readmeContent, 'utf-8');
+      
+      // Trigger auto-docs to capture this new file
+      await autoDocumentChange(readmePath, 'write', undefined, readmeContent);
+      
+      console.log(`[SubconsciousWatcher] Auto-generated README for new directory: ${relativePath}`);
+    } catch (error) {
+      console.error(`[SubconsciousWatcher] Failed to auto-document new directory ${dirPath}:`, error);
     }
   }
 
