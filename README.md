@@ -101,6 +101,18 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 - **Anchor fixtures** - Grounded in real experiment results (Sessions A/D/E), not theoretical.
 - **Verdict system** - `stable` / `mild_drift` / `significant_drift` based on weighted scoring across all dimensions.
 
+### Auto-Documentation System
+- **Multi-directory source detection** - `reconcileSystemMap` auto-detects source directories (`src/`, `lib/`, `core/`, `harness/`, `engine/`, `modules/`, `packages/`, and any directory containing `.ts`/`.js` files), not just `src/`.
+- **Root-level protocol tracking** - Tracks README, MANIFESTO, IMPLEMENTATION_AGENT_PROTOCOL, ARCHITECTURE, DECISIONS, RUNBOOK, CHANGELOG at the project root.
+- **New directory auto-documentation** - When the subconscious watcher detects a new directory without a README, it auto-generates one and feeds it into the auto-docs pipeline.
+- **Recursive output protection** - Auto-docs output files (SYSTEM_MAP.md, CHANGELOG_LIVE.md, DECISIONS.md, AGENT_MEMORY.md) are tracked for reads but excluded from write-triggered recursion loops.
+- **Section auto-creation** - `updateDocContent` creates missing sections instead of silently skipping unknown headers.
+
+### Subconscious Watcher
+- **File change detection** - Periodic scan detects created/modified/deleted files and captures them as episodic memories.
+- **New directory detection** - Directories without a prior scan record trigger `handleNewDirectory()`, which auto-generates a README and triggers `autoDocumentChange()`.
+- **Build artifact filtering** - Skips `node_modules`, `dist`, `.next`, source maps, minified/hashed files.
+
 ### Safety and Monitoring
 - **Loop detection** - Breaks repeated identical tool calls.
 - **Git watching** - Surfaces repo changes into the context pipeline.
