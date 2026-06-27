@@ -6,6 +6,9 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/self-continuity-types.ts` | SelfContinuityTriggerType, SimilarityMethod, DriftLevel, IdentityDrift, SelfContinuityRecord, InjectionMode, SelfContinuityDebugTelemetry, ContinuityConfidenceInput, CONTINUITY_CONFIDENCE_WEIGHTS, SelfContinuityConfig, DEFAULT_SELF_CONTINUITY_CONFIG | source | Module |
+| `src/self-continuity-schema.ts` | initializeSelfContinuitySchema | source | SQL schema |
+| `src/self-continuity-generator.ts` | SelfContinuityGenerator | source | Module |
 | `src/benchmark.ts` | authenticate, runBenchmarkSuite | source | Module |
 | `src/redactor.ts` | RedactCategory, PathMode, RedactorConfig, RedactionAudit, RedactionResult, DEFAULT_REDACTOR_CONFIG, Redactor, redact, redactObject | source | Module |
 | `src/alchemist.ts` | DEFAULT_ALCHEMIST_CONFIG, AlchemistEngine | source | Module |
@@ -13,13 +16,17 @@
 | `src/index.ts` | none | source | Module |
 | `src/plugin-context.ts` | AutoCheckpointFn, PluginState, PluginContext | source | Module |
 | `src/config.ts` | DEFAULT_CONFIG | source | Configuration |
-| `src/types.ts` | MemoryType, MemoryCandidateStatus, MemoryCandidate, MemoryApproval, TTLConfig, ProjectScope, ExtractorConfig, MemoryEmotion, MemorySource, SortBy, MemorySearchMode, Session, Memory, MemoryChunk, MemoryEvent, SessionContext, BudgetMode, ContextCompilerConfig, ContextCacheConfig, CompressedPartDetail, ContextCompilationEntry, ProviderPricing, CompactionReport, ToolDominanceTrendPoint, SessionAnalytics, AutoDocsConfig, PluginConfig, CompactorConfig, AssistantCompactorConfig, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics, CompactionQualityConfig, DEFAULT_COMPACTION_QUALITY_CONFIG, DistillerConfig, ToolCallRecord, ToolCallGroup, ToolCallSummary, ContextBrief, LoopDetectionResult, ContextPressureResult, RecallResult, MemorySaveOptions, MemorySearchOptions, MemoryListOptions, DatabasePool, DatabaseClient, PruneRiskLevel, PruneSignal, PruneCandidate, PruneReport, PruneConfig, AlchemistLessonType, AlchemistSource, AlchemistIngest, ExtractedCapability, LessonTelemetry, AlchemistLesson, Blueprint, GapReport, AlchemistConfig, DEFAULT_PRUNE_CONFIG | source | Context compaction engine |
+| `src/types.ts` | MemoryType, MemoryCandidateStatus, MemoryCandidate, MemoryApproval, TTLConfig, ProjectScope, ExtractorConfig, MemoryEmotion, MemorySource, SortBy, MemorySearchMode, Session, Memory, MemoryChunk, MemoryEvent, SessionContext, BudgetMode, ContextCompilerConfig, ContextCacheConfig, CompressedPartDetail, ContextCompilationEntry, ProviderPricing, CompactionReport, ToolDominanceTrendPoint, SessionAnalytics, AutoDocsConfig, PluginConfig, CompactorConfig, AssistantCompactorConfig, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics, CompactionQualityConfig, DEFAULT_COMPACTION_QUALITY_CONFIG, DistillerConfig, ToolCallRecord, ToolCallGroup, ToolCallSummary, ContextBrief, LoopDetectionResult, ContextPressureResult, RecallResult, MemorySaveOptions, MemorySearchOptions, MemoryListOptions, BackfillEmbeddingsOptions, BackfillEmbeddingsResult, DatabasePool, DatabaseClient, PruneRiskLevel, PruneSignal, PruneCandidate, PruneReport, PruneConfig, AlchemistLessonType, AlchemistSource, AlchemistIngest, ExtractedCapability, LessonTelemetry, AlchemistLesson, Blueprint, GapReport, AlchemistConfig, SelfContinuityConfidenceWeights, SelfContinuityConfig, DEFAULT_PRUNE_CONFIG | source | Context compaction engine |
 | `src/tools.ts` | memorySaveTool, memorySearchTool, memoryDeleteTool, memoryContextTool, memoryLessonTool, memoryListTool, memoryTranscriptTool, memoryCandidateListTool, memoryCandidateApproveTool, memoryCandidateRejectTool, memoryProjectListTool, memoryCleanupTool, memoryDistillTool, memoryDistilledViewTool, memoryCompactTool | source | Tool registration |
 | `src/database.ts` | Database | source | PostgreSQL connection & schema |
-| `src/embeddings.ts` | EmbeddingChunk, EmbeddingConfig, EmbeddingGenerator | source | Module |
+| `src/embeddings.ts` | EMBEDDING_DIMENSIONS, EmbeddingChunk, EmbeddingConfig, EmbeddingGenerator | source | Module |
+| `src/maintenance-tools.ts` | memoryBackfillEmbeddingsTool | source | Tool registration |
+| `src/bridge-ops.ts` | BridgeDeps, BridgeContext, ContextBriefPayload, CompactionReportPayload, saveMemoryOp, searchMemoriesOp, listMemoriesOp, recallLessonsOp, getContextBriefOp, pruneMemoriesDryRunOp, backfillMissingEmbeddingsOp, getCompactionReportOp | source | Context compaction engine |
+| `src/codex-bridge.ts` | CodexMemoryBridge | source | Memory & recall subsystem |
 | `src/memory-manager.ts` | MemoryManager | source | Memory & recall subsystem |
 | `src/memory-graph.ts` | MemoryLink, RelatedMemory, initializeGraphSchema, inferLinkType, buildLinksForMemory, getRelatedMemories, findSharedEntities | source | Memory & recall subsystem |
 | `src/memory-extractor.ts` | MemoryExtractor | source | Memory & recall subsystem |
+| `src/recall-telemetry.ts` | RecallTelemetrySource, RecallTelemetryInput, initializeRecallTelemetrySchema, hashRecallQuery, recordRecallBatch, getRecallCounts | source | Memory & recall subsystem |
 | `src/concept-extractor.ts` | ExtractedConcept, ExtractionResult, extractConcepts, mergeConcepts | source | Module |
 | `src/hybrid-search.ts` | HybridWeights, ftsSearch, vectorSearch, entityMatchBoost, reciprocalRankFusion, applyWeights, hybridSearch | source | Module |
 | `src/compaction-quality.ts` | extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeCompressionRatio, computeQualityScore, measureCompactionQuality, cosineSimilarity | source | Context compaction engine |
@@ -102,6 +109,8 @@
 | `src/assistant-text-compactor.ts` | AssistantCompactorConfig, AssistantCompactionResult, compactAssistantText | source | Context compaction engine |
 
 ## Key Decisions
+
+- **Thin bridge adapters** - OpenCode plugin and Codex bridge wrap the same Postgres-backed core rather than forking memory logic
 
 - **No CLI** — plugin is runtime/API-first; TUI is optional adapter
 - **PostgreSQL + pgvector** — vector search via DB, not in-process

@@ -3,6 +3,8 @@
 
 import { PluginConfig } from './types.js';
 
+export const EMBEDDING_DIMENSIONS = 1536;
+
 export interface EmbeddingChunk {
   content: string;
   tokenCount: number;
@@ -99,20 +101,19 @@ export class EmbeddingGenerator {
    * This is NOT a real embedding - just for development purposes
    */
   private generateHashEmbedding(text: string): number[] {
-    const dimensions = 1536;
-    const embedding: number[] = new Array(dimensions).fill(0);
+    const embedding: number[] = new Array(EMBEDDING_DIMENSIONS).fill(0);
 
     // Simple hash-based embedding
     for (let i = 0; i < text.length; i++) {
       const charCode = text.charCodeAt(i);
-      const index = (charCode * (i + 1)) % dimensions;
+      const index = (charCode * (i + 1)) % EMBEDDING_DIMENSIONS;
       embedding[index] += 1;
     }
 
     // Normalize
     const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
     if (magnitude > 0) {
-      for (let i = 0; i < dimensions; i++) {
+      for (let i = 0; i < EMBEDDING_DIMENSIONS; i++) {
         embedding[i] /= magnitude;
       }
     }
@@ -173,7 +174,7 @@ export class EmbeddingGenerator {
    */
   private averageEmbeddings(embeddings: number[][]): number[] {
     if (embeddings.length === 0) {
-      return new Array(1536).fill(0);
+      return new Array(EMBEDDING_DIMENSIONS).fill(0);
     }
 
     if (embeddings.length === 1) {

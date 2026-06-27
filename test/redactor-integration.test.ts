@@ -100,7 +100,7 @@ describe('Redactor integration — MemoryManager mock', () => {
           };
         }
         if (sql.includes('INSERT INTO memory_chunks')) return { rows: [] };
-        if (sql.includes('INSERT INTO memory_concepts')) return { rows: [] };
+        if (sql.includes('INSERT INTO memory_links')) return { rows: [] };
         if (sql.includes('SELECT * FROM sessions')) return { rows: [] };
         if (sql.includes('INSERT INTO sessions')) return { rows: [{ id: 's1' }] };
         if (sql.includes('SELECT project_id')) return { rows: [] };

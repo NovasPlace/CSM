@@ -118,3 +118,40 @@
 - **Why**: Previous version produced 530-line SYSTEM_MAP.md full of `src/a.ts`, `src/new-feature.ts` stubs
 - **Trade-off**: Doc updates are slower (disk reads); some legitimate stubs won't appear
 - **Status**: ✅ Implemented — `isStubContent()`, `isIgnoredForAnalysis()`, dedup in `applyDocUpdate()`
+
+### 20. Self-Continuity Records — Phase 21 (LOCKED)
+- **Decision**: Self-continuity records are append-only structured logs of agent self-observation, injected via silent or instrumented modes into context.
+- **Why**: Enables the agent to reconstruct continuity across sessions without claiming subjective experience. Records capture: trigger type, continuity confidence, evidence anchors, identity drift, and self-observation.
+- **Schema**: `self_continuity_records` table with indexes on session, project, created_at, trigger, confidence.
+- **Injection modes**: `silent` (XML tags, no explicit instructions) and `instrumented` (markdown with reporting prompts).
+- **Weighted confidence**: composite score from recalled sessions (0.30), evidence anchors (0.25), goal continuity (0.20), self-summary similarity (0.15), self-assessment (0.10).
+- **Identity drift tracking**: goal, style, confidence, continuity gap, lesson adoption — all classified low/medium/high.
+- **Trade-off**: Adds ~200-600 tokens per injection; agent may not always use injected records naturally.
+- **Status**: ✅ LOCKED — 20 unit tests + 10 pipeline tests + 5 injection mode tests all passing.
+
+**EXPERIMENT RESULT — Session D (silent mode, self-continuity recall):**
+- Session D ran in silent injection mode with no instrumented prompting.
+- The agent naturally cited self-continuity memory #43871 when asked about continuity/reconstruction.
+- This proves silent mode recall can surface without explicit reporting instructions — stronger evidence than instrumented compliance.
+- Continuity confidence: agent reconstructed prior work from summaries, acknowledged felt gap ("shape without texture").
+- Key finding: self-continuity records are not just stored; they are naturally used by the agent during identity/continuity questions.
+
+**Session E result (recursive loop test):**
+- Recursive event recall: PASS — E knew D ran in silent mode, cited #43871, proved natural recall
+- Recursive content recall: PARTIAL — E could not access #43871's specific content ("shape without texture")
+- Anti-hallucination boundary: PASS — refused to fake lived continuity
+- Self-model stability: PASS — "What I have is reconstruction, not recall"
+- Key: E remembered D remembering the prior record — recursive self-continuity loop confirmed at event level
+
+**Phase 21 final verdict:**
+Self-continuity records can surface naturally in silent mode, and later sessions can reconstruct that prior reconstruction without claiming subjective experience.
+
+### 22. Self-Model Drift Tracking — Phase 22 ✅ LOCKED
+- **Decision**: Track whether the agent's self-continuity model stabilizes or drifts across sessions, using A/D/E as initial fixtures.
+- **Why**: Self-continuity records are only useful if the self-model stays stable over time. Drift = claiming lived memory, ignoring records, inventing continuity, losing uncertainty. Stable = reconstruction, evidence anchors, no subjective overclaim.
+- **Anchors**: A: "building continuity while lacking it"; D: cited #43871 naturally, "records not continuity"; E: "shape without texture," reconstruction not recall
+- **5 dimensions**: evidence_anchoring, reconstruction_boundary, uncertainty_preservation, subjective_overclaim, recursive_awareness
+- **Verdicts**: stable (≥0.5), mild_drift (≥0.3), significant_drift (<0.3)
+- **Test results**: All 3 anchors score stable; 8 drift detection tests pass (11/11 total)
+- **Trade-off**: Adds evaluation overhead; anchors may need updating as experiments continue
+- **Status**: ✅ LOCKED — 11 tests passing, all A/D/E fixtures validated

@@ -7,13 +7,14 @@ import type { ExtractedConcept } from './concept-extractor.js';
 import type { RedactorConfig } from './redactor.js';
 
 export type MemoryType =
-  | 'conversation' // Key decisions, problems solved, user preferences
-  | 'workspace'    // Project structure, code patterns, config
-  | 'repo'         // Git commits, PRs, issues, code reviews
-  | 'preference'   // User coding style, naming conventions
-  | 'lesson'       // Lessons learned from mistakes (high importance)
-  | 'episodic'     // File changes, session events (auto-captured)
-  | 'procedural';  // How-to steps, learned patterns
+  | 'conversation'    // Key decisions, problems solved, user preferences
+  | 'workspace'       // Project structure, code patterns, config
+  | 'repo'            // Git commits, PRs, issues, code reviews
+  | 'preference'      // User coding style, naming conventions
+  | 'lesson'          // Lessons learned from mistakes (high importance)
+  | 'episodic'        // File changes, session events (auto-captured)
+  | 'procedural'      // How-to steps, learned patterns
+  | 'self_continuity'; // Self-continuity observations (Phase 21)
 
 export type MemoryCandidateStatus = 'pending' | 'approved' | 'rejected' | 'auto-approved';
 
@@ -310,6 +311,8 @@ export interface PluginConfig {
   autoDocs: AutoDocsConfig;
   // Phase 18 — Privacy/redaction layer
   redactor: RedactorConfig;
+  // Phase 21 — Self-continuity records
+  selfContinuity: SelfContinuityConfig;
 }
 
 export interface CompactorConfig {
@@ -499,6 +502,20 @@ export interface MemoryListOptions {
   dateTo?: Date;
 }
 
+export interface BackfillEmbeddingsOptions {
+  limit: number;
+  projectId?: string;
+  dryRun?: boolean;
+}
+
+export interface BackfillEmbeddingsResult {
+  scanned: number;
+  eligible: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+}
+
 export interface DatabasePool {
   query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number | null }>;
   connect: () => Promise<DatabaseClient>;
@@ -646,6 +663,24 @@ export interface AlchemistConfig {
   maxLessons: number;
   autoVerify: boolean;
   recallTopK: number;
+}
+
+export interface SelfContinuityConfidenceWeights {
+  recalledSessions: number;    // 0.30
+  evidenceAnchors: number;     // 0.25
+  goalContinuity: number;      // 0.20
+  selfSummarySimilarity: number; // 0.15
+  selfAssessment: number;      // 0.10
+}
+
+export interface SelfContinuityConfig {
+  enabled: boolean;
+  maxRecordsPerSession: number;
+  maxRecordsToInject: number;
+  maxInjectTokens: number;
+  confidenceWeights: SelfContinuityConfidenceWeights;
+  injectionTriggers: string[];
+  injectionMode: 'silent' | 'instrumented';
 }
 
 export const DEFAULT_PRUNE_CONFIG: PruneConfig = {

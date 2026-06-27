@@ -10,6 +10,10 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./codex-bridge": {
+      "import": "./dist/codex-bridge.js",
+      "types": "./dist/codex-bridge.d.ts"
+    },
     "./tui": {
       "import": "./dist/tui.js",
       "types": "./dist/tui.d.ts"

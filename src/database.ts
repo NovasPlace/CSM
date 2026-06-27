@@ -9,6 +9,9 @@ import { initializeContextCompilationSchema } from './context-compilation-schema
 import { initializeContextCacheSchema } from './context-cache-schema.js';
 import { initializeRolloverSchema } from './context-rollover-schema.js';
 import { initializeGoalSchema } from './goal-schema.js';
+import { EMBEDDING_DIMENSIONS } from './embeddings.js';
+import { initializeRecallTelemetrySchema } from './recall-telemetry.js';
+import { initializeSelfContinuitySchema } from './self-continuity-schema.js';
 
 const { Pool } = pg;
 
@@ -62,18 +65,26 @@ export class Database {
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
+        workspace_id TEXT,
         directory TEXT,
         title TEXT,
         name TEXT,
+        summary TEXT,
+        turn_count INTEGER NOT NULL DEFAULT 0,
         metadata JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         ended_at TIMESTAMPTZ
       )
     `);
 
     // Add missing columns to existing sessions table
+    await this.pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS workspace_id TEXT`);
     await this.pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS directory TEXT`);
     await this.pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS title TEXT`);
+    await this.pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS summary TEXT`);
+    await this.pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS turn_count INTEGER NOT NULL DEFAULT 0`);
+    await this.pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
 
 // Create memories table (Cognitive Memory Engine)
     await this.pool.query(`
@@ -86,7 +97,7 @@ export class Database {
             'lesson', 'episodic', 'procedural', 'concept', 'code', 'config', 'error'
         )),
         content TEXT NOT NULL,
-        embedding VECTOR(768),
+        embedding VECTOR(${EMBEDDING_DIMENSIONS}),
         search_vector TSVECTOR,
         importance FLOAT DEFAULT 0.5 CHECK (importance BETWEEN 0 AND 1),
         emotion TEXT DEFAULT 'neutral' CHECK (emotion IN (
@@ -106,16 +117,17 @@ export class Database {
       )
     `);
 
-    // Update memory_type check constraint to include 'concept'
+    // Update memory_type check constraint to include 'concept', 'self_continuity'
     await this.pool.query(`
       ALTER TABLE memories
-DROP CONSTRAINT IF EXISTS memories_memory_type_check,
-ADD CONSTRAINT memories_memory_type_check
-            CHECK (memory_type IN (
-                'conversation', 'workspace', 'repo', 'preference',
-                'lesson', 'episodic', 'procedural', 'concept', 'code', 'config', 'error'
-              ))
-        `);
+      DROP CONSTRAINT IF EXISTS memories_memory_type_check,
+      ADD CONSTRAINT memories_memory_type_check
+      CHECK (memory_type IN (
+          'conversation', 'workspace', 'repo', 'preference',
+          'lesson', 'episodic', 'procedural', 'concept', 'code', 'config', 'error',
+          'self_continuity'
+        ))
+    `);
 
       // Update emotion check constraint to include 'frustrated'
       await this.pool.query(`
@@ -128,9 +140,9 @@ CHECK (emotion IN (
         `);
 
         // Add embedding and search_vector columns to memories table
+        await this.ensureEmbeddingColumnContract();
         await this.pool.query(`
           ALTER TABLE memories
-          ADD COLUMN IF NOT EXISTS embedding VECTOR(1536),
           ADD COLUMN IF NOT EXISTS search_vector TSVECTOR
         `);
 
@@ -142,7 +154,7 @@ CHECK (emotion IN (
         chunk_index INT NOT NULL,
         content TEXT NOT NULL,
         token_count INT NOT NULL,
-        embedding VECTOR(1536) NOT NULL,
+        embedding VECTOR(${EMBEDDING_DIMENSIONS}) NOT NULL,
         embedding_model TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE (memory_id, chunk_index)
@@ -372,6 +384,10 @@ emotion TEXT DEFAULT 'neutral' CHECK (emotion IN (
 
     // Goal system schema (additive)
     await initializeGoalSchema(this.pool);
+    await initializeRecallTelemetrySchema(this.pool);
+
+    // Phase 21 — Self-continuity records schema (additive)
+    await initializeSelfContinuitySchema(this.pool);
 
     // Phase 7 — Memory graph relationships (additive)
     await initializeGraphSchema(this);
@@ -457,6 +473,46 @@ emotion TEXT DEFAULT 'neutral' CHECK (emotion IN (
         AND sc.session_id = s.id
         AND s.project_id IS NOT NULL
     `);
+  }
+
+  private async ensureEmbeddingColumnContract(): Promise<void> {
+    if (!this.pool) return;
+
+    const result = await this.pool.query(
+      `SELECT format_type(a.atttypid, a.atttypmod) AS column_type
+       FROM pg_attribute a
+       JOIN pg_class c ON c.oid = a.attrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public'
+         AND c.relname = 'memories'
+         AND a.attname = 'embedding'
+         AND a.attnum > 0
+         AND NOT a.attisdropped`,
+    );
+
+    if (result.rows.length === 0) {
+      await this.pool.query(
+        `ALTER TABLE memories ADD COLUMN embedding VECTOR(${EMBEDDING_DIMENSIONS})`,
+      );
+      return;
+    }
+
+    const row = result.rows[0] as { column_type?: string };
+    const expectedType = `vector(${EMBEDDING_DIMENSIONS})`;
+    if (row.column_type === expectedType) {
+      return;
+    }
+
+    const legacyColumn = `embedding_legacy_${Date.now()}`;
+    await this.pool.query(
+      `ALTER TABLE memories RENAME COLUMN embedding TO ${legacyColumn}`,
+    );
+    await this.pool.query(
+      `ALTER TABLE memories ADD COLUMN embedding VECTOR(${EMBEDDING_DIMENSIONS})`,
+    );
+    console.warn(
+      `[Database] Renamed mismatched embedding column to ${legacyColumn}; regenerate embeddings to backfill ${expectedType}.`,
+    );
   }
 
   getPool(): DatabasePool {

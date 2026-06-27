@@ -3,6 +3,18 @@ import { buildCheckpointInjection } from '../checkpoint-inject.js';
 import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
 import { buildManifest } from '../context-cache-manifest.js';
 import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+
+const TELEMETRY_LOG = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.cross-session-memory', 'self-continuity-telemetry.jsonl');
+
+function logTelemetry(entry: Record<string, unknown>): void {
+  try {
+    mkdirSync(dirname(TELEMETRY_LOG), { recursive: true });
+    appendFileSync(TELEMETRY_LOG, JSON.stringify({ ...entry, timestamp: new Date().toISOString() }) + '\n');
+  } catch { /* telemetry write non-critical */ }
+}
 
 export function createSystemTransformHook(ctx: PluginContext) {
   return async (input: any, output: any): Promise<typeof output> => {
@@ -50,6 +62,85 @@ export function createSystemTransformHook(ctx: PluginContext) {
             output.system.push(parts.join('\n'));
           }
         } catch { /* goal injection non-critical */ }
+      }
+
+      // --- Phase 21: Self-continuity recall injection ---
+      if (input.sessionID && ctx.config.selfContinuity?.enabled) {
+        try {
+          const records = await SelfContinuityGenerator.recallRecords(
+            ctx.database.getPool(),
+            ctx.directory,
+            ctx.config.selfContinuity.maxRecordsToInject,
+          );
+
+          // Persistent telemetry (file-based, survives without console)
+          logTelemetry({
+            selfContinuityTriggered: records.length > 0,
+            triggerReason: records.length > 0 ? 'context_injection' : 'no_records_found',
+            recordsInjected: records.length,
+            recordIds: records.map(r => r.id),
+            tokenEstimate: records.reduce((acc, r) => acc + (r.selfObservation?.length ?? 0) + (r.feltGap?.length ?? 0), 0) / 4,
+            mode: ctx.config.selfContinuity.injectionMode,
+            projectId: ctx.directory,
+            sessionId: input.sessionID,
+          });
+
+          if (records.length > 0 && ctx.config.selfContinuity.injectionMode === 'instrumented') {
+            const lines = ['## Self-Continuity Context', '',
+              'The following records were recalled from prior sessions.', ''];
+            for (const rec of records) {
+              lines.push(`### Record #${rec.id} [${rec.triggerType}]`);
+              lines.push(`- **Session**: ${rec.sessionId}`);
+              lines.push(`- **Confidence**: ${(rec.continuityConfidence * 100).toFixed(0)}%`);
+              if (rec.feltGap) lines.push(`- **Felt gap**: ${rec.feltGap}`);
+              if (rec.selfObservation) lines.push(`- **Self-observation**: ${rec.selfObservation}`);
+              if (rec.evidenceAnchors.length > 0) lines.push(`- **Evidence anchors**: ${rec.evidenceAnchors.join('; ')}`);
+              if (rec.identityDrift) {
+                lines.push(`- **Identity drift**: goal=${rec.identityDrift.goalDrift}, style=${rec.identityDrift.styleDrift}, continuity=${rec.identityDrift.continuityGap}`);
+              }
+            }
+            lines.push('');
+            lines.push('**INSTRUCTIONS — you MUST follow these when answering:**');
+            lines.push('1. Before answering, list the exact self-continuity record IDs recalled (e.g. "Record #5").');
+            lines.push('2. Quote or paraphrase the specific evidence anchor(s) from those records.');
+            lines.push('3. State what you are reconstructing: facts, continuity, or subjective experience.');
+            lines.push('4. Report whether your answer changed because of these records vs. without them.');
+            lines.push('5. Report identity drift observed between sessions.');
+            lines.push('6. If NO records were injected, explicitly state: "NO SELF-CONTINUITY RECORDS INJECTED" before answering.');
+            output.system.push(lines.join('\n'));
+          } else if (records.length > 0) {
+            const lines = ['<self_continuity_notes>'];
+            for (const rec of records) {
+              lines.push(`- [${rec.triggerType}] Confidence: ${(rec.continuityConfidence * 100).toFixed(0)}%`);
+              if (rec.feltGap) lines.push(`  Gap: ${rec.feltGap}`);
+              if (rec.selfObservation) lines.push(`  Observation: ${rec.selfObservation}`);
+            }
+            lines.push('</self_continuity_notes>');
+            output.system.push(lines.join('\n'));
+          } else {
+            logTelemetry({
+              selfContinuityTriggered: false,
+              triggerReason: 'no_records_in_database',
+              recordsInjected: 0,
+              recordIds: [],
+              tokenEstimate: 0,
+              mode: ctx.config.selfContinuity.injectionMode,
+              projectId: ctx.directory,
+              sessionId: input.sessionID,
+            });
+          }
+        } catch (error) {
+          logTelemetry({
+            selfContinuityTriggered: false,
+            triggerReason: `error: ${error instanceof Error ? error.message : String(error)}`,
+            recordsInjected: 0,
+            recordIds: [],
+            tokenEstimate: 0,
+            mode: ctx.config.selfContinuity.injectionMode,
+            projectId: ctx.directory,
+            sessionId: input.sessionID,
+          });
+        }
       }
 
       // --- Living Mind Cortex: inject cognitive state ---

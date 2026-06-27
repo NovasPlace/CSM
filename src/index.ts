@@ -46,6 +46,7 @@ import {
   memoryDistilledViewTool,
   memoryCompactTool,
 } from './tools.js';
+import { memoryBackfillEmbeddingsTool } from './maintenance-tools.js';
 import { PluginConfig, ToolCallRecord, CompactionResult } from './types.js';
 import { CheckpointStore } from './checkpoint-store.js';
 import { createCheckpointTool, expandCheckpointRefTool, listCheckpointsTool, type CheckpointToolDeps } from './checkpoint-tool.js';
@@ -55,6 +56,7 @@ import { recordCompactionMetric, hasToolDiscardMarker } from './helpers/compacti
 import { createSessionCompactingHook, createAutocontinueHook } from './hooks/session-compaction.js';
 import { createToolExecuteBeforeHook, createToolExecuteAfterHook } from './hooks/tool-execute.js';
 import { createSystemTransformHook } from './hooks/system-transform.js';
+import { SelfContinuityGenerator } from './self-continuity-generator.js';
 import type { PluginContext } from './plugin-context.js';
 import { DEFAULT_CONFIG } from './config.js';
 
@@ -644,6 +646,7 @@ export default async (
       memory_distill: memoryDistillTool(toolDistiller, database, memoryExtractor, redactor),
       memory_distilled_view: memoryDistilledViewTool(database),
       memory_compact: memoryCompactTool(contextCompactor),
+      memory_backfill_embeddings: memoryBackfillEmbeddingsTool(memoryManager),
       // Phase 4A — Durable session checkpointing
       create_checkpoint: createCheckpointTool(checkpointToolDeps),
         expand_checkpoint_ref: expandCheckpointRefTool(checkpointToolDeps),
@@ -700,6 +703,29 @@ export default async (
           metadata: { sessionId: currentSessionId, messageCount },
           sessionId: currentSessionId,
         });
+      }
+
+      // Phase 21 — Self-continuity record at session end
+      if (currentSessionId && config.selfContinuity.enabled) {
+        try {
+          const generator = new SelfContinuityGenerator(
+            database.getPool(),
+            currentSessionId,
+            projectId,
+          );
+          await generator.writeRecord('session_end', {
+            recalledSessionIds: [],
+            recalledMemoryIds: [],
+            evidenceAnchors: [],
+            selfObservation: `Session ended after ${messageCount} messages.`,
+            feltGap: undefined,
+            goalContinued: false,
+            alchemistInjected: false,
+            checkpointResumed: false,
+          });
+        } catch (error) {
+          console.error('[CrossSessionMemory] Self-continuity record failed:', error);
+        }
       }
       
       contextRecall.stop();

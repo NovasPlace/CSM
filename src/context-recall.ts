@@ -7,6 +7,7 @@
 
 import { Database } from './database.js';
 import { Memory, ContextBrief, ToolCallGroup } from './types.js';
+import { recordRecallBatch } from './recall-telemetry.js';
 
 export class ContextRecallDaemon {
   private database: Database;
@@ -138,6 +139,7 @@ export class ContextRecallDaemon {
           JSON.stringify(semantic),
         ]
       );
+      await this.logContextRecall([...episodic, ...procedural, ...semantic]);
     }
 
     return { episodic, procedural, semantic, distilled, compressed };
@@ -349,5 +351,27 @@ export class ContextRecallDaemon {
       accessedAt: row.accessed_at as Date,
       accessCount: row.access_count as number,
     };
+  }
+
+  private async logContextRecall(memories: Memory[]): Promise<void> {
+    if (!this.currentSessionId || memories.length === 0) return;
+
+    const pool = this.database.getPool();
+    try {
+      await recordRecallBatch(
+        pool,
+        memories.map((memory, index) => ({
+          memoryId: memory.id,
+          sessionId: this.currentSessionId,
+          projectId: memory.projectId ?? this.currentProjectId,
+          query: `context:${this.currentProjectId ?? 'global'}`,
+          source: 'context_recall',
+          rank: index + 1,
+          score: memory.importance,
+        })),
+      );
+    } catch (error) {
+      console.error('[ContextRecallDaemon] Recall telemetry write failed:', error);
+    }
   }
 }

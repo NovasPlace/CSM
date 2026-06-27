@@ -11,6 +11,7 @@ import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
 import { Database } from './database.js';
 import type { Redactor } from './redactor.js';
+import { listMemoriesOp, saveMemoryOp, searchMemoriesOp } from './bridge-ops.js';
 
 /**
  * memory_save - Save information to cross-session memory
@@ -26,7 +27,12 @@ export function memorySaveTool(memoryManager: MemoryManager) {
       linkedMemoryIds: tool.schema.array(tool.schema.number()).optional().describe('IDs of related memories to link'),
     },
     async execute(args, context) {
-      const memory = await memoryManager.saveMemory({
+      const memory = await saveMemoryOp({
+        memoryManager,
+        contextRecall: undefined as never,
+        primingEngine: undefined as never,
+        contextCompactor: undefined as never,
+      }, {
         content: args.content,
         type: args.type as MemoryType,
         importance: args.type === 'lesson' ? 0.75 : args.importance,
@@ -63,21 +69,19 @@ export function memorySearchTool(memoryManager: MemoryManager, primingEngine: Pr
       minImportance: tool.schema.number().optional().describe('Minimum importance 0-1'),
     },
     async execute(args, context) {
-      // Search for semantically similar memories
-      const results = await memoryManager.searchMemories({
+      const { results, cascaded } = await searchMemoriesOp({
+        memoryManager,
+        primingEngine,
+        contextRecall: undefined as never,
+        contextCompactor: undefined as never,
+      }, {
         query: args.query,
         type: args.type as MemoryType | undefined,
         limit: args.limit ?? 10,
         minImportance: args.minImportance,
+      }, {
+        sessionId: context.sessionID,
       });
-
-      // If we found memories, also run PrimingEngine cascade on top results
-      let cascadedMemories: Memory[] = [];
-      if (results.length > 0) {
-        const topMemoryIds = results.slice(0, 3).map(r => r.memory.id);
-        const cascadeResult = await primingEngine.cascadeFromMultiple(topMemoryIds);
-        cascadedMemories = cascadeResult.memories;
-      }
 
       // Format output
       let output = `Found ${results.length} relevant memories:\n\n`;
@@ -90,9 +94,9 @@ export function memorySearchTool(memoryManager: MemoryManager, primingEngine: Pr
         output += `  Importance: ${memory.importance.toFixed(2)} | Accessed: ${memory.accessCount} times\n\n`;
       }
 
-      if (cascadedMemories.length > results.length) {
+      if (cascaded.length > results.length) {
         output += `\n--- Related memories (via PrimingEngine cascade) ---\n`;
-        for (const memory of cascadedMemories.slice(results.length, results.length + 5)) {
+        for (const memory of cascaded.slice(results.length, results.length + 5)) {
           const preview = memory.content.substring(0, 100).replace(/\n/g, ' ');
           output += `#${memory.id} [${memory.memoryType}] ${preview}\n`;
         }
@@ -103,7 +107,7 @@ export function memorySearchTool(memoryManager: MemoryManager, primingEngine: Pr
         output,
         metadata: {
           count: results.length,
-          cascadedCount: cascadedMemories.length,
+          cascadedCount: cascaded.length,
           memories: results.map(r => ({ id: r.memory.id, score: r.score })),
         },
       };
@@ -270,7 +274,7 @@ export function memoryListTool(memoryManager: MemoryManager) {
     args: {
       sessionId: tool.schema.string().optional().describe('Filter by session ID'),
       projectId: tool.schema.string().optional().describe('Filter by project ID'),
-      type: tool.schema.enum(['conversation', 'code', 'fact', 'error', 'decision', 'lesson', 'summary', 'reference', 'workspace', 'repo', 'preference']).optional().describe('Filter by memory type'),
+      type: tool.schema.enum(['conversation', 'workspace', 'repo', 'preference', 'lesson', 'episodic', 'procedural']).optional().describe('Filter by memory type'),
       tags: tool.schema.array(tool.schema.string()).optional().describe('Filter by tags (AND)'),
       entityType: tool.schema.enum(['file', 'function', 'error', 'decision', 'tool', 'concept', 'dependency']).optional().describe('Filter by extracted entity type'),
       entityValue: tool.schema.string().optional().describe('Filter by specific entity value'),
@@ -280,7 +284,12 @@ export function memoryListTool(memoryManager: MemoryManager) {
       limit: tool.schema.number().optional().describe('Max results (default 20, max 100)'),
     },
     async execute(args, context) {
-      const memories = await memoryManager.listMemories({
+      const memories = await listMemoriesOp({
+        memoryManager,
+        contextRecall: undefined as never,
+        primingEngine: undefined as never,
+        contextCompactor: undefined as never,
+      }, {
         sessionId: args.sessionId,
         projectId: args.projectId,
         type: args.type as any,
@@ -291,6 +300,8 @@ export function memoryListTool(memoryManager: MemoryManager) {
         dateTo: args.endDate ? new Date(args.endDate) : undefined,
         sortBy: args.sortBy,
         limit: Math.min(args.limit ?? 20, 100),
+      }, {
+        sessionId: context.sessionID,
       });
 
       if (memories.length === 0) {
@@ -305,7 +316,7 @@ export function memoryListTool(memoryManager: MemoryManager) {
       for (const m of memories) {
         const date = new Date(m.createdAt).toLocaleString();
         const tags = m.tags.length ? ` [${m.tags.join(', ')}]` : '';
-        const concepts = (m.metadata as any)?.extractedConcepts ?? [];
+        const concepts = (m.metadata as any)?.extracted_concepts ?? [];
         const conceptStr = concepts.length ? ` | ${concepts.map((c: any) => `${c.type}:${c.value}`).join(', ')}` : '';
         output += `#${m.id} ${m.memoryType} (${m.importance.toFixed(2)})${tags}${conceptStr}\n  ${date} — ${m.content.substring(0, 120)}${m.content.length > 120 ? '...' : ''}\n\n`;
       }

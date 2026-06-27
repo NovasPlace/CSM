@@ -125,4 +125,24 @@ export const DEFAULT_CONFIG: PluginConfig = {
     },
     workspaceRoot: undefined,
   },
+  selfContinuity: {
+    enabled: true,
+    maxRecordsPerSession: 3,
+    maxRecordsToInject: 3,
+    maxInjectTokens: 600,
+    injectionMode: 'silent',
+    confidenceWeights: {
+      recalledSessions: 0.30,
+      evidenceAnchors: 0.25,
+      goalContinuity: 0.20,
+      selfSummarySimilarity: 0.15,
+      selfAssessment: 0.10,
+    },
+    injectionTriggers: [
+      'user_asks_about_memory',
+      'session_resume',
+      'alchemist_enabled',
+      'checkpoint_resume',
+    ],
+  },
 };

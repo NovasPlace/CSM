@@ -9,6 +9,7 @@ import { hybridSearch, DEFAULT_WEIGHTS, type HybridWeights } from './hybrid-sear
 import { pruneMemories } from './prune-scorer.js';
 import { Redactor } from './redactor.js';
 import { DEFAULT_PRUNE_CONFIG } from './types.js';
+import { recordRecallBatch, type RecallTelemetrySource } from './recall-telemetry.js';
 import {
   Memory,
   MemoryType,
@@ -21,6 +22,8 @@ import {
   SortBy,
   PruneConfig,
   PruneReport,
+  BackfillEmbeddingsOptions,
+  BackfillEmbeddingsResult,
 } from './types.js';
 
 export class MemoryManager {
@@ -75,7 +78,9 @@ export class MemoryManager {
     
     await pool.query(
       `UPDATE sessions 
-       SET updated_at = now(), summary = COALESCE($1, summary)
+       SET updated_at = now(),
+           ended_at = now(),
+           summary = COALESCE($1, summary)
        WHERE id = $2`,
       [summary, sessionId]
     );
@@ -250,6 +255,37 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     );
   }
 
+  async backfillMissingEmbeddings(
+    options: BackfillEmbeddingsOptions,
+  ): Promise<BackfillEmbeddingsResult> {
+    const rows = await this.loadBackfillRows(options);
+    const counts: BackfillEmbeddingsResult = {
+      scanned: rows.length,
+      eligible: rows.length,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+    };
+
+    if (options.dryRun) {
+      counts.skipped = rows.length;
+      return counts;
+    }
+
+    for (const row of rows) {
+      try {
+        const embedding = await this.embeddings.generate(row.content);
+        await this.storeEmbedding(row.id, row.content, embedding);
+        counts.updated++;
+      } catch (error) {
+        console.error('[MemoryManager] Embedding backfill failed:', error);
+        counts.failed++;
+      }
+    }
+
+    return counts;
+  }
+
   /**
    * Delete a memory
    */
@@ -272,7 +308,10 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   /**
    * Search memories using semantic similarity
    */
-  async searchMemories(options: MemorySearchOptions): Promise<{ memory: Memory; score: number }[]> {
+  async searchMemories(
+    options: MemorySearchOptions,
+    telemetry?: { sessionId?: string; source?: RecallTelemetrySource },
+  ): Promise<{ memory: Memory; score: number }[]> {
     const pool = this.database.getPool();
     const queryEmbedding = await this.embeddings.generate(options.query);
 
@@ -297,6 +336,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
           memories.push({ memory, score: r.score });
         }
       }
+      await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
     } catch (err) {
       console.warn('[MemoryManager] Hybrid search failed, falling back to vector-only:', err);
@@ -351,13 +391,17 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       await this.touchMemory(memory.id);
       memories.push({ memory, score });
     }
+    await this.recordRecalls(memories, options.query, options.projectId, telemetry);
     return memories;
   }
 
   /**
    * List memories with filters
    */
-  async listMemories(options: MemoryListOptions = {}): Promise<Memory[]> {
+  async listMemories(
+    options: MemoryListOptions = {},
+    telemetry?: { sessionId?: string; source?: RecallTelemetrySource },
+  ): Promise<Memory[]> {
     const pool = this.database.getPool();
     
     let query = 'SELECT * FROM memories WHERE 1=1';
@@ -406,7 +450,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     }
 
     if (options.entityType && options.entityValue) {
-      query += ` AND metadata->'concepts' @> $${paramIndex}`;
+      query += ` AND metadata->'extracted_concepts' @> $${paramIndex}`;
       params.push(JSON.stringify([{ type: options.entityType, value: options.entityValue }]));
       paramIndex++;
     }
@@ -432,7 +476,14 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
 
     const result = await pool.query(query, params);
 
-    return result.rows.map(row => this.mapMemory(row as Record<string, unknown>));
+    const memories = result.rows.map(row => this.mapMemory(row as Record<string, unknown>));
+    await this.recordRecalls(
+      memories.map((memory) => ({ memory, score: 0 })),
+      this.describeListQuery(options),
+      options.projectId,
+      telemetry,
+    );
+    return memories;
   }
 
   /**
@@ -614,9 +665,9 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       directory: row.directory as string | undefined,
       title: row.title as string,
       summary: row.summary as string | undefined,
-      turnCount: row.turn_count as number,
+      turnCount: (row.turn_count as number | undefined) ?? 0,
       createdAt: row.created_at as Date,
-      updatedAt: row.updated_at as Date,
+      updatedAt: (row.updated_at as Date | undefined) ?? (row.created_at as Date),
     };
   }
 
@@ -642,26 +693,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   }
 
   async pruneMemories(config?: Partial<PruneConfig>): Promise<PruneReport> {
-    const pool = this.database.getPool();
     const fullConfig = { ...DEFAULT_PRUNE_CONFIG, ...config };
-
-    const result = await pool.query(`
-      SELECT m.*,
-        COALESCE(g.link_count, 0) AS graph_links,
-        COALESCE(r.recall_count, 0) AS recall_count
-      FROM memories m
-      LEFT JOIN LATERAL (
-        SELECT COUNT(*) AS link_count
-        FROM memory_graph
-        WHERE source_id = m.id OR target_id = m.id
-      ) g ON true
-      LEFT JOIN LATERAL (
-        SELECT COUNT(*) AS recall_count
-        FROM memory_events
-        WHERE memory_id = m.id AND event_type = 'recall'
-      ) r ON true
-      ORDER BY m.created_at ASC
-    `);
+    const result = await this.loadPruneRows();
 
     const memories: Memory[] = result.rows.map((row: unknown) => {
       const r = row as Record<string, unknown>;
@@ -673,5 +706,123 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     });
 
     return pruneMemories(memories, fullConfig);
+  }
+
+  private async loadBackfillRows(
+    options: BackfillEmbeddingsOptions,
+  ): Promise<Array<{ id: number; content: string }>> {
+    const pool = this.database.getPool();
+    const params: unknown[] = [];
+    let sql = `SELECT id, content FROM memories WHERE embedding IS NULL`;
+
+    if (options.projectId) {
+      params.push(options.projectId);
+      sql += ` AND project_id = $${params.length}`;
+    }
+
+    params.push(options.limit);
+    sql += ` ORDER BY created_at ASC LIMIT $${params.length}`;
+    const result = await pool.query(sql, params);
+    return result.rows as Array<{ id: number; content: string }>;
+  }
+
+  private async storeEmbedding(
+    memoryId: number,
+    content: string,
+    embedding: number[],
+  ): Promise<void> {
+    const pool = this.database.getPool();
+    const vector = `[${embedding.join(',')}]`;
+    await pool.query(
+      `UPDATE memories SET embedding = $1, updated_at = now() WHERE id = $2`,
+      [vector, memoryId],
+    );
+    await pool.query(
+      `INSERT INTO memory_chunks
+       (memory_id, chunk_index, content, token_count, embedding, embedding_model)
+       VALUES ($1, 0, $2, $3, $4, $5)
+       ON CONFLICT (memory_id, chunk_index) DO UPDATE SET
+         content = EXCLUDED.content,
+         token_count = EXCLUDED.token_count,
+         embedding = EXCLUDED.embedding,
+         embedding_model = EXCLUDED.embedding_model`,
+      [memoryId, content, Math.ceil(content.length / 4), vector, 'hash-fallback'],
+    );
+  }
+
+  private async recordRecalls(
+    entries: Array<{ memory: Memory; score: number }>,
+    query: string,
+    projectId?: string,
+    telemetry?: { sessionId?: string; source?: RecallTelemetrySource },
+  ): Promise<void> {
+    if (entries.length === 0) return;
+
+    const pool = this.database.getPool();
+    try {
+      await recordRecallBatch(
+        pool,
+        entries.map((entry, index) => ({
+          memoryId: entry.memory.id,
+          sessionId: telemetry?.sessionId,
+          projectId: entry.memory.projectId ?? projectId ?? null,
+          query,
+          source: telemetry?.source ?? 'search',
+          rank: index + 1,
+          score: entry.score,
+        })),
+      );
+    } catch (error) {
+      console.error('[MemoryManager] Recall telemetry write failed:', error);
+    }
+  }
+
+  private describeListQuery(options: MemoryListOptions): string {
+    return JSON.stringify({
+      type: options.type ?? null,
+      tags: options.tags ?? [],
+      projectId: options.projectId ?? null,
+      entityType: options.entityType ?? null,
+      entityValue: options.entityValue ?? null,
+      sessionId: options.sessionId ?? null,
+      sortBy: options.sortBy ?? 'recent',
+    });
+  }
+
+  private async loadPruneRows(): Promise<{ rows: unknown[] }> {
+    const pool = this.database.getPool();
+
+    try {
+      return await pool.query(`
+        SELECT m.*,
+          COALESCE(g.link_count, 0) AS graph_links,
+          COALESCE(r.recall_count, 0) AS recall_count
+        FROM memories m
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) AS link_count
+          FROM memory_links
+          WHERE source_id = m.id OR target_id = m.id
+        ) g ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) AS recall_count
+          FROM memory_recall_events
+          WHERE memory_id = m.id
+        ) r ON true
+        ORDER BY m.created_at ASC
+      `);
+    } catch {
+      return pool.query(`
+        SELECT m.*,
+          COALESCE(g.link_count, 0) AS graph_links,
+          0::int AS recall_count
+        FROM memories m
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) AS link_count
+          FROM memory_links
+          WHERE source_id = m.id OR target_id = m.id
+        ) g ON true
+        ORDER BY m.created_at ASC
+      `);
+    }
   }
 }
