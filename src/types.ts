@@ -292,6 +292,7 @@ export interface PluginConfig {
   logCommands: boolean;        // Log "Command executed: X" procedural memories
   logSessionLifecycle: boolean; // Log session started/ended episodic memories
   filterBuildArtifacts: boolean; // Filter node_modules, .map, dist/, out/ in subconscious
+  promptDebug: boolean;        // Write prompt-debug logs to .opencode/prompt-debug/
   // New write path configs
   extractor: ExtractorConfig;
   ttl: TTLConfig;

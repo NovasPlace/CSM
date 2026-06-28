@@ -20,6 +20,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
   logCommands: false,
   logSessionLifecycle: false,
   filterBuildArtifacts: true,
+  promptDebug: false,
   extractor: {
     enabled: true,
     minTurnsBeforeExtract: 3,

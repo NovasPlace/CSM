@@ -363,9 +363,11 @@ export default async (
       try {
         if (!output.messages || output.messages.length === 0) return;
 
-        writePromptDebugLog(ctx.directory, 'before-normalization', output.messages as { info?: any; parts?: any[] }[], {
-          currentSessionId,
-        });
+        if (config.promptDebug) {
+          writePromptDebugLog(ctx.directory, 'before-normalization', output.messages as { info?: any; parts?: any[] }[], {
+            currentSessionId,
+          });
+        }
 
         const normalization = normalizePromptMessages(output.messages as { info?: any; parts?: any[] }[], {
           cwd: ctx.directory,
@@ -378,11 +380,13 @@ export default async (
           );
         }
         output.messages = normalization.messages as any;
-        writePromptDebugLog(ctx.directory, 'after-normalization', output.messages as { info?: any; parts?: any[] }[], {
-          currentSessionId,
-          convertedSystemMessages: normalization.convertedSystemMessages,
-          droppedMessages: normalization.droppedMessages,
-        });
+        if (config.promptDebug) {
+          writePromptDebugLog(ctx.directory, 'after-normalization', output.messages as { info?: any; parts?: any[] }[], {
+            currentSessionId,
+            convertedSystemMessages: normalization.convertedSystemMessages,
+            droppedMessages: normalization.droppedMessages,
+          });
+        }
         if (output.messages.length === 0) return;
 
         // ── Token bucket: count ALL raw tokens BEFORE any compaction ──
@@ -671,9 +675,11 @@ export default async (
           sessionId: info.sessionID,
         });
 
-        writePromptDebugLog(ctx.directory, 'before-return', output.messages as { info?: any; parts?: any[] }[], {
-          currentSessionId,
-        });
+        if (config.promptDebug) {
+          writePromptDebugLog(ctx.directory, 'before-return', output.messages as { info?: any; parts?: any[] }[], {
+            currentSessionId,
+          });
+        }
       } catch (error) {
         console.error('[CrossSessionMemory] Messages transform error:', error);
       }
