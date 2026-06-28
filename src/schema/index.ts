@@ -8,6 +8,8 @@ import { initializeGoalSchema } from '../goal-schema.js';
 import { initializeGraphSchema } from '../memory-graph.js';
 import { initializeRecallTelemetrySchema } from '../recall-telemetry.js';
 import { initializeSelfContinuitySchema } from '../self-continuity-schema.js';
+import { initializeTraceVaultSchema } from '../trace-vault-store.js';
+import { initializeWorkJournalSchema } from '../work-journal-schema.js';
 import { initializeCoreSchema } from './core-schema.js';
 import { initializeMemorySchema } from './memory-schema.js';
 import { migrateProjectIsolation } from './project-isolation-schema.js';
@@ -32,7 +34,9 @@ export async function initializeAllSchemas(database: Database): Promise<void> {
     ['recall-telemetry', () => initializeRecallTelemetrySchema(pool)],
     ['self-continuity', () => initializeSelfContinuitySchema(pool)],
     ['cross-session-causal', () => initializeCrossSessionCausalSchema(pool)],
+    ['trace-vault', () => initializeTraceVaultSchema(pool)],
     ['graph', () => initializeGraphSchema(database)],
+    ['work-journal', () => initializeWorkJournalSchema(pool)],
   ];
 
   for (const [name, step] of steps) {

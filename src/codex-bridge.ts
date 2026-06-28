@@ -22,6 +22,8 @@ import {
 } from './bridge-ops.js';
 import { previewTeacherTracesOp, seedTeacherTracesOp } from './teacher-trace-ops.js';
 import type { TeacherTraceSeedResult } from './teacher-trace-types.js';
+import { captureTraceVaultOp, previewTraceVaultOp, seedTeacherTracesFromVaultOp } from './trace-vault-ops.js';
+import type { TraceVaultCaptureResult } from './trace-vault-types.js';
 import {
   handoffSummaryOp,
   resumeContextOp,
@@ -104,23 +106,15 @@ export class CodexMemoryBridge {
     return getCompactionReportOp(this.deps, sessionId);
   }
 
-  async previewTeacherTraces(input: { projectRoot?: string; sessionId: string; limit?: number }): Promise<TeacherTraceSeedResult> {
-    await this.ensureSession(input.projectRoot, input.sessionId);
-    return previewTeacherTracesOp(this.deps, {
-      projectId: input.projectRoot,
-      sessionId: input.sessionId,
-      limit: input.limit,
-    });
-  }
+  async previewTeacherTraces(input: { projectRoot?: string; sessionId: string; limit?: number }): Promise<TeacherTraceSeedResult> { await this.ensureSession(input.projectRoot, input.sessionId); return previewTeacherTracesOp(this.deps, { projectId: input.projectRoot, sessionId: input.sessionId, limit: input.limit }); }
 
-  async seedTeacherTraces(input: { projectRoot?: string; sessionId: string; limit?: number }): Promise<TeacherTraceSeedResult> {
-    await this.ensureSession(input.projectRoot, input.sessionId);
-    return seedTeacherTracesOp(this.deps, {
-      projectId: input.projectRoot,
-      sessionId: input.sessionId,
-      limit: input.limit,
-    });
-  }
+  async seedTeacherTraces(input: { projectRoot?: string; sessionId: string; limit?: number }): Promise<TeacherTraceSeedResult> { await this.ensureSession(input.projectRoot, input.sessionId); return seedTeacherTracesOp(this.deps, { projectId: input.projectRoot, sessionId: input.sessionId, limit: input.limit }); }
+
+  async captureTraceVault(input: { projectRoot?: string; sessionId: string; sourceLabel?: string }): Promise<TraceVaultCaptureResult> { await this.ensureSession(input.projectRoot, input.sessionId); return captureTraceVaultOp(this.deps, { sessionId: input.sessionId, projectId: input.projectRoot, sourceLabel: input.sourceLabel ?? 'work_journal' }); }
+
+  async previewTraceVault(input: { projectRoot?: string; sessionId: string; limit?: number }): Promise<TraceVaultCaptureResult[]> { await this.ensureSession(input.projectRoot, input.sessionId); return previewTraceVaultOp(this.deps, input.sessionId, input.limit); }
+
+  async seedTeacherTracesFromVault(input: { projectRoot?: string; sessionId: string; limit?: number }): Promise<{ seeded: number; vault: TraceVaultCaptureResult[] }> { await this.ensureSession(input.projectRoot, input.sessionId); return seedTeacherTracesFromVaultOp(this.deps, this.deps.memoryManager, input.sessionId, input.limit); }
 
   async resumeContext(input: { projectRoot: string; task: string; sessionId?: string; recentLimit?: number }): Promise<ResumeContextPayload> {
     const sessionId = await this.ensureSession(input.projectRoot, input.sessionId);
@@ -174,6 +168,9 @@ export class CodexMemoryBridge {
       'get_compaction_report',
       'preview_teacher_traces',
       'seed_teacher_traces',
+      'capture_trace_vault',
+      'preview_trace_vault',
+      'seed_teacher_traces_from_vault',
     ];
   }
 

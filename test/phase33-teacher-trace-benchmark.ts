@@ -83,22 +83,24 @@ async function main() {
       ],
     );
 
-    const previewBefore = await bridge.previewTeacherTraces({ projectRoot, sessionId, limit: 10 });
+    const vaultPreviewBefore = await bridge.previewTraceVault({ projectRoot, sessionId, limit: 5 });
     const beforeStart = performance.now();
     const beforeLessons = await bridge.recallLessons({ projectRoot, sessionId, task: 'fix the null guard regression', limit: 5 });
     const beforeMs = performance.now() - beforeStart;
-    const seed = await bridge.seedTeacherTraces({ projectRoot, sessionId, limit: 10 });
+    const capture = await bridge.captureTraceVault({ projectRoot, sessionId, sourceLabel: 'work_journal' });
+    const seed = await bridge.seedTeacherTracesFromVault({ projectRoot, sessionId, limit: 5 });
     const afterStart = performance.now();
     const afterLessons = await bridge.recallLessons({ projectRoot, sessionId, task: 'fix the null guard regression', limit: 5 });
     const afterMs = performance.now() - afterStart;
     const resumed = await bridge.resumeContext({ projectRoot, sessionId, task: 'fix the null guard regression', recentLimit: 3 });
 
-    console.log(`teacher_trace_cards=${seed.cards.length}`);
-    console.log(`teacher_trace_saved=${seed.savedCount}`);
-    console.log(`raw_journal_tokens=${seed.rawJournalTokens}`);
-    console.log(`teacher_trace_tokens=${seed.teacherTraceTokens}`);
-    console.log(`teacher_trace_reduction_pct=${seed.reductionPercent.toFixed(1)}`);
-    console.log(`preview_cards=${previewBefore.cards.length}`);
+    console.log(`vault_preview_before=${vaultPreviewBefore.length}`);
+    console.log(`vault_capture_id=${capture.id}`);
+    console.log(`vault_raw_tokens=${capture.rawTokens}`);
+    console.log(`vault_condensed_tokens=${capture.condensedTokens}`);
+    console.log(`vault_reduction_pct=${((capture.rawTokens - capture.condensedTokens) / capture.rawTokens * 100).toFixed(1)}`);
+    console.log(`teacher_trace_cards=${capture.cards.length}`);
+    console.log(`teacher_trace_saved=${seed.seeded}`);
     console.log(`pre_seed_lessons=${beforeLessons.length}`);
     console.log(`post_seed_lessons=${afterLessons.length}`);
     console.log(`pre_seed_recall_ms=${beforeMs.toFixed(2)}`);

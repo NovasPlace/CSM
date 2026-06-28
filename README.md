@@ -26,7 +26,9 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 - **Adaptive Context Governor (Phase 32)** - Applies budget-aware pressure monitoring, light memory briefs, checkpoint refs, distilled project state, and emergency rebuilds to keep long sessions under target prompt budgets.
 - **Verified quota savings (Phase 32.5)** - Benchmarked results show `53.5%` synthetic long-session input reduction, `63.9%` captured-trace input reduction, peak active context dropping from `156,532` to `31,687`, and context pressure moving from turn `93` to turn `240` while preserving continuity.
 - **Workspace replay proof** - Real prompt-debug workspace replay now shows `11.3%` reduction, proving the governor affects messy organic traces rather than only synthetic paths.
-- **Teacher traces (Phase 33)** - Real work-journal traces can now be distilled into compact repair cards, saved as lesson memories, and replayed through bridge recall with less token spend than the raw journal trail.
+- **Vault trace capture (Phase 33)** - Real work-journal traces are now persisted as vault records before distillation, so the system can replay a compact evidence trail instead of the full raw journal.
+- **Teacher traces (Phase 33)** - Those vault records can be distilled into compact repair cards, saved as lesson memories, and replayed through bridge recall with less token spend than the raw journal trail.
+- **Phase 33 evidence** - Reproducible results and raw outputs are documented in `docs/PHASE33_TRACE_VAULT_RESULTS.md` and `docs/PHASE33_TRACE_VAULT_RAW_OUTPUTS.md`.
 - **Codex context brief** - `CodexMemoryBridge.getContextBrief({ projectRoot, task })` builds a compact brief plus lesson/risk recall before a fresh Codex task burns context rediscovering the repo.
 - **Tool-call distillation** - Converts raw tool output into structured summaries and references.
 - **Assistant text compaction** - Compresses long assistant text while preserving important lines.
@@ -179,6 +181,9 @@ Import `./codex-bridge` to expose the existing memory harness to Codex-facing co
 - `recall_lessons`
 - `preview_teacher_traces`
 - `seed_teacher_traces`
+- `capture_trace_vault`
+- `preview_trace_vault`
+- `seed_teacher_traces_from_vault`
 - `prune_memories_dry_run`
 - `backfill_missing_embeddings`
 - `get_compaction_report`

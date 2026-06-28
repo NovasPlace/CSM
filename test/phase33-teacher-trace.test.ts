@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { deriveTeacherTraceCards, previewTeacherTraces, seedTeacherTraces } from '../src/teacher-trace.js';
+import { buildTraceVaultCapture } from '../src/trace-vault-core.js';
+import { captureTraceVault } from '../src/trace-vault-store.js';
 
 function makeEntry(overrides: Record<string, unknown>) {
   return {
@@ -94,5 +96,56 @@ describe('Phase 33 teacher traces', () => {
     assert.match(saved[0].content, /Build recovered/i);
     assert.ok(saved[0].tags.includes('teacher-trace'));
     assert.equal(saved[0].metadata.triggers.tools[0], 'bash');
+  });
+
+  it('captures a vault trace before seeding teacher traces', async () => {
+    const entries = [
+      makeEntry({
+        intent: 'Run a long verification pass to capture the vault trace',
+        resultSummary: 'The raw trace is too large to keep in active context.',
+        errorSummary: 'Null guard missing caused undefined access in the resume path.',
+      }),
+      makeEntry({
+        entryType: 'decision',
+        toolName: 'edit',
+        intent: 'Trim the capture into a compact repair card and keep the resume path stable.',
+        resultSummary: 'Build recovered after the compact capture was saved.',
+        errorSummary: undefined,
+      }),
+    ];
+    let inserted = 0;
+    const pool = {
+      query: async (sql: string) => {
+        if (sql.includes('FROM agent_work_journal')) {
+          return { rows: entries.map((entry) => ({
+            intent: entry.intent,
+            target: entry.target,
+            result_summary: entry.resultSummary,
+            error_summary: entry.errorSummary,
+            files_touched: entry.filesTouched,
+            entry_type: entry.entryType,
+            tool_name: entry.toolName,
+            created_at: entry.createdAt,
+          })), rowCount: entries.length };
+        }
+        inserted++;
+        return { rows: [{ id: inserted, created_at: new Date('2026-06-28T00:00:00.000Z') }], rowCount: 1 };
+      },
+    };
+    const capture = await captureTraceVault(pool as any, {
+      sessionId: 'sess-vault',
+      projectId: 'proj-vault',
+      sourceLabel: 'work_journal',
+    }, entries as any);
+    const preview = buildTraceVaultCapture({
+      sessionId: 'sess-vault',
+      projectId: 'proj-vault',
+      sourceLabel: 'work_journal',
+    }, entries as any);
+
+    assert.equal(capture.id, 1);
+    assert.ok(capture.rawTokens > capture.condensedTokens);
+    assert.ok(capture.cards.length >= 1);
+    assert.ok(preview.condensedTrace.includes('Repair card'));
   });
 });

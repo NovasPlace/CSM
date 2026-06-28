@@ -1,5 +1,6 @@
 import { CodexMemoryBridge } from './codex-bridge.js';
 import type { MemoryListOptions, MemorySaveOptions, MemorySearchMode, MemorySearchOptions, MemoryType, SortBy } from './types.js';
+import { VAULT_TOOL_SPECS, teacherTraceArgs, traceVaultArgs, traceVaultPreviewArgs } from './codex-mcp-vault-tools.js';
 
 type ToolArgs = Record<string, unknown>;
 
@@ -71,16 +72,7 @@ export const MCP_TOOLS = [
   toolSpec('get_compaction_report', 'Fetch the latest compaction metric for a session.', {
     sessionId: { type: 'string', description: 'Optional session id.' },
   }),
-  toolSpec('preview_teacher_traces', 'Preview repair cards derived from a work journal trace.', {
-    sessionId: { type: 'string', description: 'Session id to inspect.' },
-    projectRoot: { type: 'string', description: 'Project root or identifier.' },
-    limit: { type: 'number', description: 'Max journal entries to inspect.', default: 50 },
-  }, ['sessionId']),
-  toolSpec('seed_teacher_traces', 'Derive and save teacher-trace repair cards from a work journal trace.', {
-    sessionId: { type: 'string', description: 'Session id to inspect.' },
-    projectRoot: { type: 'string', description: 'Project root or identifier.' },
-    limit: { type: 'number', description: 'Max journal entries to inspect.', default: 50 },
-  }, ['sessionId']),
+  ...VAULT_TOOL_SPECS,
 ];
 
 export async function invokeMcpTool(bridge: CodexMemoryBridge, name: string, args: ToolArgs) {
@@ -97,6 +89,9 @@ export async function invokeMcpTool(bridge: CodexMemoryBridge, name: string, arg
   if (name === 'get_compaction_report') return bridge.getCompactionReport(optionalString(args.sessionId));
   if (name === 'preview_teacher_traces') return bridge.previewTeacherTraces(teacherTraceArgs(args));
   if (name === 'seed_teacher_traces') return bridge.seedTeacherTraces(teacherTraceArgs(args));
+  if (name === 'capture_trace_vault') return bridge.captureTraceVault(traceVaultArgs(args));
+  if (name === 'preview_trace_vault') return bridge.previewTraceVault(traceVaultPreviewArgs(args));
+  if (name === 'seed_teacher_traces_from_vault') return bridge.seedTeacherTracesFromVault(traceVaultPreviewArgs(args));
   throw new Error(`Unknown tool: ${name}`);
 }
 
@@ -165,14 +160,6 @@ function handoffArgs(args: ToolArgs) {
 
 function backfillArgs(args: ToolArgs) {
   return { limit: optionalNumber(args.limit) ?? 25, projectId: defaultProject(args.projectId), dryRun: args.dryRun === true };
-}
-
-function teacherTraceArgs(args: ToolArgs) {
-  return {
-    sessionId: requiredString(args.sessionId, 'sessionId'),
-    projectRoot: defaultProject(args.projectRoot),
-    limit: optionalNumber(args.limit) ?? 50,
-  };
 }
 
 function requiredString(value: unknown, name: string): string {
