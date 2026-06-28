@@ -86,6 +86,20 @@ Bridge operations:
 - `backfill_missing_embeddings`
 - `get_compaction_report`
 
+### Safe Review Copy
+
+If you need a clean throwaway copy for inspection, prefer the local helper instead of downloading a ZIP and expanding it in PowerShell.
+
+```powershell
+.\scripts\safe-review-copy.ps1
+```
+
+If you need an archive for offline review, use the helper with `-Archive`:
+
+```powershell
+.\scripts\safe-review-copy.ps1 -Archive
+```
+
 ### Session Schema Repair
 
 ```sql
