@@ -16,17 +16,35 @@ import type {
 } from './context-governor-types.js';
 import type { ContextCompilerConfig } from './types.js';
 
+function getThresholds(config: GovernorConfig): { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number } {
+  const def: { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number } = {
+    lightBrief: 40_000,
+    compactToolCalls: 50_000,
+    checkpointRefsOnly: 60_000,
+    distilledStateOnly: 75_000,
+    emergencyRebuild: 90_000,
+  };
+
+  return {
+    lightBrief: config.thresholds?.lightBrief ?? def.lightBrief,
+    compactToolCalls: config.thresholds?.compactToolCalls ?? def.compactToolCalls,
+    checkpointRefsOnly: config.thresholds?.checkpointRefsOnly ?? def.checkpointRefsOnly,
+    distilledStateOnly: config.thresholds?.distilledStateOnly ?? def.distilledStateOnly,
+    emergencyRebuild: config.thresholds?.emergencyRebuild ?? def.emergencyRebuild,
+  };
+}
+
 interface MessageLike {
   info?: { role?: string };
   parts?: any[];
 }
 
-function chooseAction(total: number, projected: number, budget: number): GovernorActionName {
-  if (projected >= 90_000 || total > budget * 1.45) return 'emergency_context_rebuild';
+function chooseAction(total: number, projected: number, budget: number, thresholds: { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number }): GovernorActionName {
+  if (projected >= thresholds.emergencyRebuild || total > budget * 1.45) return 'emergency_context_rebuild';
   if (projected >= 75_000) return 'distilled_project_state';
-  if (projected >= 60_000) return 'checkpoint_refs_only';
-  if (projected >= 50_000) return 'compact_old_tool_calls';
-  if (projected >= 40_000) return 'light_memory_brief';
+  if (projected >= thresholds.checkpointRefsOnly) return 'checkpoint_refs_only';
+  if (projected >= thresholds.compactToolCalls) return 'compact_old_tool_calls';
+  if (projected >= thresholds.lightBrief) return 'light_memory_brief';
   return 'none';
 }
 
@@ -125,7 +143,8 @@ export class AdaptiveContextGovernor {
     const slopeGrowth = estimateSlopeGrowth(messages);
     const projectedGrowth = profile.projectedGrowth + slopeGrowth;
     const before = measureGovernorMetrics(messages, projectedGrowth);
-    const action = chooseAction(before.totalTokens, before.projectedNextTurnTokens, profile.maxBudget);
+    const thresholds = getThresholds(this.governorConfig);
+    const action = chooseAction(before.totalTokens, before.projectedNextTurnTokens, profile.maxBudget, thresholds);
     const decision: GovernorDecision = {
       profile: profile.name,
       action,

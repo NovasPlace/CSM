@@ -448,14 +448,27 @@ export default async (
               content: (m.parts ?? []).map((p) => p.text ?? '').join(' '),
             })),
           );
-          const toolCalls = (output.messages as { parts: { tool?: string }[] }[])
-            .flatMap(m => (m.parts ?? []).filter(p => p.tool === 'tool'));
+          const toolCalls = (output.messages as { info?: { role?: string }; parts?: any[] }[])
+            .flatMap(m => {
+              const role = m.info?.role ?? 'unknown';
+              return (m.parts ?? []).filter(p => p.type === 'tool').map((p, idx) => ({
+                tool: p.tool || 'unknown',
+                args: (p.state?.input ?? {}) as Record<string, unknown>,
+                output: p.state?.output ?? '',
+                error: p.state?.type === 'error' ? (p.state?.message ?? '') : p.error,
+                exitCode: p.state?.exitCode,
+                timestamp: Date.now() - ((m.parts ?? []).length - idx - 1) * 60000, // rough timestamp
+                sessionId: currentSessionId || 'unknown',
+                filePath: (p.state?.input?.filePath || p.state?.input?.pattern) as string | undefined,
+              }));
+            });
           const messagesStr = (output.messages as { parts: { text?: string }[] }[])
             .flatMap(m => (m.parts ?? []).map(p => p.text ?? ''))
             .join('\n');
           const result = contextCompactor.compact(
             toolCalls as ToolCallRecord[],
-            messagesStr
+            messagesStr,
+            output.messages as any[]
           );
           toolCompactionResult = result.result;
           toolCompactionSaved = result.result.tokensSaved;

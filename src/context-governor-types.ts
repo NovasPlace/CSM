@@ -31,6 +31,13 @@ export interface GovernorConfig {
   enabled: boolean;
   defaultProfile: GovernorProfileName;
   profiles: Record<GovernorProfileName, GovernorProfile>;
+  thresholds?: {
+    lightBrief?: number;
+    compactToolCalls?: number;
+    checkpointRefsOnly?: number;
+    distilledStateOnly?: number;
+    emergencyRebuild?: number;
+  };
 }
 
 export interface GovernorMetrics {

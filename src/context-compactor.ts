@@ -50,7 +50,8 @@ export class ContextCompactor {
 
   compact(
     toolCalls: ToolCallRecord[],
-    inputStr?: string
+    inputStr?: string,
+    messages?: any[]
   ): { compacted: string; result: CompactionResult; compactedCount: number } {
     if (!this.config.enabled || toolCalls.length === 0) {
       const raw = toolCalls.map(tc => this.formatRawToolCall(tc)).join('\n') + '\n' + (inputStr ?? '');
@@ -99,6 +100,28 @@ export class ContextCompactor {
         keepRaw.push(tc);
       } else {
         compactable.push(tc);
+      }
+    }
+
+    // Mutate messages: replace compacted tool parts with compacted output
+    if (messages) {
+      let callIdx = 0;
+      for (let msgIdx = 0; msgIdx < messages.length; msgIdx++) {
+        const msg = messages[msgIdx];
+        const role = msg.info?.role ?? 'unknown';
+        if (role === 'assistant') {
+          for (let partIdx = 0; partIdx < (msg.parts?.length ?? 0); partIdx++) {
+            const part = msg.parts[partIdx];
+            if (part.type === 'tool') {
+              if (callIdx < compactable.length) {
+                // This tool part should be compacted
+                part.state.output = this.formatCompactRef(compactable[callIdx]);
+                part.compacted = true; // Mark as compacted
+              }
+              callIdx++;
+            }
+          }
+        }
       }
     }
 
