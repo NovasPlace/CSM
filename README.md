@@ -52,11 +52,12 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 - **Auto-checkpointing** - Queues checkpoints before risky operations.
 - **Checkpoint markdown** - Renders checkpoints into readable summaries for debugging and handoff.
 
-### Behavioral Growth Tracking (Phase 30)
-- **Memory → behavior change** - Tracks whether recalled lessons/memories actually change agent behavior across sessions.
-- **7 growth categories**: loop_prevention, schema_lesson_application, boundary_adherence, causal_depth_improvement, repo_fact_reuse, drift_correction, hydration_depth_improvement.
-- **Growth metrics**: event count, category breakdown, baseline comparison, overall growth score.
-- **Proof target**: "The system grows from what it remembers" — not just "the system remembers."
+### Governance Threshold Testing (Phase 32.5A)
+- **Memory "Teeth" Proof** - V2-M6.5A synthetic governance test proves prior memory records can actually veto future agent behavior, not just provide context.
+- **Provenance Completeness Gate** - Validates that governance records must have direct evidence (source_kind, evidence_strength, source_session_id, source_agent_id, source_model_id, source_surface) to constrain actions.
+- **Evidence Strength Classification** - Distinguishes direct_original, direct_summary (with derivative_of tracking), inferred, and gap records.
+- **Governance Eligibility** - Only governance_eligible records can veto behavior; context_only and gap_record are for context/audit only.
+- **Prevents Fake Continuity** - System correctly reports what it knows directly, what it infers, and what's missing (direct | inferred | gap discipline).
 
 ### Cross-Session Causal Stitching (Phase 31)
 - **No silent continuity inference** - Every cross-session edge is labeled `direct`, `inferred`, or `gap`; missing proof is preserved instead of smoothed over.
