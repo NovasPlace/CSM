@@ -84,6 +84,14 @@ export default async (
   console.log('[CrossSessionMemory] Initializing AUTOMATED memory system...');
 
   const database = new Database(config);
+
+  try {
+    await database.connect();
+    console.log('[CrossSessionMemory] Database connected');
+  } catch (error) {
+    console.error('[CrossSessionMemory] Database connection failed:', error);
+  }
+
   const embeddings = new EmbeddingGenerator(config);
   const redactor = new Redactor(config.redactor);
   const memoryManager = new MemoryManager(database, embeddings, redactor);
@@ -128,13 +136,6 @@ export default async (
   };
 
   // recordCompactionMetric and hasToolDiscardMarker extracted to helpers/compaction-metrics.ts
-
-  try {
-    await database.connect();
-    console.log('[CrossSessionMemory] Database connected');
-  } catch (error) {
-    console.error('[CrossSessionMemory] Database connection failed:', error);
-  }
 
   // Phase 4A — Durable session checkpointing (initialized after DB connect)
   const checkpointStore = new CheckpointStore(database.getPool(), redactor);
