@@ -30,11 +30,17 @@ export interface BucketBreakdown {
   opencodeInternal: number;
 }
 
-// Approximate tokens per character for English text.
-const CHARS_PER_TOKEN = 4;
+// Approximate tokens per character for English prose.
+const PROSE_CHARS_PER_TOKEN = 4;
+// Code-heavy content has more token splits (camelCase, punctuation, brackets).
+const CODE_CHARS_PER_TOKEN = 3.2;
+
+const CODE_INDICATORS = /(?:function |const |let |var |import |export |class |=>|&&|\|\||::|;\s*$|\{|\}|\[|\]|=>|\\n|0x[0-9a-f]+|[a-z][A-Z])/m;
 
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
+  if (text.length === 0) return 0;
+  const ratio = CODE_INDICATORS.test(text) ? CODE_CHARS_PER_TOKEN : PROSE_CHARS_PER_TOKEN;
+  return Math.ceil(text.length / ratio);
 }
 
 export function estimatePartTokens(part: any): number {

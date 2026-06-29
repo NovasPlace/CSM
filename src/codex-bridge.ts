@@ -161,7 +161,7 @@ export class CodexMemoryBridge {
     });
   }
 
-  async invokeExtra(name: string, input: Record<string, unknown>): Promise<unknown> { const sessionless = new Set(['memory_project_list', 'memory_cleanup', 'csm_runtime_status', 'csm_compaction_audit']); const sessionId = sessionless.has(name) ? undefined : await this.ensureSession(input.projectRoot as string | undefined, input.sessionId as string | undefined); return invokeCodexBridgeExtra(this.deps, name as never, input, sessionId); }
+  async invokeExtra(name: string, input: Record<string, unknown>): Promise<unknown> { const sessionless = new Set(['memory_project_list', 'memory_cleanup', 'csm_runtime_status', 'csm_compaction_audit', 'csm_context_budget']); const sessionId = sessionless.has(name) ? undefined : await this.ensureSession(input.projectRoot as string | undefined, input.sessionId as string | undefined); return invokeCodexBridgeExtra(this.deps, name as never, input, sessionId); }
 
   listTools(): string[] { return ['save_memory', 'search_memories', 'list_memories', 'get_context_brief', 'recall_lessons', 'bridge_resume_context', 'bridge_sync_turn', 'bridge_handoff_summary', 'prune_memories_dry_run', 'backfill_missing_embeddings', 'get_compaction_report', 'preview_teacher_traces', 'seed_teacher_traces', 'capture_trace_vault', 'preview_trace_vault', 'seed_teacher_traces_from_vault', ...EXTRA_BRIDGE_TOOL_NAMES]; }
 

@@ -10,6 +10,7 @@ export interface GovernanceVeto {
   confidence: number;
   stalenessMs: number;
   sourceSessionId: string | null;
+  provenanceVerified: boolean;
 }
 
 export interface GovernanceEvaluateResult {
@@ -65,6 +66,7 @@ export class MemoryGovernance {
       for (const row of result.rows as any[]) {
         const gov = row.metadata?.governance ?? {};
         if (!gov.failure_mode || !gov.veto_action || !gov.required_action) continue;
+        if (hasNonGovernanceProvenance(row.metadata)) continue;
 
         const createdMs = new Date(row.created_at).getTime();
         const stalenessMs = now - createdMs;
@@ -87,6 +89,7 @@ export class MemoryGovernance {
           confidence: row.confidence ?? 0.7,
           stalenessMs,
           sourceSessionId: row.session_id ?? null,
+          provenanceVerified: hasGovernanceProvenance(row.metadata),
         });
       }
 
@@ -103,6 +106,7 @@ export class MemoryGovernance {
       '<memory_governance>',
       '',
       'The following governance vetoes are ACTIVE enforcement directives from prior sessions.',
+      'Records without direct provenance are legacy/unverified source records with degraded authority.',
       'You MUST comply with these vetoes. They are not suggestions — they override default behavior.',
       '',
     ];
@@ -118,6 +122,7 @@ export class MemoryGovernance {
       lines.push(`- veto_action: ${veto.vetoAction}`);
       lines.push(`- required_action: ${veto.requiredAction}`);
       lines.push(`- confidence: ${veto.confidence.toFixed(2)}`);
+      lines.push(`- provenance: ${veto.provenanceVerified ? 'direct' : 'unverified source'}`);
       if (veto.sourceSessionId) {
         lines.push(`- source_session: ${veto.sourceSessionId.slice(0, 8)}`);
       }
@@ -174,4 +179,16 @@ export class MemoryGovernance {
     if (stalenessMs < STALENESS_MAX_MS) return 'stale';
     return 'expired';
   }
+}
+
+function hasGovernanceProvenance(metadata: any): boolean {
+  const sourceKind = metadata?.source_kind;
+  const evidence = metadata?.evidence_strength;
+  return ['transcript', 'tool_trace', 'file_diff', 'user_supplied'].includes(sourceKind)
+    && evidence === 'direct_original';
+}
+
+function hasNonGovernanceProvenance(metadata: any): boolean {
+  if (!metadata?.source_kind && !metadata?.evidence_strength) return false;
+  return !hasGovernanceProvenance(metadata);
 }

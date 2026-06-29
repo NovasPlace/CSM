@@ -1,23 +1,7 @@
 import type { PluginContext } from '../plugin-context.js';
 import type { ToolCallRecord } from '../types.js';
-import { queueDocUpdate, flushDocUpdates, getPendingUpdates, ensureProjectDocsInitialized } from './auto-docs.js';
-
-let flushTimer: ReturnType<typeof setTimeout> | null = null;
-const FLUSH_DELAY_MS = 2000;
-
-function scheduleDocFlush(ctx: PluginContext): void {
-  if (flushTimer) clearTimeout(flushTimer);
-  flushTimer = setTimeout(async () => {
-    flushTimer = null;
-    if (getPendingUpdates().length > 0) {
-      try {
-        await flushDocUpdates(ctx, ctx.directory);
-      } catch (err) {
-        console.error('[CrossSessionMemory] Auto-doc flush error:', err);
-      }
-    }
-  }, FLUSH_DELAY_MS);
-}
+import { ensureProjectDocsInitialized } from './auto-docs.js';
+import { autoDistill, logToolUsage } from './tool-execute-memory.js';
 
 /**
  * tool.execute.before — Fires before any tool call.
@@ -156,90 +140,4 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
       console.error('[CrossSessionMemory] Tool tracking error:', error);
     }
   };
-}
-
-/** Auto-distill tool calls and save summaries + memories. */
-async function autoDistill(ctx: PluginContext, sid: string): Promise<void> {
-  const summary = ctx.toolDistiller.distill();
-  if (summary.groups.length === 0) return;
-
-  const pool = ctx.database.getPool();
-  await pool.query(
-    `INSERT INTO distilled_summaries (id, session_id, groups, compressed, total_calls_summarized)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [
-      summary.id,
-      sid,
-      JSON.stringify(summary.groups),
-      summary.compressed,
-      summary.totalCallsSummarized,
-    ],
-  );
-
-  if (ctx.config.distiller.autoSaveAsMemory) {
-    await ctx.memoryExtractor.extractFromDistilledSummaries(sid, sid, summary);
-  }
-  await ctx.refreshActiveContext(sid);
-}
-
-/** Log significant tool usage as episodic memories. */
-async function logToolUsage(
-  ctx: PluginContext,
-  input: any,
-  output: any,
-  sid: string | null,
-): Promise<void> {
-  const significantTools = [
-    'read', 'write', 'edit', 'glob', 'grep', 'bash', 'task',
-    'memory_save', 'memory_search', 'memory_lesson',
-    'csm_memory_save', 'csm_memory_search', 'csm_memory_lesson',
-  ];
-
-  if (significantTools.includes(input.tool)) {
-    await ctx.memoryManager.saveMemory({
-      content: `Tool used: ${input.tool}`,
-      type: 'episodic',
-      importance: 0.2,
-      source: 'auto',
-      tags: ['tool-usage', input.tool],
-      metadata: {
-        tool: input.tool,
-        args: input.args,
-        outputPreview: typeof output.output === 'string'
-          ? output.output.substring(0, 200)
-          : 'non-string output',
-      },
-      sessionId: sid ?? undefined,
-    });
-  }
-
-  // Log file operations + queue doc updates
-  if (input.tool === 'write' || input.tool === 'edit') {
-    const filePath = input.args?.filePath ?? input.args?.path ?? 'unknown';
-    queueDocUpdate(filePath, input.tool === 'write' ? 'write' : 'edit');
-      scheduleDocFlush(ctx);
-    await ctx.memoryManager.saveMemory({
-      content: `File ${input.tool === 'write' ? 'written' : 'edited'}: ${filePath}`,
-      type: 'episodic',
-      importance: 0.4,
-      source: 'auto',
-      tags: ['file-operation', input.tool],
-      metadata: { operation: input.tool, filePath },
-      sessionId: sid ?? undefined,
-    });
-  }
-
-  // Log commands
-  if (ctx.config.logCommands && input.tool === 'bash') {
-    const command = input.args?.command ?? 'unknown';
-    await ctx.memoryManager.saveMemory({
-      content: `Command executed: ${command.substring(0, 200)}`,
-      type: 'procedural',
-      importance: 0.3,
-      source: 'auto',
-      tags: ['command', 'procedural'],
-      metadata: { command: command.substring(0, 500), exitCode: output.metadata?.exitCode },
-      sessionId: sid ?? undefined,
-    });
-  }
 }

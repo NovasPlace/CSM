@@ -59,6 +59,7 @@ describe('Codex bridge extra plugin surfaces', () => {
     assert.equal(MCP_TOOLS.some((tool) => tool.name === 'memory_lesson'), true);
     assert.equal(MCP_TOOLS.some((tool) => tool.name === 'create_checkpoint'), true);
     assert.equal(MCP_TOOLS.some((tool) => tool.name === 'csm_context_pressure'), true);
+    assert.equal(MCP_TOOLS.some((tool) => tool.name === 'csm_context_budget'), true);
 
     await bridge.saveMemory({
       projectRoot: 'extras-project',
@@ -153,5 +154,17 @@ describe('Codex bridge extra plugin surfaces', () => {
     assert.equal((pressure as { messageCount?: number }).messageCount, 2);
     assert.equal((pressure as { maxTokens?: number }).maxTokens, 10000);
     assert.equal((pressure as { projectedNextTurnTokens?: number }).projectedNextTurnTokens, ((pressure as { estimatedTokens?: number }).estimatedTokens ?? 0) + 500);
+
+    const budget = await invokeMcpTool(bridge, 'csm_context_budget', {
+      latestUserText: 'run tests and keep only the important proof',
+      touchedFiles: ['src/context-budget-governor.ts'],
+      command: 'npm test',
+      stdout: Array.from({ length: 60 }, (_, index) => `pass ${index}`).join('\n'),
+      exitCode: 0,
+    });
+    assert.equal((budget as { decision?: { toolOutputMode?: string } }).decision?.toolOutputMode, 'distilled');
+    assert.equal((budget as { decision?: { ruleMode?: string } }).decision?.ruleMode, 'load_triggered_rules');
+    assert.equal(typeof (budget as { promptPayload?: unknown }).promptPayload, 'string');
+    assert.equal(typeof (budget as { evidenceRef?: unknown }).evidenceRef, 'string');
   });
 });

@@ -18,11 +18,11 @@ import type { ContextCompilerConfig } from './types.js';
 
 function getThresholds(config: GovernorConfig): { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number } {
   const def: { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number } = {
-    lightBrief: 40_000,
-    compactToolCalls: 50_000,
-    checkpointRefsOnly: 60_000,
-    distilledStateOnly: 75_000,
-    emergencyRebuild: 90_000,
+    lightBrief: 50_000,
+    compactToolCalls: 65_000,
+    checkpointRefsOnly: 75_000,
+    distilledStateOnly: 90_000,
+    emergencyRebuild: 120_000,
   };
 
   return {
@@ -41,7 +41,7 @@ interface MessageLike {
 
 function chooseAction(total: number, projected: number, budget: number, thresholds: { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number }): GovernorActionName {
   if (projected >= thresholds.emergencyRebuild || total > budget * 1.45) return 'emergency_context_rebuild';
-  if (projected >= 75_000) return 'distilled_project_state';
+  if (projected >= thresholds.distilledStateOnly) return 'distilled_project_state';
   if (projected >= thresholds.checkpointRefsOnly) return 'checkpoint_refs_only';
   if (projected >= thresholds.compactToolCalls) return 'compact_old_tool_calls';
   if (projected >= thresholds.lightBrief) return 'light_memory_brief';
@@ -56,10 +56,10 @@ function actionBudget(
   action: GovernorActionName,
   targetBudget: number,
 ): number {
-  if (action === 'light_memory_brief') return Math.min(targetBudget, 40_000);
-  if (action === 'compact_old_tool_calls') return Math.min(targetBudget, 50_000);
-  if (action === 'checkpoint_refs_only') return Math.min(targetBudget, 60_000);
-  if (action === 'distilled_project_state') return Math.min(targetBudget, 75_000);
+  if (action === 'light_memory_brief') return Math.min(targetBudget, 50_000);
+  if (action === 'compact_old_tool_calls') return Math.min(targetBudget, 65_000);
+  if (action === 'checkpoint_refs_only') return Math.min(targetBudget, 75_000);
+  if (action === 'distilled_project_state') return Math.min(targetBudget, 90_000);
   if (action === 'emergency_context_rebuild') return Math.min(targetBudget, 20_000);
   return targetBudget;
 }

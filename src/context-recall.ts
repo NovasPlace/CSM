@@ -129,6 +129,17 @@ export class ContextRecallDaemon {
     // Cache the context brief
     if (this.currentSessionId) {
       await pool.query(
+        `INSERT INTO sessions (id, directory, title, project_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          this.currentSessionId,
+          this.currentProjectId ?? process.cwd(),
+          `Session ${new Date().toISOString()}`,
+          this.currentProjectId ?? 'global',
+        ]
+      );
+      await pool.query(
         `INSERT INTO session_contexts (session_id, context_brief, episodic_memories, procedural_memories, semantic_memories)
          VALUES ($1, $2, $3, $4, $5)`,
         [

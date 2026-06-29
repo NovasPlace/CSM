@@ -7,6 +7,7 @@ import type { Database } from './database.js';
 import type { MemoryExtractor } from './memory-extractor.js';
 import type { MemoryManager } from './memory-manager.js';
 import type { PrimingEngine } from './priming-engine.js';
+import { contextBudgetOp } from './codex-bridge-extra-budget-ops.js';
 import { contextFetchDecisionLogOp, contextFetchFileRegionOp, contextFetchLastErrorOp, contextFetchOp, contextPressureOp, contextReviewOp, createCheckpointOp, expandCheckpointRefOp, goalListOp, goalSetOp, goalUpdateOp, listCheckpointsOp, runtimeStatusOp, compactionAuditOp as csmCompactionAuditOp } from './codex-bridge-extra-state-ops.js';
 import { memoryBackfillOp, memoryCleanupOp, memoryCompactOp, memoryContextOp, memoryDeleteOp, memoryDistillOp, memoryDistilledViewOp, memoryLessonOp, memoryProjectListOp, memoryTranscriptOp } from './codex-bridge-extra-memory-ops.js';
 import { reviewCandidateOp } from './codex-bridge-extra-memory-ops.js';
@@ -32,7 +33,7 @@ export type CodexBridgeExtraName =
   | 'context_search' | 'context_fetch_file_region' | 'context_fetch_last_error'
   | 'context_fetch_decision_log' | 'goal_set' | 'goal_update' | 'goal_list'
   | 'create_checkpoint' | 'list_checkpoints' | 'expand_checkpoint_ref' | 'csm_context_pressure'
-  | 'csm_runtime_status' | 'csm_compaction_audit';
+  | 'csm_context_budget' | 'csm_runtime_status' | 'csm_compaction_audit';
 
 export const EXTRA_BRIDGE_TOOL_NAMES: CodexBridgeExtraName[] = [
   'memory_transcript','memory_delete','memory_context','memory_lesson','memory_candidate_list',
@@ -40,7 +41,7 @@ export const EXTRA_BRIDGE_TOOL_NAMES: CodexBridgeExtraName[] = [
   'memory_distill','memory_distilled_view','memory_compact','memory_backfill_embeddings',
   'context_review','context_fetch','context_search','context_fetch_file_region','context_fetch_last_error',
   'context_fetch_decision_log','goal_set','goal_update','goal_list','create_checkpoint','list_checkpoints',
-  'csm_context_pressure',
+  'csm_context_pressure','csm_context_budget',
   'expand_checkpoint_ref','csm_runtime_status','csm_compaction_audit',
 ];
 
@@ -72,6 +73,7 @@ export async function invokeCodexBridgeExtra(
   if (name === 'goal_update') return goalUpdateOp(deps, sessionId, input);
   if (name === 'goal_list') return goalListOp(deps, sessionId, input);
   if (name === 'csm_context_pressure') return contextPressureOp(deps, input);
+  if (name === 'csm_context_budget') return contextBudgetOp(input);
   if (name === 'create_checkpoint') return createCheckpointOp(deps, sessionId, input);
   if (name === 'list_checkpoints') return listCheckpointsOp(deps, sessionId, input);
   if (name === 'expand_checkpoint_ref') return expandCheckpointRefOp(deps, sessionId, input);

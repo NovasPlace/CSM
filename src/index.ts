@@ -59,6 +59,7 @@ import { createCheckpointTool, expandCheckpointRefTool, listCheckpointsTool, typ
 import { buildCheckpointInjection, type CheckpointInjectDeps } from './checkpoint-inject.js';
 import { createAutoCheckpoint, type AutoCheckpointTrigger } from './helpers/auto-checkpoint.js';
 import { recordCompactionMetric, hasToolDiscardMarker } from './helpers/compaction-metrics.js';
+import { TokenBudgetLedger } from './token-budget-ledger.js';
 import { createSessionCompactingHook, createAutocontinueHook } from './hooks/session-compaction.js';
 import { createToolExecuteBeforeHook, createToolExecuteAfterHook } from './hooks/tool-execute.js';
 import { createSystemTransformHook } from './hooks/system-transform.js';
@@ -77,7 +78,7 @@ export default async (
 ): Promise<Hooks> => {
   const config: PluginConfig = {
     ...DEFAULT_CONFIG,
-    ...(options as Partial<PluginConfig> ?? {}),
+    ...(options as any ?? {}),
   };
 
   console.log('[CrossSessionMemory] Initializing AUTOMATED memory system...');
@@ -89,6 +90,7 @@ export default async (
   const memoryExtractor = new MemoryExtractor(database, memoryManager, config.extractor);
   const primingEngine = new PrimingEngine(database);
   const contextRecall = new ContextRecallDaemon(database, config.contextRecallInterval);
+  const tokenLedger = new TokenBudgetLedger(database.getPool());
   const subconscious = new SubconsciousWatcher(memoryManager, config.subconsciousWatchInterval, config.filterBuildArtifacts);
   const gitWatcher = new GitWatcher(memoryManager, config.gitPollInterval);
   const loopDetector = new LoopDetector(config.loopDetectionThreshold);
@@ -450,6 +452,7 @@ export default async (
               );
               if (rolloverResult.rolloverTriggered) {
                 console.log(`[CrossSessionMemory] ${rolloverResult.auditLine}`);
+                output.messages = rolloverResult.messages as any;
               }
             }
           } catch (e) {
@@ -602,6 +605,15 @@ export default async (
           console.log(`[TokenBuckets] ${formatBreakdown(breakdown)}`);
 
           const activeSessionId = currentSessionId;
+          if (activeSessionId) {
+            const inputTokens = breakdown.toolOutputsFinal + breakdown.assistantTextFinal + breakdown.userMessagesFinal + breakdown.toolCalls + breakdown.compactedOverhead + breakdown.recentRawParts + breakdown.systemPrompt + breakdown.pluginInserts;
+            const outputTokens = 0;
+            const turnCount = 1;
+            tokenLedger.recordUsage({ sessionId: activeSessionId, inputTokens, outputTokens, turnCount }).catch((e) => {
+              console.error('[TokenBudgetLedger] recordUsage failed:', e);
+            });
+          }
+
           const contextBrief = activeSessionId ? await contextRecall.getContextBrief() : null;
           const discardMarkerPresent = hasToolDiscardMarker(
             output.messages as { parts?: unknown[] }[],

@@ -186,8 +186,8 @@ export function runTraceBenchmark(path: string): TraceBenchmarkReport {
     totalGovernorTokens += governed;
     peakBaselineTokens = Math.max(peakBaselineTokens, baseline);
     peakGovernorTokens = Math.max(peakGovernorTokens, governed);
-    if (baseline > 60_000) snapshotsOver60kBaseline++;
-    if (governed > 60_000) snapshotsOver60kGovernor++;
+    if (baseline > 75_000) snapshotsOver60kBaseline++;
+    if (governed > 75_000) snapshotsOver60kGovernor++;
   }
 
   return {

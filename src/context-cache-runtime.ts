@@ -25,19 +25,19 @@ export interface CacheRuntimeResult {
 function extractContent(part: any): { text: string; kind: CacheKind; summary: string; metadata: Record<string, unknown> } | null {
   if (part.type === 'text' && typeof part.text === 'string') {
     const text = part.text;
-    if (text.length < 200) return null;
-    const summary = text.slice(0, 100).replace(/\n/g, ' ');
+    if (text.length < 100) return null;
+    const summary = text.slice(0, 80).replace(/\n/g, ' ');
     return { text, kind: 'turn', summary, metadata: {} };
   }
   if (part.type === 'tool' && part.state) {
     const state = part.state;
     if (state.status !== 'completed' && state.type !== 'completed') return null;
     const output = String(state.output ?? '');
-    if (output.length < 200) return null;
+    if (output.length < 100) return null;
     const tool = part.tool ?? 'unknown';
     const input = state.input ?? {};
     let kind: CacheKind = 'tool_output';
-    let summary = output.slice(0, 100).replace(/\n/g, ' ');
+    let summary = output.slice(0, 80).replace(/\n/g, ' ');
     const metadata: Record<string, unknown> = { tool };
     if (tool === 'read' && input.filePath) {
       kind = 'file_read';
@@ -52,7 +52,7 @@ function extractContent(part: any): { text: string; kind: CacheKind; summary: st
     }
     if (output.includes('Error') || output.includes('error TS') || output.includes('FAIL')) {
       kind = 'error';
-      summary = `error in ${tool}: ${output.slice(0, 80).replace(/\n/g, ' ')}`;
+      summary = `error in ${tool}: ${output.slice(0, 60).replace(/\n/g, ' ')}`;
     }
     return { text: output, kind, summary, metadata };
   }

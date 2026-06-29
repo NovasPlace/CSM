@@ -51,24 +51,24 @@ describe('AdaptiveContextGovernor', () => {
     assert.equal(result.metricsAfter.totalTokens <= result.decision.budget, true);
   });
 
-  it('compacts old tool calls when projected size crosses the 50k threshold', () => {
+  it('compacts old tool calls when projected size crosses the 65k threshold', () => {
     const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, DEFAULT_GOVERNOR_CONFIG);
-    const messages = [msg('user', [text('continue')]), ...longToolMessages(37, 5000)];
+    const messages = [msg('user', [text('continue')]), ...longToolMessages(48, 5000)];
     const result = governor.govern(messages, 'balanced');
     assert.equal(result.decision.action, 'compact_old_tool_calls');
     assert.equal(result.metricsAfter.totalTokens < result.metricsBefore.totalTokens, true);
   });
 
   it('adds a light memory brief before higher thresholds', () => {
-    const { messages, result } = actionFor(27, 5000);
+    const { messages, result } = actionFor(36, 5000);
     const firstText = String(messages[0].parts?.[0]?.text ?? '');
     assert.equal(result.decision.action, 'light_memory_brief');
     assert.match(firstText, /\[MEMORY_BRIEF\]/);
   });
 
-  it('replaces older history with checkpoint refs at the 60k threshold', () => {
+  it('replaces older history with checkpoint refs at the 75k threshold', () => {
     const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, DEFAULT_GOVERNOR_CONFIG);
-    const messages = [msg('user', [text('resume')]), ...longToolMessages(48, 5000)];
+    const messages = [msg('user', [text('resume')]), ...longToolMessages(56, 5000)];
     const result = governor.govern(messages, 'balanced');
     const firstText = String(messages[0].parts?.[0]?.text ?? '');
     assert.equal(result.decision.action, 'checkpoint_refs_only');
@@ -77,7 +77,7 @@ describe('AdaptiveContextGovernor', () => {
   });
 
   it('falls back to distilled project state before emergency rebuild', () => {
-    const { messages, result } = actionFor(54, 5000);
+    const { messages, result } = actionFor(68, 5000);
     const firstText = String(messages[0].parts?.[0]?.text ?? '');
     assert.equal(result.decision.action, 'distilled_project_state');
     assert.match(firstText, /\[DISTILLED_STATE\]/);

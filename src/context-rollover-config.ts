@@ -27,10 +27,10 @@ export interface RolloverConfig {
 
 export const DEFAULT_ROLLOVER_CONFIG: RolloverConfig = {
   enabled: true,
-  rolloverAtTotalSessionTokens: 120_000,
-  targetInputTokensAfterRollover: 25_000,
-  failClosedOverInputTokens: 45_000,
+  rolloverAtTotalSessionTokens: 90_000,
+  targetInputTokensAfterRollover: 20_000,
+  failClosedOverInputTokens: 40_000,
   recentTurnsToKeep: 2,
-  maxBriefTokens: 4_000,
+  maxBriefTokens: 3_000,
   logEnabled: true,
 };

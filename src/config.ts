@@ -103,8 +103,8 @@ export const DEFAULT_CONFIG: PluginConfig = {
   contextGovernor: DEFAULT_GOVERNOR_CONFIG,
   contextCache: {
     enabled: true,
-    minTokensToCache: 200,
-    manifestMaxTokens: 2000,
+    minTokensToCache: 100,
+    manifestMaxTokens: 1000,
     retentionDays: 30,
   },
   contextRollover: DEFAULT_ROLLOVER_CONFIG,

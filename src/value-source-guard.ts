@@ -7,6 +7,11 @@ export interface TaggedValue {
   confidence: number;
 }
 
+export interface ValueClaimProvenance {
+  source_kind?: string;
+  evidence_strength?: string;
+}
+
 export interface ValueSourceGuardResult {
   values: TaggedValue[];
   knownCount: number;
@@ -40,18 +45,24 @@ export function detectUnlabeledInferences(text: string): string[] {
 export function classifyValueClaim(
   claim: string,
   hasStoredMemory: boolean,
-  confidence: number
+  confidence: number,
+  provenance?: ValueClaimProvenance
 ): TaggedValue {
-  if (hasStoredMemory && confidence >= 0.7) {
+  const directKinds = new Set(['transcript', 'tool_trace', 'file_diff', 'user_supplied']);
+  const hasDirectProvenance = provenance?.source_kind
+    ? directKinds.has(provenance.source_kind) && provenance.evidence_strength === 'direct_original'
+    : confidence >= 0.9;
+
+  if (hasStoredMemory && hasDirectProvenance && confidence >= 0.7) {
     return { claim, source: 'known', evidence: 'stored memory with sufficient confidence', confidence };
   }
   return { claim, source: 'inferred', evidence: 'no stored memory backing this claim', confidence };
 }
 
 export function guardValueSources(
-  claims: Array<{ claim: string; hasStoredMemory: boolean; confidence: number }>
+  claims: Array<{ claim: string; hasStoredMemory: boolean; confidence: number; provenance?: ValueClaimProvenance }>
 ): ValueSourceGuardResult {
-  const values = claims.map(c => classifyValueClaim(c.claim, c.hasStoredMemory, c.confidence));
+  const values = claims.map(c => classifyValueClaim(c.claim, c.hasStoredMemory, c.confidence, c.provenance));
   const knownCount = values.filter(v => v.source === 'known').length;
   const inferredCount = values.filter(v => v.source === 'inferred').length;
 

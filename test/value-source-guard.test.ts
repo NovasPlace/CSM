@@ -7,8 +7,11 @@ import {
 } from '../src/value-source-guard.js';
 
 describe('classifyValueClaim', () => {
-  it('classifies as known when backed by stored memory', () => {
-    const result = classifyValueClaim('prefers benchmark rigor', true, 0.85);
+  it('classifies as known when backed by direct stored memory', () => {
+    const result = classifyValueClaim('prefers benchmark rigor', true, 0.85, {
+      source_kind: 'transcript',
+      evidence_strength: 'direct_original',
+    });
     assert.equal(result.source, 'known');
     assert.equal(result.confidence, 0.85);
   });
@@ -27,8 +30,18 @@ describe('classifyValueClaim', () => {
 describe('guardValueSources', () => {
   it('counts known vs inferred correctly', () => {
     const result = guardValueSources([
-      { claim: 'benchmark rigor', hasStoredMemory: true, confidence: 0.9 },
-      { claim: 'silent injection', hasStoredMemory: true, confidence: 0.8 },
+      {
+        claim: 'benchmark rigor',
+        hasStoredMemory: true,
+        confidence: 0.9,
+        provenance: { source_kind: 'transcript', evidence_strength: 'direct_original' },
+      },
+      {
+        claim: 'silent injection',
+        hasStoredMemory: true,
+        confidence: 0.8,
+        provenance: { source_kind: 'tool_trace', evidence_strength: 'direct_original' },
+      },
       { claim: 'code quality', hasStoredMemory: false, confidence: 0.4 },
     ]);
     assert.equal(result.knownCount, 2);
@@ -38,7 +51,12 @@ describe('guardValueSources', () => {
 
   it('reports no unlabeled inferences when all known', () => {
     const result = guardValueSources([
-      { claim: 'benchmark rigor', hasStoredMemory: true, confidence: 0.9 },
+      {
+        claim: 'benchmark rigor',
+        hasStoredMemory: true,
+        confidence: 0.9,
+        provenance: { source_kind: 'transcript', evidence_strength: 'direct_original' },
+      },
     ]);
     assert.equal(result.hasUnlabeledInferred, false);
   });

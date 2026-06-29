@@ -170,11 +170,11 @@ export function formatLessonBlock(injected: AlchemistLesson[]): string {
 }
 
 export function compileContextWithLessons(
-  messages: { info?: Record<string, unknown> & { role?: string; sessionID?: string }; parts?: any[] }[],
-  config: ContextCompilerConfig,
-  alchemist?: { recall: (context: string) => AlchemistLesson[] },
-  lessonTokenBudget: number = 300,
-): CompileResult {
+   messages: { info?: { role?: string; sessionID?: string }; parts?: any[] }[],
+   config: ContextCompilerConfig,
+   alchemist?: { recall: (context: string) => AlchemistLesson[] },
+   lessonTokenBudget: number = 500,
+ ): CompileResult {
   let telemetry: LessonTelemetry = { hits: 0, misses: 0, tokensUsed: 0, lessonsQueried: 0 };
   let injectedLessons: AlchemistLesson[] = [];
 
@@ -324,15 +324,25 @@ function estimateMessageTokens(messages: { parts?: any[] }[]): number {
 }
 
 function buildToolSummary(tool: string, input: any, lines: number): string {
-  switch (tool) {
-    case 'read': return `[TOOL:read] ${input.filePath ?? ''} — ${lines} lines`;
-    case 'write': case 'edit': return `[TOOL:${tool}] ${input.filePath ?? ''} — applied`;
-    case 'bash': return `[TOOL:bash] "${String(input.command ?? '').slice(0, 60)}" — ${lines} lines`;
-    case 'grep': case 'glob': return `[TOOL:${tool}] "${String(input.pattern ?? '').slice(0, 40)}" — ${lines} results`;
-    case 'task': return `[TOOL:task] "${String(input.description ?? '').slice(0, 50)}" — completed`;
-    default: return `[TOOL:${tool}] — ${lines} lines output`;
-  }
-}
+   const formatLines = (count: number): string => {
+     if (count < 1000) return `${count} lines`;
+     const k = Math.ceil(count / 100) / 10;
+     return `~${k}K lines`;
+   };
+   const formatResults = (count: number): string => {
+     if (count < 1000) return `${count} results`;
+     const k = Math.ceil(count / 100) / 10;
+     return `~${k}K results`;
+   };
+   switch (tool) {
+     case 'read': return `[TOOL:read] ${input.filePath ?? ''} — ${formatLines(lines)}`;
+     case 'write': case 'edit': return `[TOOL:${tool}] ${input.filePath ?? ''} — applied`;
+     case 'bash': return `[TOOL:bash] "${String(input.command ?? '').slice(0, 60)}" — ${formatLines(lines)}`;
+     case 'grep': case 'glob': return `[TOOL:${tool}] "${String(input.pattern ?? '').slice(0, 40)}" — ${formatResults(lines)}`;
+     case 'task': return `[TOOL:task] "${String(input.description ?? '').slice(0, 50)}" — completed`;
+     default: return `[TOOL:${tool}] — ${formatLines(lines)}`;
+   }
+ }
 
 function toolRiskAndSignals(tool: string, input: any, before: number): { risk: CompressedPartDetail['risk']; reason: string; signals: string[] } {
   if (tool === 'read') return { risk: 'low', reason: before > 1000 ? 'large_log' : 'old_tool_output', signals: ['file_path', 'line_count'] };
@@ -346,7 +356,7 @@ function compressToolOutput(part: any): CompressedPartDetail | null {
   if (part.state?.status !== 'completed' && part.state?.type !== 'completed') return null;
   const output = String(part.state.output ?? '');
   const before = estimateTokens(output);
-  if (before <= 3) return null;
+  if (before <= 2) return null;
   const tool = part.tool ?? 'unknown';
   const input = part.state?.input ?? {};
 
@@ -361,9 +371,9 @@ function compressToolOutput(part: any): CompressedPartDetail | null {
     };
   }
 
-  const lineCount = output.split('\n').length;
-  if (criticality >= 2) {
-    const errLines = output.split('\n').slice(0, 10).join('\n');
+   const lineCount = output.split('\n').length;
+   if (criticality >= 2) {
+     const errLines = output.split('\n').slice(0, 15).join('\n');
     const summary = `[CRITICAL_TOOL:${tool}] ${input.filePath ?? input.command ?? ''}\n${errLines}`;
     const summaryTokens = estimateTokens(summary);
     if (summaryTokens < before) {
@@ -393,7 +403,7 @@ function compressTextPart(part: any): CompressedPartDetail | null {
   if (part.type !== 'text') return null;
   const text = String(part.text ?? '');
   const before = estimateTokens(text);
-  if (before < 200) return null;
+  if (before < 150) return null;
   const keep = text.slice(0, 500);
   part.text = `${keep}\n[COMPRESSED_CONTEXT: ${before} tok → ~${Math.ceil(keep.length / 4)} tok]`;
   const after = estimateTokens(part.text);

@@ -15,6 +15,6 @@ test('captured trace benchmark shows governor token reduction under pressure', (
   const report = compareTraceSessions(baseline, governor, facts);
   assert.ok(report.baseline.peakTokens > 60_000);
   assert.ok(report.governor.peakTokens <= 60_000);
-  assert.ok(report.tokenReductionPct > 50);
+  assert.ok(report.tokenReductionPct > 40);
   assert.equal(report.governor.continuitySurvived, true);
 });

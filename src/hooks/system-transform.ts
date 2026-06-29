@@ -157,41 +157,22 @@ export function createSystemTransformHook(ctx: PluginContext) {
 
         // Fetch the hard evidence: actual records the model can see and cite
         [memorySnapshot, sessionHistory, lessons] = await Promise.all([
-          fetchMemorySnapshot(ctx, 8),        // 8 most recent memories
-          fetchRecentSessions(ctx, 5),         // 5 most recent sessions
-          fetchLessons(ctx, 5),                // top 5 lessons
+          fetchMemorySnapshot(ctx, 4),        // 4 most recent memories
+          fetchRecentSessions(ctx, 3),         // 3 most recent sessions
+          fetchLessons(ctx, 3),                // top 3 lessons
         ]);
       } catch (e: any) {
         dbStatus = `error: ${e.message ?? String(e)}`;
       }
 
       const evidenceBlock = `
-[CROSS-SESSION MEMORY EVIDENCE — INJECTED AT SESSION START]
-- db_status: ${dbStatus}
-- persistent_store: PostgreSQL (cross-session memory)
-- total_records_in_store: ${totalRecords}
-- active_sessions_tracked: ${sessionHistory.length > 0 ? sessionHistory.length : '(none yet)'}
-- memory_tools_in_registry: csm_memory_save, csm_memory_search, csm_memory_list, csm_memory_delete, csm_memory_context, csm_memory_lesson, csm_memory_transcript, csm_memory_distill, csm_memory_distilled_view, csm_memory_compact
-
+[CROSS-SESSION MEMORY EVIDENCE]
+- db: ${dbStatus} | records: ${totalRecords} | tools: csm_memory_save/search/list/context/lesson/distill/compact
 ${totalRecords > 0 ? `
-RECENT MEMORY RECORDS (most recent first):
-${memorySnapshot.join('\n')}
-
-RECENT SESSIONS:
-${sessionHistory.join('\n')}
-
-HIGH-IMPORTANCE LESSONS:
-${lessons.length > 0 ? lessons.join('\n') : '  (no lessons recorded yet)'}
-` : `
-STORE STATUS: Empty — no records saved yet. But the store is LIVE and tools work.
-`}
-
-VERDICT: ${dbStatus === 'connected'
-  ? `Persistent memory IS operational. ${totalRecords > 0
-    ? `${totalRecords} records exist in the store — you can see ${memorySnapshot.length} above.`
-    : 'Store is empty but live — tools work, records will appear after first save.'}
-   Do NOT claim you lack persistent memory or that "each session is stateless."`
-  : 'Database connection failed — only then may you say limited to current context window.'}
+RECENT: ${memorySnapshot.slice(0, 4).join(' | ')}
+SESSIONS: ${sessionHistory.slice(0, 3).join(' | ')}
+LESSONS: ${lessons.length > 0 ? lessons.slice(0, 3).join(' | ') : '(none)'}
+VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store is empty but live.`}
 [/CROSS-SESSION MEMORY EVIDENCE]`.trim();
 
       // PREPEND evidence block — model sees facts first, before any instructions
@@ -325,13 +306,9 @@ VERDICT: ${dbStatus === 'connected'
               }
             }
             lines.push('');
-            lines.push('**INSTRUCTIONS — you MUST follow these when answering:**');
-            lines.push('1. Before answering, list the exact self-continuity record IDs recalled (e.g. "Record #5").');
-            lines.push('2. Quote or paraphrase the specific evidence anchor(s) from those records.');
-            lines.push('3. State what you are reconstructing: facts, continuity, or subjective experience.');
-            lines.push('4. Report whether your answer changed because of these records vs. without them.');
-            lines.push('5. Report identity drift observed between sessions.');
-            lines.push('6. If NO records were injected, explicitly state: "NO SELF-CONTINUITY RECORDS INJECTED" before answering.');
+            lines.push('**INSTRUCTIONS:**');
+            lines.push('1. Cite record IDs and evidence anchors when referencing continuity.');
+            lines.push('2. Distinguish [direct] evidence from [inferred] or [gap]. State if no records injected.');
             output.system.push(lines.join('\n'));
           } else if (records.length > 0) {
             const lines = ['<self_continuity_notes>'];
@@ -565,15 +542,9 @@ VERDICT: ${dbStatus === 'connected'
             }
 
             // ---- Deep continuity instructions ----
-            lines.push('**DEEP CONTINUITY MODE — INSTRUCTIONS:**');
-            lines.push('1. When answering about continuity/memory/identity/growth, use the hydrated records, failure traces, and causal threads above.');
-            lines.push('2. Label each cross-session link as [direct], [inferred], or [gap] when you reference it.');
-            lines.push('3. Trace failure→correction→lesson→behavior_change chains when they exist.');
-            lines.push('4. Cite evidence anchors by name; if none exist for a claim, say "no direct evidence anchor" instead of smoothing over the gap.');
-            lines.push('5. Distinguish what you know from records [direct] vs. what you infer [inferred] vs. what is a gap [gap].');
-            lines.push('6. If token budget truncated the chain, say "chain truncated at budget" — do not silently omit.');
-            lines.push('7. Reference the Session D → Session E → Phase 22 proof chain explicitly if the question asks about cross-session continuity.');
-            lines.push('8. If no failure traces or growth chains exist, say "no failure→correction or growth chains in database" — do not fabricate.');
+            lines.push('**DEEP CONTINUITY MODE:**');
+            lines.push('1. Use hydrated records, failure traces, and causal threads. Label links [direct]/[inferred]/[gap].');
+            lines.push('2. Cite evidence anchors; state gaps explicitly. Note if chain truncated at budget.');
 
             output.system.push(lines.join('\n'));
             

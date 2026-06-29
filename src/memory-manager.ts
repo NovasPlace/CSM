@@ -10,6 +10,7 @@ import { pruneMemories } from './prune-scorer.js';
 import { Redactor } from './redactor.js';
 import { DEFAULT_PRUNE_CONFIG } from './types.js';
 import { recordRecallBatch, type RecallTelemetrySource } from './recall-telemetry.js';
+import { applyTypeQuota } from './memory-type-quota.js';
 import {
   Memory,
   MemoryType,
@@ -132,6 +133,10 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         const redactionResult = this.redactor.redact(options.content);
         contentToProcess = redactionResult.text;
       }
+
+      // Phase 5 — Apply per-type content quota (compress success/episodic, preserve errors/lessons)
+      const quotaResult = applyTypeQuota(contentToProcess, options.type, options.emotion);
+      contentToProcess = quotaResult.content;
       
       // Get project_id from session if available
       let projectId: string | null = null;
@@ -143,6 +148,14 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         if (sessionResult.rows.length > 0) {
           const row = sessionResult.rows[0] as { project_id: string | null };
           projectId = row.project_id ?? null;
+        } else {
+          await pool.query(
+            `INSERT INTO sessions (id, directory, title, project_id)
+             VALUES ($1, $2, $3, $3)
+             ON CONFLICT (id) DO NOTHING`,
+            [options.sessionId, process.cwd(), 'recovered-session']
+          );
+          projectId = process.cwd();
         }
       }
       
