@@ -16,10 +16,10 @@ export function buildBridgeActionPlan(input: {
   workJournal: BridgeWorkJournalSummary | null;
 }): BridgeActionPlanItem[] {
   const actions: BridgeActionPlanItem[] = [];
-  const matchingWorkflow = input.recovery?.matchingWorkflow;
-  if (matchingWorkflow) actions.push({ title: 'Fetch matching workflow', tool: matchingWorkflow.fetchAction.tool, args: matchingWorkflow.fetchAction.args, reason: matchingWorkflow.summary, priority: 1 });
   const checkpointRef = input.recovery?.activeCheckpoint?.expandableRefs[0];
   if (checkpointRef) actions.push({ title: 'Expand checkpoint ref', tool: checkpointRef.expandAction.tool, args: checkpointRef.expandAction.args, reason: checkpointRef.note, priority: 1 });
+  const matchingWorkflow = input.recovery?.matchingWorkflow;
+  if (matchingWorkflow) actions.push({ title: 'Fetch matching workflow', tool: matchingWorkflow.fetchAction.tool, args: matchingWorkflow.fetchAction.args, reason: matchingWorkflow.summary, priority: 1 });
   const lastError = input.recovery?.lastError;
   if (lastError) actions.push({ title: 'Fetch cached error', tool: lastError.fetchAction.tool, args: lastError.fetchAction.args, reason: lastError.summary, priority: 1 });
   const lastHandoff = input.recovery?.lastHandoff;
