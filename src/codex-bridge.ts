@@ -26,6 +26,7 @@ import { previewTeacherTracesOp, seedTeacherTracesOp } from './teacher-trace-ops
 import type { TeacherTraceSeedResult } from './teacher-trace-types.js';
 import { captureTraceVaultOp, previewTraceVaultOp, seedTeacherTracesFromVaultOp } from './trace-vault-ops.js';
 import type { TraceVaultCaptureResult } from './trace-vault-types.js';
+import { withBridgeProvenance } from './bridge-provenance.js';
 import {
   handoffSummaryOp,
   resumeContextOp,
@@ -73,7 +74,13 @@ export class CodexMemoryBridge {
 
   async saveMemory(input: MemorySaveOptions & { projectRoot?: string; sessionId?: string }): Promise<Memory> {
     const sessionId = await this.ensureSession(input.projectRoot, input.sessionId);
-    return saveMemoryOp(this.deps, { ...input, sessionId });
+    return saveMemoryOp(
+      this.deps,
+      withBridgeProvenance(
+        { ...input, sessionId },
+        { sessionId, projectRoot: input.projectRoot, sourceKind: 'user_supplied' },
+      ),
+    );
   }
 
   async searchMemories(input: MemorySearchOptions & { sessionId?: string }): Promise<Awaited<ReturnType<typeof searchMemoriesOp>>> {

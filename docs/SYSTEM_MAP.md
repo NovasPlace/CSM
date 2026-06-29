@@ -6,6 +6,16 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/bridge-action-plan.ts` | BridgeActionPlanItem, buildBridgeActionPlan | src | Module |
+| `test/bridge-work-journal.test.ts` | none | test | Test suite |
+| `src/context-cache-signals.ts` | cacheBridgeTurnSignal, cacheToolErrorSignal, cacheBridgeWorkflowSignal | src | Module |
+| `src/bridge-recovery-state.ts` | BridgeRecoveryAction, BridgeCheckpointRefSummary, BridgeRecoveryItemSummary, BridgeCheckpointSummary, BridgeRecoveryStateSummary, loadBridgeRecoveryState | src | Module |
+| `src/bridge-session-state.ts` | BridgeGoalSummary, BridgeFailureSummary, BridgeSessionStateSummary, loadBridgeSessionState | src | Module |
+| `test/tool-execute-work-journal.test.ts` | none | test | Tool registration |
+| `src/bridge-work-journal.ts` | BridgeWorkJournalSummary, loadWorkJournalSummary, writeBridgeTurnJournal | src | Module |
+| `src/bridge-provenance.ts` | BridgeProvenanceSummary, rankMemoriesByProvenance, summarizeMemoryProvenance, withBridgeProvenance, buildBridgeProvenanceMetadata | src | Memory & recall subsystem |
+| `test/agent-work-journal.test.ts` | none | test | Test suite |
+| `src/work-journal-last-steps.ts` | buildLastSteps | src | Module |
 | `test/token-budget-ledger.test.ts` | none | test | Test suite |
 | `test/memory-type-quota.test.ts` | none | test | Test suite |
 | `src/token-budget-ledger.ts` | SessionTokenUsage, TokenLedgerEntry, TokenBudgetLedger | src | Module |
@@ -139,7 +149,6 @@
 | `src/hybrid-search.ts` | HybridWeights, ftsSearch, vectorSearch, entityMatchBoost, reciprocalRankFusion, applyWeights, hybridSearch | src | Module |
 | `src/hooks/work-journal-inject.ts` | createWorkJournalInjectHook | src | Hook handler |
 | `src/hooks/tool-execute.ts` | createToolExecuteBeforeHook, createToolExecuteAfterHook | src | Hook handler |
-| `src/hooks/tool-execute-work-journal.ts` | createToolExecuteAfterWorkJournalHook | src | Hook handler |
 | `src/hooks/tool-execute-memory.ts` | autoDistill, logToolUsage | src | Hook handler |
 | `src/hooks/tool-execute-budget.ts` | packageToolEvidence, packageCommandEvidence | src | Hook handler |
 | `src/hooks/system-transform.ts` | isGreetingLikeTurn, isWorkspaceFactTurn, createSystemTransformHook | src | Hook handler |
@@ -186,7 +195,7 @@
 | `src/context-compilation-log.ts` | logCompilation, getRecentCompilation, getCompilationHistory, pruneOldDetails | src | Module |
 | `src/context-compactor.ts` | ContextCompactor, createContextCompactor | src | Context compaction engine |
 | `src/context-cache-tools.ts` | ContextCacheToolDeps, contextFetchTool, contextSearchTool, contextFetchFileRegionTool, contextFetchLastErrorTool, contextFetchDecisionLogTool | src | Tool registration |
-| `src/context-cache-store.ts` | CacheKind, CacheItemInput, CacheItem, storeItem, fetchItem, searchItems, fetchFileReads, fetchLastError, fetchDecisions, countItems, pruneOldItems | src | Module |
+| `src/context-cache-store.ts` | CacheKind, CacheItemInput, CacheItem, storeItem, fetchItem, searchItems, fetchFileReads, fetchLastError, fetchDecisions, fetchLatestDecisionBySource, searchLatestDecisionBySources, countItems, pruneOldItems | src | Module |
 | `src/context-cache-schema.ts` | initializeContextCacheSchema | src | SQL schema |
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |
@@ -2537,7 +2546,6 @@
 | `src/work-journal-inject.ts` | WorkJournalInjectDeps, buildResumeInjection | src | Module |
 | `src/lesson-trigger-cache.ts` | LessonTrigger, LessonTriggerCache | src | Module |
 | `src/hooks/work-journal-inject.ts` | createWorkJournalInjectHook | src | Hook handler |
-| `src/hooks/tool-execute-work-journal.ts` | createToolExecuteAfterWorkJournalHook | src | Hook handler |
 | `src/compaction-telemetry-audit.ts` | AuditResult, AuditAnomaly, SessionBreakdown, auditCompactionTelemetry, formatAuditReport | src | Context compaction engine |
 | `src/codex-mcp-vault-tools.ts` | VAULT_TOOL_SPECS, teacherTraceArgs, traceVaultArgs, traceVaultPreviewArgs, ToolAnnotations | src | Tool registration |
 | `src/agent-work-journal.ts` | AgentWorkJournal | src | Module |

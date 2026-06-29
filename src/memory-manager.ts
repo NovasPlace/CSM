@@ -125,6 +125,24 @@ export class MemoryManager {
    * Save a memory with dual-write (structured data + embeddings)
    */
 async saveMemory(options: MemorySaveOptions): Promise<Memory> {
+      // Apply default provenance metadata so all memories are governance-trackable
+      const currentMeta = options.metadata ?? {};
+      const hasProvenance = currentMeta.source_kind || currentMeta.evidence_strength;
+      if (!hasProvenance) {
+        options = {
+          ...options,
+          metadata: {
+            source_kind: options.source === 'auto' ? 'transcript' : 'user_supplied',
+            evidence_strength: 'direct_original',
+            source_session_id: options.sessionId,
+            source_agent_id: 'opencode',
+            source_model_id: 'default',
+            source_surface: 'opencode',
+            ...currentMeta,
+          },
+        };
+      }
+
       const pool = this.database.getPool();
       
       // Phase 18 — Redact content BEFORE any processing (concepts, embeddings, storage)

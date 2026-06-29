@@ -40,6 +40,12 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 - **Vault trace capture (Phase 33)** - Real work-journal traces are now persisted as vault records before distillation, so the system can replay a compact evidence trail instead of the full raw journal.
 - **Teacher traces (Phase 33)** - Those vault records can be distilled into compact repair cards, saved as lesson memories, and replayed through bridge recall with less token spend than the raw journal trail.
 - **Phase 33 evidence** - Reproducible results and raw outputs are documented in `docs/PHASE33_TRACE_VAULT_RESULTS.md` and `docs/PHASE33_TRACE_VAULT_RAW_OUTPUTS.md`.
+- **Context optimization (Phase 34)** - Per-memory-type quotas (lessons 800t, episodic 200t) with aggressive compression, evidence vault retention (30d max, 500 file cap), token budget ledger with 2M weekly quota, tighter token estimation, and system prompt trimming reducing evidence blocks from ~20 to 5 lines.
+- **Bridge continuity packets (Phase 35)** - Resume and handoff operations now build rich continuity packets containing work journal summary, provenance-ranked memories, session state (active goal + latest failure), recovery state (checkpoints/errors/decisions), and a prioritized action plan.
+- **Provenance ranking** - Memories are ranked by governance eligibility: direct > direct_summary > inferred > context_only. Bridge results surface the strongest-evidence memories first.
+- **Work journal integration** - Bridge resume/handoff includes the agent's last steps, files touched, errors encountered, and inferred next step from the work journal.
+- **Recovery state** - Resume loads the latest checkpoint, last error, recent decisions, and prior handoff/resume from context cache so the agent picks up exactly where it left off.
+- **Tool error signal caching** - Failed tool calls now cache error signals in context cache for recovery-state retrieval, enabling the next session to avoid the same mistakes.
 - **Codex context brief** - `CodexMemoryBridge.getContextBrief({ projectRoot, task })` builds a compact brief plus lesson/risk recall before a fresh Codex task burns context rediscovering the repo.
 - **Tool-call distillation** - Converts raw tool output into structured summaries and references.
 - **Assistant text compaction** - Compresses long assistant text while preserving important lines.

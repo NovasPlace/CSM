@@ -3,6 +3,7 @@ import type { ContextCompactor } from './context-compactor.js';
 import type { ContextRecallDaemon } from './context-recall.js';
 import type { MemoryManager } from './memory-manager.js';
 import type { PrimingEngine } from './priming-engine.js';
+import { rankMemoriesByProvenance } from './bridge-provenance.js';
 import type { BackfillEmbeddingsResult, ContextBrief, Memory, MemorySaveOptions, MemorySearchOptions, PruneReport } from './types.js';
 
 export interface BridgeDeps {
@@ -111,7 +112,7 @@ export async function recallLessonsOp(
     sortBy: 'important',
     limit,
   });
-  return uniqueMemories([...direct, ...fallback]).slice(0, limit);
+  return rankMemoriesByProvenance(uniqueMemories([...direct, ...fallback])).slice(0, limit);
 }
 
 export async function getContextBriefOp(
@@ -124,10 +125,10 @@ export async function getContextBriefOp(
     return { available: false, brief: null, lessons: [], activeRisks: [] };
   }
   const lessons = await recallLessonsOp(deps, task, context);
-  const activeRisks = uniqueMemories([
+  const activeRisks = rankMemoriesByProvenance(uniqueMemories([
     ...lessons.filter(isRiskMemory),
     ...brief.procedural.filter(isRiskMemory),
-  ]).slice(0, 5);
+  ])).slice(0, 5);
   return { available: true, brief, lessons, activeRisks };
 }
 

@@ -113,6 +113,41 @@ export async function fetchDecisions(
   return res.rows.map((r) => rowToItem(r as Record<string, unknown>));
 }
 
+export async function fetchLatestDecisionBySource(
+  pool: DatabasePool, sessionId: string, source: string,
+): Promise<CacheItem | null> {
+  const res = await pool.query(
+    `SELECT * FROM context_cache
+     WHERE session_id = $1 AND kind = 'decision' AND metadata->>'source' = $2
+     ORDER BY created_at DESC LIMIT 1`,
+    [sessionId, source],
+  );
+  if (res.rows.length === 0) return null;
+  return rowToItem(res.rows[0] as Record<string, unknown>);
+}
+
+export async function searchLatestDecisionBySources(
+  pool: DatabasePool, sessionId: string, query: string, sources: string[],
+): Promise<CacheItem | null> {
+  const words = query.replace(/[%_]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+  if (words.length === 0) return null;
+  const params: unknown[] = [sessionId, sources];
+  const conditions = words.map((w) => {
+    const idx = params.length + 1;
+    params.push(`%${w}%`);
+    return `(summary ILIKE $${idx} OR content ILIKE $${idx} OR metadata->>'task' ILIKE $${idx})`;
+  });
+  const res = await pool.query(
+    `SELECT * FROM context_cache
+     WHERE session_id = $1 AND kind = 'decision' AND metadata->>'source' = ANY($2)
+       AND (${conditions.join(' OR ')})
+     ORDER BY created_at DESC LIMIT 1`,
+    params,
+  );
+  if (res.rows.length === 0) return null;
+  return rowToItem(res.rows[0] as Record<string, unknown>);
+}
+
 export async function countItems(pool: DatabasePool, sessionId: string): Promise<number> {
   const res = await pool.query(
     `SELECT COUNT(*)::int AS cnt FROM context_cache WHERE session_id = $1`,

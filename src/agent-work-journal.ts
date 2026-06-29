@@ -115,6 +115,7 @@ export class AgentWorkJournal {
     const entries = this.writeBuffer.splice(0);
     if (entries.length === 0) return;
 
+    console.log(`[WorkJournal] Flushing ${entries.length} entries`);
     try {
       for (const entry of entries) {
         const redactedIntent = this.redactor ? this.redactor.redact(entry.intent).text : entry.intent;
@@ -128,11 +129,11 @@ export class AgentWorkJournal {
           ? (this.redactor ? this.redactor.redact(entry.errorSummary).text : entry.errorSummary)
           : null;
 
-        await this.pool.query(
+        const result = await this.pool.query(
           `INSERT INTO agent_work_journal
            (session_id, project_id, entry_type, tool_name, intent, target,
             result_summary, error_summary, files_touched, token_snapshot)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             entry.sessionId,
             entry.projectId ?? null,
@@ -142,10 +143,11 @@ export class AgentWorkJournal {
             redactedTarget,
             redactedResult,
             redactedError,
-            JSON.stringify(entry.filesTouched),
+            entry.filesTouched,
             entry.tokenSnapshot ?? null,
           ],
         );
+        console.log(`[WorkJournal] Inserted entry: ${entry.toolName || 'unknown'} (${entry.entryType})`);
       }
     } catch (e) {
       console.error('[WorkJournal] Flush failed:', e);

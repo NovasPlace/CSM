@@ -19,16 +19,27 @@ function rowToCheckpoint(row: any): CheckpointRecord {
     summaryMarkdown: row.summary_markdown,
     summaryTokens: row.summary_tokens,
     inputTokensEstimate: row.input_tokens_estimate,
-    sourceRefs: Array.isArray(row.source_refs) ? row.source_refs : [],
-    compactedRefs: Array.isArray(row.compacted_refs) ? row.compacted_refs : [],
+    sourceRefs: readJsonArray(row.source_refs),
+    compactedRefs: readJsonArray(row.compacted_refs),
     filesMentioned: Array.isArray(row.files_mentioned) ? row.files_mentioned : [],
     testsMentioned: Array.isArray(row.tests_mentioned) ? row.tests_mentioned : [],
-    risks: Array.isArray(row.risks) ? row.risks : [],
-    nextSteps: Array.isArray(row.next_steps) ? row.next_steps : [],
+    risks: readJsonArray(row.risks),
+    nextSteps: readJsonArray(row.next_steps),
     supersedesCheckpointId: row.supersedes_checkpoint_id ?? undefined,
     schemaVersion: row.schema_version,
     isActive: row.is_active,
   };
+}
+
+function readJsonArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (typeof value !== 'string' || value.length === 0) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed as T[] : [];
+  } catch {
+    return [];
+  }
 }
 
 function rowToRawCapture(row: any): RawCaptureRecord {
