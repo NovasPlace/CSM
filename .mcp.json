@@ -4,7 +4,7 @@
       "cwd": ".",
       "command": "node",
       "args": [
-        "./dist/codex-mcp-server.js"
+        "./.codex-plugin/runtime/launch-mcp.mjs"
       ]
     }
   }

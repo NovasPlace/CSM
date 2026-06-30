@@ -17,6 +17,34 @@
     "./tui": {
       "import": "./dist/tui.js",
       "types": "./dist/tui.d.ts"
+    },
+    "./database": {
+      "import": "./dist/database.js",
+      "types": "./dist/database.d.ts"
+    },
+    "./embeddings": {
+      "import": "./dist/embeddings.js",
+      "types": "./dist/embeddings.d.ts"
+    },
+    "./memory-manager": {
+      "import": "./dist/memory-manager.js",
+      "types": "./dist/memory-manager.d.ts"
+    },
+    "./context-governor": {
+      "import": "./dist/context-governor.js",
+      "types": "./dist/context-governor.d.ts"
+    },
+    "./redactor": {
+      "import": "./dist/redactor.js",
+      "types": "./dist/redactor.d.ts"
+    },
+    "./config": {
+      "import": "./dist/config.js",
+      "types": "./dist/config.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
     }
   },
   "tui": "dist/tui.js",
