@@ -1,6 +1,149 @@
-# Cross-Session Memory Plugin
+# Continuity Engine
 
-A full-stack memory and context management system for AI coding assistants. Persists knowledge across sessions, compacts context on the fly, checkpoints progress, and auto-documents your codebase, all backed by PostgreSQL and pgvector.
+**Continuity Engine** is an open-source continuity layer for AI systems.
+
+It gives AI coding assistants a durable memory of their work, their decisions, their lessons, and the project they are helping build. Instead of forcing an assistant to start from zero every session or burn context rereading the same information, Continuity Engine captures what matters, stores it, compresses it, and brings back only the context that is useful for the current task.
+
+The goal is simple: help AI systems keep working with continuity.
+
+Continuity Engine is not just a memory plugin. It is a persistence, recall, compaction, checkpoint, journaling, and documentation system designed to make long-running AI development sessions more reliable, more efficient, and easier to resume.
+
+---
+
+## What This System Does For You
+
+When you use an AI coding assistant without continuity, every new session has the same problems:
+
+- the assistant forgets what happened before;
+- you repeat project context again and again;
+- important decisions disappear into old chats;
+- long tool outputs consume huge amounts of context;
+- mistakes get rediscovered instead of avoided;
+- sessions become harder to resume as the project grows.
+
+Continuity Engine solves those problems by giving the assistant a structured memory layer outside the model's limited context window.
+
+It watches the work, records useful information, stores it in PostgreSQL, retrieves relevant context when needed, and keeps the active prompt focused instead of overloaded.
+
+In practical terms, it helps your assistant remember:
+
+- what the project is;
+- what files and systems matter;
+- what changed recently;
+- what goals are active;
+- what errors happened before;
+- what lessons were learned;
+- what checkpoints were created;
+- what decisions should not be repeated or reversed;
+- where the previous session left off.
+
+---
+
+## Why Continuity Matters
+
+Large language models can reason well, but their working memory is temporary. A model may solve a problem in one session, then lose the context that made the solution possible in the next session.
+
+Continuity Engine separates long-term project knowledge from short-term model context.
+
+Instead of stuffing every past message into the prompt, it builds a living knowledge base and returns compact, relevant context only when it is needed.
+
+This makes the assistant feel less like a disposable chat window and more like a long-running development partner that can build on prior work.
+
+---
+
+## Core Capabilities
+
+### Persistent Memory
+
+Continuity Engine stores meaningful memories across sessions. These can include project facts, user preferences, architectural decisions, lessons, repo knowledge, conversation summaries, and procedural knowledge.
+
+Memories survive restarts and can be searched, recalled, ranked, and injected into future sessions.
+
+### Semantic Retrieval
+
+The system does not blindly reload everything it has ever seen.
+
+It searches for memories relevant to the current task using vector search, full-text search, entity matching, and fallback text search. This keeps the assistant focused on useful context instead of stale noise.
+
+### Context Compaction
+
+Long sessions create huge amounts of text, especially from tool calls, test output, logs, and repeated assistant reasoning.
+
+Continuity Engine distills large outputs into compact summaries and references while preserving important signals. Raw evidence can be retained outside the prompt so the assistant can recover details later without carrying everything in active context.
+
+### Context Pressure Management
+
+The engine monitors prompt pressure and helps prevent the working context from becoming overloaded.
+
+When a session grows too large, it can generate compact continuation briefs, preserve recent work, and reduce unnecessary prompt load while keeping the important continuity intact.
+
+### Checkpoints
+
+Continuity Engine can save durable checkpoints of important session states.
+
+A checkpoint acts like a structured handoff: what was happening, what changed, what failed, what succeeded, and what should happen next.
+
+This makes it easier to resume work after a restart, a compaction, or a fresh session.
+
+### Agent Work Journal
+
+The system records the agent's work as it happens.
+
+Tool calls, decisions, milestones, errors, and session boundaries can become part of a structured work journal. Future sessions can use that journal to understand the previous agent's path instead of guessing from scattered messages.
+
+### Lessons Learned
+
+When something goes wrong and gets fixed, Continuity Engine can preserve the lesson.
+
+This lets future sessions avoid repeating the same mistake. Lessons can become high-value memories that influence planning, verification, and tool use.
+
+### Project Knowledge
+
+Continuity Engine builds a durable understanding of the codebase over time.
+
+It can preserve repository facts, architecture notes, file relationships, implementation decisions, system maps, and development history. This turns project context into searchable knowledge instead of one-off chat history.
+
+### Auto Documentation
+
+The system can help maintain documentation from actual project activity.
+
+As the agent works, Continuity Engine can update maps, decisions, changelogs, architecture notes, and other project documents so the knowledge base stays aligned with the codebase.
+
+### Governance and Evidence
+
+Continuity Engine is designed to distinguish between what is known, what is inferred, and what is missing.
+
+It can preserve evidence anchors, classify memory provenance, and avoid treating weak assumptions as confirmed facts. This matters for trustworthy long-running agent behavior.
+
+---
+
+## What It Is Not
+
+Continuity Engine is not a replacement for the model.
+
+It does not make a small model magically become a frontier model. It does not remove the need for verification. It does not guarantee perfect recall.
+
+Instead, it gives models better infrastructure:
+
+- durable memory;
+- compact context;
+- structured recall;
+- resumable sessions;
+- evidence-backed project knowledge.
+
+The model still reasons. Continuity Engine helps it remember what it should be reasoning from.
+
+---
+
+## Current Focus
+
+This repository currently focuses on an OpenCode-oriented continuity plugin backed by PostgreSQL and pgvector.
+
+The system includes memory capture, semantic search, context compilation, compaction, checkpoints, bridge/handoff support, work journals, lessons, and auto-documentation components.
+
+The broader direction is a host-neutral continuity engine that can support multiple AI coding surfaces and agent runtimes.
+
+---
 
 ## Quick Start
 
@@ -10,277 +153,83 @@ npm run build
 npm run verify
 ```
 
-If you want the design story, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). This README stays focused on getting the plugin running.
-If you want the public store plan, read [docs/STORE_SUBMISSION.md](docs/STORE_SUBMISSION.md).
+PostgreSQL with pgvector is required for the full memory and retrieval system.
 
-## What It Does
+See the documentation in `docs/` for architecture notes, phase evidence, store submission planning, and implementation details.
 
-This plugin gives an AI assistant long-term memory. Without it, every new session starts from zero. With it, the assistant remembers what it did last session, what decisions were made, what went wrong, what the codebase looks like, and where it left off.
+Useful starting points:
 
-### Memory System
-- **Cross-session persistence** - Memories are stored in PostgreSQL and survive session restarts. Every session can recall, search, and build on knowledge from prior sessions.
-- **Host-neutral bridge path** - The Postgres memory core can be reached from OpenCode or from the Codex bridge export without rewriting `MemoryManager`.
-- **csm_ tool namespace** - All memory tools are now prefixed `csm_` (e.g. `csm_memory_save`, `csm_memory_search`) to avoid collisions with host tool registries. A `csm_runtime_status` diagnostic tool is included.
-- **Prompt message normalization** - Sanitizes prompt messages to valid SDK chat roles (user/assistant/tool), converts system messages to assistant, and drops invalid messages before context compilation.
-- **Cascade search fallback** - Search and list operations cascade through `project → legacy → global` modes when the primary mode returns zero results.
-- **Text search fallback** - If vector search fails (e.g. missing embeddings), a `LIKE`-based text search fallback activates automatically.
-- **Automatic memory extraction** - After every assistant turn, raw conversation text is distilled into structured semantic memories with no user effort.
-- **Memory types** - `conversation`, `workspace`, `repo`, `preference`, `lesson`, `episodic`, and `procedural`.
-- **Hybrid search** - Queries use Reciprocal Rank Fusion across vector similarity, full-text search, and entity matching.
-- **Explicit recall telemetry** - Search, list, and context recall write `memory_recall_events` rows with hashed queries only. No raw query text is stored by default.
-- **Concept extraction and knowledge graph** - Concepts are extracted from memory content and linked together for entity-aware recall.
-- **Prune scoring** - Dry-run prune scoring now accounts for recall frequency so old but frequently used memories stay protected.
-- **Manual embedding backfill** - Legacy rows with `embedding IS NULL` can be repaired explicitly through runtime/API backfill. This never runs automatically on startup.
+- `docs/ARCHITECTURE.md` — design and system architecture
+- `docs/STORE_SUBMISSION.md` — public plugin/store submission plan
+- `docs/PHASE32_CONTEXT_GOVERNOR_RESULTS.md` — context governor evidence
+- `docs/PHASE33_TRACE_VAULT_RESULTS.md` — trace vault and evidence distillation results
 
-### Context Pipeline
-- **Context compilation** - Builds a token-budgeted manifest from recent work, goals, lessons, and project context.
-- **Adaptive Context Governor (Phase 32)** - Applies budget-aware pressure monitoring, light memory briefs, checkpoint refs, distilled project state, and emergency rebuilds to keep long sessions under target prompt budgets.
-- **Verified quota savings (Phase 32.5)** - Benchmarked results show `53.5%` synthetic long-session input reduction, `63.9%` captured-trace input reduction, peak active context dropping from `156,532` to `31,687`, and context pressure moving from turn `93` to turn `240` while preserving continuity. Live workspace replay now shows a `7.3%` reduction on the latest trace rerun. Live production data across 10,302 compactions confirms an **81.9% average savings** (2B+ tokens saved).
-- **Workspace replay proof** - Real prompt-debug workspace replay now shows `7.3%` reduction on the latest rerun, proving the governor affects messy organic traces rather than only synthetic paths.
-- **Vault trace capture (Phase 33)** - Real work-journal traces are now persisted as vault records before distillation, so the system can replay a compact evidence trail instead of the full raw journal.
-- **Teacher traces (Phase 33)** - Those vault records can be distilled into compact repair cards, saved as lesson memories, and replayed through bridge recall with less token spend than the raw journal trail.
-- **Phase 33 evidence** - Reproducible results and raw outputs are documented in `docs/PHASE33_TRACE_VAULT_RESULTS.md` and `docs/PHASE33_TRACE_VAULT_RAW_OUTPUTS.md`.
-- **Context optimization (Phase 34)** - Per-memory-type quotas (lessons 800t, episodic 200t) with aggressive compression, evidence vault retention (30d max, 500 file cap), token budget ledger with 2M weekly quota, tighter token estimation, and system prompt trimming reducing evidence blocks from ~20 to 5 lines.
-- **Bridge continuity packets (Phase 35)** - Resume and handoff operations now build rich continuity packets containing work journal summary, provenance-ranked memories, session state (active goal + latest failure), recovery state (checkpoints/errors/decisions), and a prioritized action plan.
-- **Provenance ranking** - Memories are ranked by governance eligibility: direct > direct_summary > inferred > context_only. Bridge results surface the strongest-evidence memories first.
-- **Work journal integration** - Bridge resume/handoff includes the agent's last steps, files touched, errors encountered, and inferred next step from the work journal.
-- **Recovery state** - Resume loads the latest checkpoint, last error, recent decisions, and prior handoff/resume from context cache so the agent picks up exactly where it left off.
-- **Tool error signal caching** - Failed tool calls now cache error signals in context cache for recovery-state retrieval, enabling the next session to avoid the same mistakes.
-- **Codex context brief** - `CodexMemoryBridge.getContextBrief({ projectRoot, task })` builds a compact brief plus lesson/risk recall before a fresh Codex task burns context rediscovering the repo.
-- **Tool-call distillation** - Converts raw tool output into structured summaries and references.
-- **Assistant text compaction** - Compresses long assistant text while preserving important lines.
-- **Compaction quality gate** - Rejects unsafe compactions instead of silently dropping signal.
-- **Context rollover** - Generates a continuation brief when prompt pressure gets too high.
-- **Evidence package** - Reproducible benchmark claims and raw outputs are documented in `docs/PHASE32_CONTEXT_GOVERNOR_RESULTS.md` and `docs/PHASE32_CONTEXT_GOVERNOR_RAW_OUTPUTS.md`.
+---
 
-### Checkpoint System
-- **Session checkpoints** - Snapshots current work into durable PostgreSQL-backed checkpoints.
-- **Auto-checkpointing** - Queues checkpoints before risky operations.
-- **Checkpoint markdown** - Renders checkpoints into readable summaries for debugging and handoff.
+## High-Level Architecture
 
-### Governance Threshold Testing (Phase 32.5A)
-- **Memory "Teeth" Proof** - V2-M6.5A synthetic governance test proves prior memory records can actually veto future agent behavior, not just provide context.
-- **Provenance Completeness Gate** - Validates that governance records must have direct evidence (source_kind, evidence_strength, source_session_id, source_agent_id, source_model_id, source_surface) to constrain actions.
-- **Evidence Strength Classification** - Distinguishes direct_original, direct_summary (with derivative_of tracking), inferred, and gap records.
-- **Governance Eligibility** - Only governance_eligible records can veto behavior; context_only and gap_record are for context/audit only.
-- **Prevents Fake Continuity** - System correctly reports what it knows directly, what it infers, and what's missing (direct | inferred | gap discipline).
-
-### Cross-Session Causal Stitching (Phase 31)
-- **No silent continuity inference** - Every cross-session edge is labeled `direct`, `inferred`, or `gap`; missing proof is preserved instead of smoothed over.
-- **Dedicated stitch graph** - `cross_session_causal_links` stores cross-session causal edges with confidence, evidence anchors, gap kinds, and metadata.
-- **Failure-to-growth chain** - Stitches `failure → diagnosis → correction → lesson → later recall → changed behavior → improvement signal`.
-- **Canonical proof chain** - Ships a deterministic Session D → Session E → Phase 22 → 23 → 24 → 25 → 26 → 27 stitching path with explicit gap preservation.
-- **Narrative integration** - `PhaseNarrativeBuilder` now includes cross-session links and measurable growth evidence in injection text.
-- **Deep continuity injection** - When the user asks about continuity/memory/identity, hydrated records, causal threads, failure traces, and phase causation chains are injected directly into the system prompt.
-- **Greeting/workspace guard** - Simple greetings and workspace-fact queries are detected at the system transform hook to prevent unnecessary memory tool calls.
-
-### Schema Refactor
-- **Declarative schema pipeline** - `database.ts` inlined schema was extracted into `src/schema/` with per-subsystem files (`core-schema.ts`, `memory-schema.ts`, `session-schema.ts`, `project-isolation-schema.ts`).
-- **Step-by-step init with error isolation** - `initializeAllSchemas` runs each schema step in order, logging failures instead of aborting the entire init.
-- **Narrative refactor** - `PhaseNarrativeBuilder` internals moved to `self-continuity-narrative-format.ts`, `self-continuity-narrative-canonical.ts`, and `self-continuity-narrative-types.ts` for separation of concerns.
-
-### Response Mode Selector (Phase 29)
-- **Adaptive depth** - Auto-selects 'basic' (boundary-only) or 'deep' (boundary + evidence + causal chain + narrative arc) based on available hydration context.
-- **Drivers**: record count, thread presence, phase narrative, user hints ('deep', 'narrative', 'why', 'how')
-- **Graceful fallback** — deep mode degrades to basic when context insufficient.
-
-### Value Source Guard (Phase 28)
-- **Known vs inferred values** - Distinguishes explicitly stored user preferences from values inferred from the project arc. Prevents self-models from treating inferences as confirmed facts.
-- **Classification** - `classifyValueClaim`, `guardValueSources`, `detectUnlabeledInferences`. Tags each value claim with source ('known' | 'inferred'), evidence, and confidence.
-
-### Phase Narrative Builder (Phase 27)
-- **Causal chain reconstruction** - Connects phases 21-26 into a narrative: problem → action → result → downstream change. Turns index-card continuity into narrative continuity.
-- **Causation anchors** - Uses real A/D/E experiment results as fixtures. Session D proved silent recall → Phase 22 drift tracking → Phase 23 evidence hydration → Phase 24 causal threads → Phase 25 depth scoring → Phase 26 integration.
-- **Gap detection** - Reports missing links in the chain instead of hallucinating causation.
-- **Token budget** - Respects max token limit for context injection.
-
-### Self-Continuity Integration (Phase 26)
-- **Unified injection path** - Wires causal thread hydration into self-continuity record injection, so context compilation automatically includes the "why" behind each record.
-- **Two hydrators as one** - `SelfContinuityIntegration` combines `SelfContinuityHydrator` (canonical fields) and `CausalThreadHydrator` (problem/action/result chains) into a single call.
-- **Graceful degradation** - Thread hydration failure falls back to record-only hydration; never blocks normal recall.
-- **Dependency injection** - Accepts hydrator instances for testability.
-
-### Hydration Depth Scoring (Phase 25)
-- **Depth vs stability** - Separate metric from drift tracking: a self-model answer can be perfectly stable (no overclaim) but shallow (no evidence). These are orthogonal dimensions.
-- **5 dimensions** - record_citation, session_phase_naming, evidence_anchor_depth, causal_chain_reconstruction, gap_reporting.
-- **Verdicts** - shallow (< 0.3), moderate (0.3-0.55), deep (>= 0.55).
-- **Integration** - Feeds into drift tracking as an independent axis; high stability + high hydration = robust self-model.
-
-### Causal Thread Hydration (Phase 24)
-- **Narrative continuity** - Reconstructs the causal thread around a recalled memory: problem → action → result → decision → lesson → downstream change.
-- **Causal vs temporal** - Distinguishes causal links (memory_links type=causal/reference) from pure temporal adjacency, reporting lower confidence for temporal-only chains.
-- **Gap reporting** - Broken chains report explicit gaps (`missing_diff`, `missing_reason`, `missing_result`, `broken_link`) instead of hallucinating reasons.
-- **Role classification** - Pattern-based classification with priority: lesson → decision → downstream_change → result → action → problem.
-- **Token budget** - Max 2000 chars by default; graceful failure never blocks normal recall; redaction still applies.
-
-### Self-Continuity Evidence Hydration (Phase 23)
-- **Canonical hydration** - When a self-continuity record is recalled, its canonical self-observation and evidence anchors are injected directly via a dedicated `SelfContinuityHydrator` path — bypassing lossy generic/episodic compression.
-- **Canonical fields** - record_id, created_at, trigger_type, self_observation, evidence_anchors, continuity_gap, confidence_score, drift_summary, similarity_method.
-- **Guards** - Max 3 records enforced, synthetic_test excluded, redaction applied, fallback to summary on failure without blocking.
-- **Weighted confidence** - Each record carries a confidence score based on evidence strength, recency, and source reliability.
-- **Natural recall** - Proven in live experiments: agents naturally cite continuity records when asked about identity/continuity without explicit prompting.
-
-### Self-Model Drift Tracking (Phase 22)
-- **5-dimension stability metric** - Measures whether the agent's self-continuity model stabilizes or drifts across sessions.
-- **Dimensions**: evidence anchoring, reconstruction boundary, uncertainty preservation, subjective overclaim, recursive awareness.
-- **Anchor fixtures** - Grounded in real experiment results (Sessions A/D/E), not theoretical.
-- **Verdict system** - `stable` / `mild_drift` / `significant_drift` based on weighted scoring across all dimensions.
-
-### Auto-Documentation System
-- **Multi-directory source detection** - `reconcileSystemMap` auto-detects source directories (`src/`, `lib/`, `core/`, `harness/`, `engine/`, `modules/`, `packages/`, and any directory containing `.ts`/`.js` files), not just `src/`.
-- **Root-level protocol tracking** - Tracks README, MANIFESTO, IMPLEMENTATION_AGENT_PROTOCOL, ARCHITECTURE, DECISIONS, RUNBOOK, CHANGELOG at the project root.
-- **New directory auto-documentation** - When the subconscious watcher detects a new directory without a README, it auto-generates one and feeds it into the auto-docs pipeline.
-- **Recursive output protection** - Auto-docs output files (SYSTEM_MAP.md, CHANGELOG_LIVE.md, DECISIONS.md, AGENT_MEMORY.md) are tracked for reads but excluded from write-triggered recursion loops.
-- **Section auto-creation** - `updateDocContent` creates missing sections instead of silently skipping unknown headers.
-
-### Subconscious Watcher
-- **File change detection** - Periodic scan detects created/modified/deleted files and captures them as episodic memories.
-- **New directory detection** - Directories without a prior scan record trigger `handleNewDirectory()`, which auto-generates a README and triggers `autoDocumentChange()`.
-- **Structural directory protection** - Skips `src/`, `test/`, `docs/`, `plugins/`, `migrations/` and their subdirectories to prevent cluttering known project areas with auto-generated READMEs.
-- **Build artifact filtering** - Skips `node_modules`, `dist`, `.next`, source maps, minified/hashed files.
-
-### Agent Work Journal
-- **Live incremental capture** - Every tool call, decision, and session boundary is recorded to the work journal in real time.
-- **Resume payload injection** - When a session resumes, the prior session's work journal is injected as a compact resume brief so the agent can pick up where it left off.
-- **Auto milestone marking** - Milestones are detected and recorded automatically based on tool call patterns.
-- **Persist on dispose** - Session end persists the journal automatically.
-
-### Lesson Trigger Cache
-- **Pattern-based lesson recall** - Lessons with trigger patterns (tool names, file extensions, arg regexes) are cached and matched against each tool call before execution.
-- **Contextual warnings** - When a tool call matches a lesson's trigger pattern, a warning is injected before the tool runs, preventing repeated mistakes.
-- **System prompt injection** - Active lessons are injected into the system prompt so the model sees relevant lessons before generating responses.
-
-### Safety and Monitoring
-- **Loop detection** - Breaks repeated identical tool calls.
-- **Git watching** - Surfaces repo changes into the context pipeline.
-- **Background maintenance** - Handles cleanup, graph updates, and compaction telemetry.
-- **Fresh-schema contract coverage** - Empty-database integration tests verify clean installs before release claims.
-
-## Key Design Decisions
-
-- **No CLI requirement** - This is runtime/API-first. Maintenance actions like embedding backfill are explicit tools, not startup jobs.
-- **Thin adapter architecture** - Keep the Postgres memory core stable; add host bridges around it instead of forking runtime logic per assistant.
-- **PostgreSQL + pgvector only** - No SQLite, Redis, or ORM.
-- **No raw query telemetry by default** - Recall telemetry stores only hashed queries.
-- **Fail closed on token overflow** - If the prompt exceeds the hard limit, the system rejects it rather than truncating context silently.
-
-## Test Suite
-
-Current source of truth is the test runner output. The suite includes fresh-schema and Phase 19b integration coverage for clean installs, explicit backfill, and hashed recall telemetry, and it continues to grow as new phases land.
-
-| Suite | What It Covers |
-|-------|----------------|
-| `hybrid-search` | Vector + text + entity retrieval |
-| `fresh-schema-contract` | Empty DB -> schema init -> runtime contract verification |
-| `backfill-recall-telemetry` | Explicit embedding backfill + hashed recall telemetry |
-| `codex-bridge` | Codex bridge bootstrap, context brief, and bridge/plugin parity |
-| `checkpoint` | Checkpoint capture, storage, and injection |
-| `prune-scorer` | Dry-run prune scoring and protection rules |
-| `auto-docs` | Documentation queueing, flush, and reconciliation |
-| `self-continuity` | Self-continuity records: schema, generator, injection modes, confidence weighting |
-| `self-drift-tracker` | Self-model drift tracking: 5-dimension stability metric, A/D/E anchor fixtures |
-| `cross-session-causal-stitcher` | Cross-session causal stitching: failure-to-growth chains, canonical proof chain, gap preservation |
-| `cross-session-causal-store` | Cross-session causal store: link CRUD, session lookup |
-| `bridge-ops` | Bridge operations: search cascade, list cascade, context brief |
-| `prompt-message-sanitizer` | Prompt normalization: system message conversion, invalid message dropping |
-| `system-transform-greeting` | Greeting/workspace-fact detection in system transform hook |
-
-Run everything:
-
-```bash
-npm run build && npm run typecheck && npx tsx --test test/*.test.ts
+```text
+AI Assistant / Host Runtime
+        |
+        v
+Continuity Engine
+        |
+        |-- Memory capture
+        |-- Semantic retrieval
+        |-- Context compilation
+        |-- Tool-output distillation
+        |-- Checkpoints
+        |-- Work journal
+        |-- Lessons
+        |-- Auto documentation
+        |
+        v
+PostgreSQL + pgvector
 ```
 
-## Setup
+The model stays focused on the current task. Continuity Engine handles the persistent context layer around it.
 
-```bash
-npm install
-npm run build
-```
+---
 
-Requires a running PostgreSQL instance with pgvector extension and an embedding provider configuration.
+## Who This Is For
 
-## Codex Bridge
+Continuity Engine is for builders who want AI assistants to work across more than one conversation.
 
-Import `./codex-bridge` to expose the existing memory harness to Codex-facing code without OpenCode hooks. The bridge exposes:
+It is useful if you are:
 
-- `save_memory`
-- `search_memories`
-- `list_memories`
-- `get_context_brief`
-- `recall_lessons`
-- `memory_delete`
-- `memory_context`
-- `memory_lesson`
-- `memory_transcript`
-- `memory_candidate_list`
-- `memory_candidate_approve`
-- `memory_candidate_reject`
-- `memory_project_list`
-- `memory_cleanup`
-- `memory_distill`
-- `memory_distilled_view`
-- `memory_compact`
-- `memory_backfill_embeddings`
-- `context_review`
-- `context_fetch`
-- `context_search`
-- `context_fetch_file_region`
-- `context_fetch_last_error`
-- `context_fetch_decision_log`
-- `goal_set`
-- `goal_update`
-- `goal_list`
-- `csm_context_pressure`
-- `create_checkpoint`
-- `list_checkpoints`
-- `expand_checkpoint_ref`
-- `csm_runtime_status`
-- `csm_compaction_audit`
-- `preview_teacher_traces`
-- `seed_teacher_traces`
-- `capture_trace_vault`
-- `preview_trace_vault`
-- `seed_teacher_traces_from_vault`
-- `prune_memories_dry_run`
-- `backfill_missing_embeddings`
-- `get_compaction_report`
+- building long-running software projects with AI agents;
+- tired of repeating the same context every session;
+- trying to reduce token waste from giant histories and tool outputs;
+- experimenting with persistent memory for coding assistants;
+- building local-first or host-neutral AI infrastructure;
+- designing agents that need structured recall, evidence, and handoff.
 
-`get_context_brief` is the primary entry point for a fresh Codex task. It creates or reuses a bridge session for the project root, refreshes context, and returns the compact brief plus relevant lessons and active risks.
+---
 
-## Codex MCP Server
+## Philosophy
 
-`src/codex-mcp-server.ts` exposes the bridge as a JSON-RPC MCP server for Codex or other MCP clients. Configure via `.mcp.json`:
+Continuity Engine is built around one core idea:
 
-```json
-{
-  "mcpServers": {
-    "cross-session-memory-bridge": {
-      "cwd": ".",
-      "command": "node",
-      "args": ["./dist/codex-mcp-server.js"]
-    }
-  }
-}
-```
+> Intelligence is amplified by continuity.
 
-## csm_ Tool Namespace
+Models are powerful, but temporary context limits how much they can build on their own prior work.
 
-All memory tools are registered with the `csm_` prefix to avoid collisions:
+Continuity Engine gives AI systems a durable layer of experience: what happened, what mattered, what changed, what failed, what worked, and what should be remembered next time.
 
-| Tool | Description |
-|------|-------------|
-| `csm_memory_save` | Save information to cross-session memory |
-| `csm_memory_search` | Semantic search across memories |
-| `csm_memory_list` | List memories with filters |
-| `csm_memory_delete` | Delete a memory by ID |
-| `csm_memory_context` | Get current session context brief |
-| `csm_memory_lesson` | Save a lesson learned |
-| `csm_memory_transcript` | Get conversation transcript |
-| `csm_memory_distill` | Distill recent tool-call activity |
-| `csm_memory_distilled_view` | View distilled summaries |
-| `csm_memory_compact` | Report on compaction savings |
-| `csm_memory_backfill_embeddings` | Repair missing embeddings |
-| `csm_context_pressure` | Inspect an explicit message snapshot against the context window |
-| `csm_compaction_audit` | Audit compaction telemetry for correctness |
-| `csm_runtime_status` | Diagnostic: plugin status, DB connectivity, tool registry |
+That continuity makes agents more useful, more consistent, and less wasteful.
+
+---
+
+## Status
+
+Continuity Engine is under active development.
+
+The current implementation is experimental but functional, with ongoing work around context governance, evidence vaulting, host-neutral bridge support, memory provenance, and safe long-session continuity.
+
+Expect rapid iteration, changing APIs, and frequent architecture improvements as the system evolves.
+
+---
+
+## License
+
+See the repository license for usage terms.
