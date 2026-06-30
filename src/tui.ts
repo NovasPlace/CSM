@@ -1,4 +1,5 @@
-import type { TuiPluginModule } from "@opencode-ai/plugin/tui";
+import type { TuiPluginModule, TuiPluginApi } from "@opencode-ai/plugin/tui";
+import pg from "pg";
 
 type MemoryStats = {
   totalMemories: number;
@@ -16,9 +17,15 @@ const defaultStats: MemoryStats = {
   compactions: 0,
 };
 
+const STATS_KEY = "__csm_stats";
+const POLL_INTERVAL_MS = 5000;
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory";
+
 function readStats(kv: { get: (key: string, fallback: null) => unknown }): MemoryStats {
   try {
-    const stored = kv.get("__csm_stats", null);
+    const stored = kv.get(STATS_KEY, null);
     if (stored && typeof stored === "object") {
       const s = stored as Record<string, unknown>;
       return {
@@ -47,6 +54,44 @@ function pressureColor(p: number): string {
   return "green";
 }
 
+async function pollStats(api: TuiPluginApi): Promise<void> {
+  const { Pool } = pg;
+  const pool = new Pool({
+    connectionString: DATABASE_URL,
+    max: 2,
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 3000,
+  });
+  try {
+    const [memResult, sessResult, ckptResult, compResult] = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS n FROM memories"),
+      pool.query(
+        "SELECT COUNT(*)::int AS n FROM sessions WHERE updated_at > now() - interval '24 hours'",
+      ),
+      pool.query(
+        "SELECT created_at FROM checkpoints ORDER BY created_at DESC LIMIT 1",
+      ),
+      pool.query(
+        "SELECT COUNT(*)::int AS n FROM compaction_metrics WHERE created_at > now() - interval '24 hours'",
+      ),
+    ]);
+    const stats: MemoryStats = {
+      totalMemories: memResult.rows[0]?.n ?? 0,
+      recentSessions: sessResult.rows[0]?.n ?? 0,
+      lastCheckpoint: ckptResult.rows[0]?.created_at
+        ? new Date(ckptResult.rows[0].created_at).toISOString()
+        : null,
+      contextPressure: 0,
+      compactions: compResult.rows[0]?.n ?? 0,
+    };
+    api.kv.set(STATS_KEY, stats);
+  } catch {
+    // DB unreachable — leave stale stats in KV (if any)
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
 const mod: TuiPluginModule = {
   id: "opencode-cross-session-memory",
 
@@ -60,6 +105,10 @@ const mod: TuiPluginModule = {
     }
 
     const disposes: (() => void)[] = [];
+
+    // Populate stats immediately, then on an interval
+    pollStats(api).catch(() => {});
+    const pollTimer = setInterval(() => pollStats(api).catch(() => {}), POLL_INTERVAL_MS);
 
     try {
       api.slots.register({
@@ -152,6 +201,7 @@ const mod: TuiPluginModule = {
 
     try {
       api.lifecycle.onDispose(() => {
+        clearInterval(pollTimer);
         for (const fn of disposes) {
           try { fn(); } catch {}
         }
