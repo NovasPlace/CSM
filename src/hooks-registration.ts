@@ -126,7 +126,7 @@ export async function registerHooks(
   const pluginCtx: PluginContext = {
     config, database, memoryManager, contextRecall, contextPressure,
     contextCompactor, toolDistiller, loopDetector, subconscious, gitWatcher,
-    memoryExtractor, primingEngine, checkpointStore, checkpointToolDeps,
+    memoryExtractor, primingEngine, embeddings, checkpointStore, checkpointToolDeps,
     checkpointInjectDeps, redactor, statsWriter,
     client: ctx.client, directory: ctx.directory, worktree: ctx.worktree,
     autoCheckpoint: (sessionId: string, trigger: AutoCheckpointTrigger, details?: Record<string, unknown>) =>

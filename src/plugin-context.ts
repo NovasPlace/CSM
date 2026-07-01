@@ -15,6 +15,7 @@ import type { SubconsciousWatcher } from './subconscious.js';
 import type { GitWatcher } from './git-watcher.js';
 import type { MemoryExtractor } from './memory-extractor.js';
 import type { PrimingEngine } from './priming-engine.js';
+import type { EmbeddingGenerator } from './embeddings.js';
 import type { CheckpointStore } from './checkpoint-store.js';
 import type { CheckpointToolDeps } from './checkpoint-tool.js';
 import type { CheckpointInjectDeps } from './checkpoint-inject.js';
@@ -56,6 +57,7 @@ export interface PluginContext {
   gitWatcher: GitWatcher;
   memoryExtractor: MemoryExtractor;
   primingEngine: PrimingEngine;
+  embeddings: EmbeddingGenerator;
   checkpointStore: CheckpointStore;
   checkpointToolDeps: CheckpointToolDeps;
   checkpointInjectDeps: CheckpointInjectDeps;

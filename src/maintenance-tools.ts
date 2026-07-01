@@ -1,37 +1,39 @@
 import { tool } from '@opencode-ai/plugin/tool';
-import { MemoryManager } from './memory-manager.js';
-import { backfillMissingEmbeddingsOp } from './bridge-ops.js';
+import { EmbeddingBackfill, type EmbeddingBackfillConfig } from './embedding-backfill.js';
 
-export function memoryBackfillEmbeddingsTool(memoryManager: MemoryManager) {
+export function memoryBackfillEmbeddingsTool(backfill: EmbeddingBackfill) {
   return tool({
     description:
-      'Backfill missing memory embeddings for legacy rows. Explicit maintenance action only; never runs on startup.',
+      'Backfill missing memory embeddings for legacy rows. ' +
+      'Processes in batches with rate-limiting. Resumes on interruption. ' +
+      'Explicit maintenance action only; never runs on startup.',
     args: {
-      limit: tool.schema.number().optional().describe('Max rows to process (default 100)'),
+      batchSize: tool.schema.number().optional().describe('Memories per batch (default 50)'),
+      maxTotal: tool.schema.number().optional().describe('Max total to process, 0 = unlimited (default 0)'),
       projectId: tool.schema.string().optional().describe('Optional project scope filter'),
-      dryRun: tool.schema.boolean().optional().describe('Report eligible rows without updating them'),
+      dryRun: tool.schema.boolean().optional().describe('Count eligible rows without updating them'),
+      batchDelayMs: tool.schema.number().optional().describe('Rate-limit delay in ms between batches (default 100)'),
     },
     async execute(args) {
-      const result = await backfillMissingEmbeddingsOp(
-        {
-          memoryManager,
-          contextRecall: undefined as never,
-          primingEngine: undefined as never,
-          contextCompactor: undefined as never,
-        },
-        args.limit ?? 100,
-        args.projectId,
-        args.dryRun ?? false,
-      );
+      const config: EmbeddingBackfillConfig = {
+        batchSize: args.batchSize ?? 50,
+        maxTotal: args.maxTotal ?? 0,
+        projectId: args.projectId,
+        dryRun: args.dryRun ?? false,
+        batchDelayMs: args.batchDelayMs ?? 100,
+      };
+
+      const result = await backfill.backfill(config);
 
       return {
         title: 'Embedding Backfill',
         output:
-          `Scanned: ${result.scanned}\n` +
-          `Eligible: ${result.eligible}\n` +
-          `Updated: ${result.updated}\n` +
+          `Total missing: ${result.totalMissing}\n` +
+          `Attempted: ${result.attempted}\n` +
+          `Succeeded: ${result.succeeded}\n` +
+          `Failed: ${result.failed}\n` +
           `Skipped: ${result.skipped}\n` +
-          `Failed: ${result.failed}`,
+          `Complete: ${result.isComplete}`,
         metadata: result,
       };
     },

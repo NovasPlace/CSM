@@ -13,13 +13,16 @@ import {
   contextFetchLastErrorTool, contextFetchDecisionLogTool,
 } from '../context-cache-tools.js';
 import type { PluginContext } from '../plugin-context.js';
+import { EmbeddingBackfill } from '../embedding-backfill.js';
 
 export function registerTools(pluginCtx: PluginContext): Record<string, any> {
   const {
     memoryManager, database, primingEngine, contextRecall,
     toolDistiller, memoryExtractor, redactor, contextCompactor,
-    checkpointStore, checkpointToolDeps, config,
+    checkpointStore, checkpointToolDeps, config, embeddings,
   } = pluginCtx;
+
+  const backfill = new EmbeddingBackfill(database, embeddings);
 
   return {
     csm_memory_save: memorySaveTool(memoryManager),
@@ -32,7 +35,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     csm_memory_distill: memoryDistillTool(toolDistiller, database, memoryExtractor, redactor),
     csm_memory_distilled_view: memoryDistilledViewTool(database),
     csm_memory_compact: memoryCompactTool(contextCompactor),
-    csm_memory_backfill_embeddings: memoryBackfillEmbeddingsTool(memoryManager),
+    csm_memory_backfill_embeddings: memoryBackfillEmbeddingsTool(backfill),
     csm_runtime_status: runtimeStatusTool(database, memoryManager, config, pluginCtx.state.currentSessionId),
     csm_compaction_audit: compactionAuditTool(database),
     create_checkpoint: createCheckpointTool(checkpointToolDeps),
