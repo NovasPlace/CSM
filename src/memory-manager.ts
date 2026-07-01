@@ -11,6 +11,7 @@ import { Redactor } from './redactor.js';
 import { DEFAULT_PRUNE_CONFIG } from './types.js';
 import { recordRecallBatch, type RecallTelemetrySource } from './recall-telemetry.js';
 import { applyTypeQuota } from './memory-type-quota.js';
+import { getLogger } from './logger.js';
 import {
   Memory,
   MemoryType,
@@ -211,7 +212,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       try {
         embedding = await this.embeddings.generate(contentToProcess);
       } catch (error) {
-        console.error('[MemoryManager] Failed to generate embedding:', error);
+        getLogger().error('Failed to generate embedding', error instanceof Error ? error : undefined);
       }
   
       // Insert memory with embedding
@@ -276,7 +277,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
             ]
           );
         } catch (error) {
-          console.error('[MemoryManager] Failed to store embedding chunk:', error);
+          getLogger().error('Failed to store embedding chunk', error instanceof Error ? error : undefined);
         }
       }
   
@@ -288,7 +289,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         const extracted = extractConcepts(contentToProcess);
         await buildLinksForMemory(this.database, memory.id, extracted.concepts);
       } catch (error) {
-        console.error('[MemoryManager] Failed to build graph links:', error);
+        getLogger().error('Failed to build graph links', error instanceof Error ? error : undefined);
       }
   
       return memory;
@@ -349,7 +350,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         await this.storeEmbedding(row.id, row.content, embedding);
         counts.updated++;
       } catch (error) {
-        console.error('[MemoryManager] Embedding backfill failed:', error);
+        getLogger().error('Embedding backfill failed', error instanceof Error ? error : undefined);
         counts.failed++;
       }
     }
@@ -410,7 +411,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
     } catch (err) {
-      console.warn('[MemoryManager] Hybrid search failed, falling back to vector-only:', err);
+      getLogger().warn('Hybrid search failed, falling back to vector-only');
     }
 
     // Fallback: vector-only search
@@ -466,7 +467,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
     } catch (err) {
-      console.warn('[MemoryManager] Vector search failed, falling back to text search:', err);
+      getLogger().warn('Vector search failed, falling back to text search');
       const memories = await this.textSearchFallback(options);
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
@@ -714,16 +715,16 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     
     // Delete memories older than 90 days
     const deleteResult = await pool.query(
-      'DELETE FROM memories WHERE created_at < now() - interval \'90 days\''
+      `DELETE FROM memories WHERE created_at < now() - interval '90 days'`
     );
     
     // Archive memories older than 30 days but newer than 90 days
     const archiveResult = await pool.query(
-      `UPDATE memories 
-       SET metadata = jsonb_set(metadata, '{archived}', 'true')
-       WHERE created_at < now() - interval \'30 days\'
-       AND created_at >= now() - interval \'90 days\'
-       AND (metadata->>'archived') IS DISTINCT FROM 'true'`
+      `UPDATE memories
+        SET metadata = jsonb_set(metadata, '{archived}', 'true')
+        WHERE created_at < now() - interval '30 days'
+        AND created_at >= now() - interval '90 days'
+        AND (metadata->>'archived') IS DISTINCT FROM 'true'`
     );
     
     // Clean up old candidates
@@ -753,7 +754,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         [channel, JSON.stringify(payload), sessionId]
       );
     } catch (error) {
-      console.error('[MemoryManager] Failed to emit event:', error);
+      getLogger().error('Failed to emit event', error instanceof Error ? error : undefined);
     }
   }
 
@@ -786,7 +787,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
 
   async cleanup(): Promise<void> {
     // No persistent resources to clean up
-    console.log('[MemoryManager] Cleanup complete');
+    getLogger().debug('Cleanup complete');
   }
 
   // ==================== Mapping Helpers ====================
@@ -907,7 +908,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         })),
       );
     } catch (error) {
-      console.error('[MemoryManager] Recall telemetry write failed:', error);
+      getLogger().error('Recall telemetry write failed', error instanceof Error ? error : undefined);
     }
   }
 

@@ -1,5 +1,6 @@
 import type { TuiPluginModule, TuiPluginApi } from "@opencode-ai/plugin/tui";
 import pg from "pg";
+import { getLogger } from "./logger.js";
 
 type MemoryStats = {
   totalMemories: number;
@@ -36,7 +37,9 @@ function readStats(kv: { get: (key: string, fallback: null) => unknown }): Memor
         compactions: typeof s.compactions === "number" ? s.compactions : 0,
       };
     }
-  } catch {}
+     } catch (e) {
+       // Error reading stats, return defaults
+     }
   return defaultStats;
 }
 
@@ -95,13 +98,13 @@ async function pollStats(api: TuiPluginApi): Promise<void> {
 const mod: TuiPluginModule = {
   id: "opencode-cross-session-memory",
 
-  tui: async (api) => {
+  tui: async (api): Promise<void> => {
     let h: HFn | null = null;
     try {
       const solidH = await import("solid-js/h");
-      h = solidH.h as unknown as HFn;
+      h = (solidH.h ?? solidH.default) as unknown as HFn;
     } catch {
-      console.warn("[CrossSessionMemory] solid-js not available, TUI visual panel disabled (core tools unaffected)");
+      getLogger().warn('solid-js not available, TUI visual panel disabled (core tools unaffected)');
     }
 
     const disposes: (() => void)[] = [];
@@ -127,9 +130,9 @@ const mod: TuiPluginModule = {
               s.lastCheckpoint
                 ? h("text", { dim: true }, `  Last: ${new Date(s.lastCheckpoint).toLocaleString()}`)
                 : null,
-            );
-          } catch (err) {
-            console.warn("[CrossSessionMemory] sidebar_content render failed:", err);
+             );
+           } catch (err) {
+            getLogger().warn('sidebar_content render failed');
             return null;
           }
         },
@@ -140,15 +143,16 @@ const mod: TuiPluginModule = {
 
             return h("text", { dim: true },
               `  ${s.totalMemories} mem | ${s.contextPressure}% ${formatPressure(s.contextPressure)}`);
-          } catch (err) {
-            console.warn("[CrossSessionMemory] sidebar_footer render failed:", err);
+           } catch (err) {
+            getLogger().warn('sidebar_footer render failed');
             return null;
           }
         },
-      });
-    } catch (err) {
-      console.warn("[CrossSessionMemory] Slot registration failed:", err);
-    }
+           });
+           } catch (err) {
+             getLogger().warn('route render failed');
+             return;
+           }
 
     try {
       const routeDispose = api.route.register([{
@@ -168,16 +172,16 @@ const mod: TuiPluginModule = {
               h("text", {}, `  Compactions:       ${s.compactions}`),
               h("text", {}, `  Last Checkpoint:   ${s.lastCheckpoint ? new Date(s.lastCheckpoint).toLocaleString() : "none"}`),
             );
-          } catch (err) {
-            console.warn("[CrossSessionMemory] route render failed:", err);
-            return h ? h("text", {}, "  Error loading memory stats") : null;
-          }
+           } catch (err) {
+             getLogger().warn('route render failed');
+             return;
+           }
         },
       }]);
 
-      disposes.push(routeDispose);
-    } catch (err) {
-      console.warn("[CrossSessionMemory] Route registration failed:", err);
+       disposes.push(routeDispose);
+     } catch (err) {
+      getLogger().warn('Route registration failed');
     }
 
     try {
@@ -189,7 +193,9 @@ const mod: TuiPluginModule = {
             description: "Show cross-session memory statistics",
             category: "Memory",
             onSelect: () => {
-              try { api.route.navigate("memory"); } catch {}
+              try { api.route.navigate("memory"); } catch (e) {
+               // Navigation failed
+             }
             },
           },
         ]);
@@ -203,13 +209,17 @@ const mod: TuiPluginModule = {
       api.lifecycle.onDispose(() => {
         clearInterval(pollTimer);
         for (const fn of disposes) {
-          try { fn(); } catch {}
+           try { fn(); } catch (e) {
+             // Disposal failed
+           }
         }
         disposes.length = 0;
-      });
-    } catch {}
+       });
+        } catch (e) {
+          // Lifecycle hook registration failed
+        }
 
-    console.log("[CrossSessionMemory] TUI initialized");
+    getLogger().info('TUI initialized');
   },
 };
 

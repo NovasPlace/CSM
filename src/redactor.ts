@@ -73,36 +73,36 @@ const MARKERS: Record<RedactCategory, string> = {
 const SECRET_PATTERNS: RegExp[] = [
   // Generic API key patterns (sk-..., gh-..., xox..., AKIA..., etc.)
   // Allow hyphens in the key body (sk-proj-..., xoxb-...-...)
-  /\b(?:sk|sk-proj|sk-ant|ghp|gho|ghu|ghs|ghr|xox[baprs]|AIza|tfp|tfg|dop_v1|dop_v2|opencode_)[\-_]?[A-Za-z0-9\-]{20,}\b/g,
+  /\b(?:sk|sk-proj|sk-ant|ghp|gho|ghu|ghs|ghr|xox[baprs]|AIza|tfp|tfg|dop_v1|dop_v2|opencode_)[-_]?[A-Za-z0-9-]{20,}\b/g,
   // AWS access keys: AKIA + 16 uppercase alphanumeric
   /\bAKIA[A-Z0-9]{16,}\b/g,
   // Bearer tokens
-  /\bBearer\s+[A-Za-z0-9\-_\.]{20,}/g,
+  /\bBearer\s+[A-Za-z0-9\-_.]{20,}/g,
   // Private keys (PEM blocks)
   /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/g,
   // Generic long hex/base64 tokens assigned to key-like names
-  /\b(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token|secret[_-]?key|private[_-]?key|client[_-]?secret|password|passwd|pwd)["'\s:=]+["']?([A-Za-z0-9+\/=_\-]{32,})["']?/gi,
+  /\b(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token|secret[_-]?key|private[_-]?key|client[_-]?secret|password|passwd|pwd)["'\s:=]+["']?([A-Za-z0-9+/=_-]{32,})["']?/gi,
   // JWT tokens
-  /\beyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/g,
+  /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
   // Connection strings with embedded passwords
   /(?:postgres(?:ql)?|mongodb(?:\+srv)?|redis|amqp|mysql|wss?):\/\/[^:\s]+:[^@\s]+@/g,
 ];
 
 // Email addresses
-const EMAIL_PATTERN = /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g;
+const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 
 // Phone numbers (US + international basic)
-const PHONE_PATTERN = /\b(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}\b/g;
+const PHONE_PATTERN = /\b(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
 
 // IP addresses (IPv4 only; IPv6 is rare in code context)
 const IP_PATTERN = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
 
 // URLs with credentials or sensitive query params
-const URL_CRED_PATTERN = /\bhttps?:\/\/[^:\s]+:[^@\s]+@[^\s\/]+/g;
+const URL_CRED_PATTERN = /\bhttps?:\/\/[^:\s]+:[^@\s]+@[^\s/]+/g;
 const URL_QUERY_SECRET_PATTERN = /([?&](?:api[_-]?key|token|secret|password|access[_-]?token|private[_-]?key|client[_-]?secret)=[^&\s]+)/gi;
 
 // Absolute filesystem paths (Windows + POSIX)
-const WIN_PATH_PATTERN = /[A-Za-z]:[\\\/](?:[^\s\\\/:*?"<>|]+[\\\/])+[^\s\\\/:*?"<>|]+/g;
+const WIN_PATH_PATTERN = /[A-Za-z]:[\\/](?:[^\s\\/:*?"<>|]+[\\/])+[^\s\\/:*?"<>|]+/g;
 const POSIX_PATH_PATTERN = /\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www)(?:\/[^\s:*?"<>|]+)+/g;
 
 // ── Redactor class ────────────────────────────────────────────────────

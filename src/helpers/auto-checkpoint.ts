@@ -1,5 +1,6 @@
 import type { CheckpointStore } from '../checkpoint-store.js';
 import type { CheckpointConfig } from '../checkpoint-types.js';
+import { getLogger } from '../logger.js';
 
 export type AutoCheckpointTrigger = 'context_pressure' | 'message_count' | 'risky_edit' | 'pre_compaction' | 'post_compaction';
 
@@ -40,11 +41,11 @@ export async function createAutoCheckpoint(
       testsMentioned: [],
       risks: [`Auto-checkpoint triggered by ${trigger}${details ? ': ' + JSON.stringify(details) : ''}`],
       nextSteps: ['Continue conversation'],
-      rawCaptures: [],
-    });
+       rawCaptures: [],
+     });
 
-    console.log(`[CrossSessionMemory] Auto-checkpoint created: ${trigger} for session ${sessionId.slice(0, 8)}...`);
-  } catch (error) {
-    console.error(`[CrossSessionMemory] Auto-checkpoint failed (${trigger}):`, error);
-  }
-}
+     getLogger().info(`Auto-checkpoint created: ${trigger} for session ${sessionId.slice(0, 8)}...`);
+   } catch (error) {
+     getLogger().error(`Auto-checkpoint failed (${trigger})`, error instanceof Error ? error : undefined);
+   }
+ }

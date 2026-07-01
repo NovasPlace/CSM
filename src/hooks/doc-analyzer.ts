@@ -445,7 +445,7 @@ async function detectSourceDirs(cwd: string): Promise<SourceDir[]> {
     try {
       const stat = await fs.stat(join(cwd, "src"));
       if (stat.isDirectory()) results.push({ absolutePath: join(cwd, "src"), relativeName: "src" });
-    } catch {}
+    } catch { /* src dir not found, skip */ }
   }
   return results;
 }
@@ -619,5 +619,5 @@ export async function initializeDocsForProject(projectDir: string): Promise<void
 
   try {
     await reconcileSystemMap(join(projectDir, DOCS_DIR), projectDir);
-  } catch {}
+  } catch { /* reconcile failed, skip */ }
 }

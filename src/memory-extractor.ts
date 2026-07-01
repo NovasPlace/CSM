@@ -4,6 +4,7 @@
 import { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { MemoryManager } from './memory-manager.js';
+import { getLogger } from './logger.js';
 import {
   Memory,
   MemoryType,
@@ -408,10 +409,10 @@ export class MemoryExtractor {
           autoApproved: candidate.status === 'auto-approved',
         },
         sessionId: candidate.sessionId,
-      });
-    } catch (error) {
-      console.error('[MemoryExtractor] Failed to save candidate:', error);
-    }
+       });
+     } catch (error) {
+       getLogger().error('Failed to save candidate', error instanceof Error ? error : undefined);
+     }
   }
 
   /**

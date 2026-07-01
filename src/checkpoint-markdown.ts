@@ -24,40 +24,54 @@ export function buildCheckpointMarkdown(s: CheckpointSections): string {
   lines.push('## Goal');
   lines.push(`- ${s.goal || '(not detected)'}`);
   lines.push('');
-  lines.push('## Constraints & Preferences');
-  s.constraints.length > 0
-    ? s.constraints.forEach(c => lines.push(`- ${c}`))
-    : lines.push('- (none detected)');
+   lines.push('## Constraints & Preferences');
+   if (s.constraints.length > 0) {
+     s.constraints.forEach(c => lines.push(`- ${c}`));
+   } else {
+     lines.push('- (none detected)');
+   }
   lines.push('');
-  lines.push('## Current State');
-  s.currentState.length > 0
-    ? s.currentState.forEach(c => lines.push(`- ${c}`))
-    : lines.push('- (not yet determined)');
+   lines.push('## Current State');
+   if (s.currentState.length > 0) {
+     s.currentState.forEach(c => lines.push(`- ${c}`));
+   } else {
+     lines.push('- (not yet determined)');
+   }
   lines.push('');
-  lines.push('## Completed Work');
-  s.completedWork.length > 0
-    ? s.completedWork.forEach(c => lines.push(`- ${c}`))
-    : lines.push('- (none detected)');
+   lines.push('## Completed Work');
+   if (s.completedWork.length > 0) {
+     s.completedWork.forEach(c => lines.push(`- ${c}`));
+   } else {
+     lines.push('- (none detected)');
+   }
   lines.push('');
-  lines.push('## Decisions');
-  s.decisions.length > 0
-    ? s.decisions.forEach(d => lines.push(`- ${d}`))
-    : lines.push('- (none detected)');
+   lines.push('## Decisions');
+   if (s.decisions.length > 0) {
+     s.decisions.forEach(d => lines.push(`- ${d}`));
+   } else {
+     lines.push('- (none detected)');
+   }
   lines.push('');
-  lines.push('## Active Files / Components');
-  s.files.length > 0
-    ? s.files.forEach(f => lines.push(`- \`${f.path}\`: ${f.note}`))
-    : lines.push('- (none detected)');
+   lines.push('## Active Files / Components');
+   if (s.files.length > 0) {
+     s.files.forEach(f => lines.push(`- \`${f.path}\`: ${f.note}`));
+   } else {
+     lines.push('- (none detected)');
+   }
   lines.push('');
-  lines.push('## Tool / Test Evidence');
-  s.tests.length > 0
-    ? s.tests.forEach(t => lines.push(`- ${t}`))
-    : lines.push('- (none detected)');
+   lines.push('## Tool / Test Evidence');
+   if (s.tests.length > 0) {
+     s.tests.forEach(t => lines.push(`- ${t}`));
+   } else {
+     lines.push('- (none detected)');
+   }
   lines.push('');
-  lines.push('## Risks / Blockers');
-  s.risks.length > 0
-    ? s.risks.forEach(r => lines.push(`- ${r}`))
-    : lines.push('- (none detected)');
+   lines.push('## Risks / Blockers');
+   if (s.risks.length > 0) {
+     s.risks.forEach(r => lines.push(`- ${r}`));
+   } else {
+     lines.push('- (none detected)');
+   }
   lines.push('');
   lines.push('## Next Steps');
   if (s.nextSteps.length > 0) {

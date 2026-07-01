@@ -1,6 +1,7 @@
 import { Database } from "./database.js";
 import type { ExtractedConcept } from "./concept-extractor.js";
 import type { Memory } from "./types.js";
+import { getLogger } from "./logger.js";
 
 export type MemoryLink = {
   id: number;
@@ -127,9 +128,9 @@ export async function buildLinksForMemory(
           created_at: row.created_at,
         });
       }
-    } catch (err) {
-      console.warn("[MemoryGraph] Failed to create link:", err);
-    }
+     } catch (err) {
+       getLogger().warn('Failed to create link');
+     }
   }
 
   return links;

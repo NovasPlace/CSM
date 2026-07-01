@@ -138,13 +138,11 @@ export async function hybridSearch(
   const weights = options.weights ?? DEFAULT_WEIGHTS;
   const ftsAvailable = await checkFtsAvailable(db);
 
-  let vectorScores: Map<number, number>;
-  let textScores: Map<number, number>;
-  let entityBoosts: Map<number, number>;
+    let textScores: Map<number, number>;
 
   // Vector search (always available)
   const vectorResults = await vectorSearch(db, embedding, limit * 3, projectId);
-  vectorScores = reciprocalRankFusion(vectorResults);
+  const vectorScores = reciprocalRankFusion(vectorResults);
 
   // FTS search (may be unavailable)
   if (ftsAvailable) {
@@ -154,9 +152,9 @@ export async function hybridSearch(
     textScores = new Map();
   }
 
-  // Entity boost
-  const entityResults = await entityMatchBoost(db, query, limit * 3, projectId);
-  entityBoosts = new Map(entityResults.map((e) => [e.id, e.boost]));
+   // Entity boost
+   const entityResults = await entityMatchBoost(db, query, limit * 3, projectId);
+   const entityBoosts = new Map(entityResults.map((e) => [e.id, e.boost]));
 
   // Recency boost (prefer recent memories)
   const recencyScores = new Map<number, number>();

@@ -91,7 +91,7 @@ async function resolveImport(projectDir: string, fromFile: string, spec: string)
       const stat = await fs.stat(candidate);
       if (!stat.isFile()) continue;
       return relative(projectDir, candidate).replace(/\\/g, '/');
-    } catch {}
+    } catch { /* file not found, skip */ }
   }
   return undefined;
 }

@@ -321,6 +321,8 @@ export interface PluginConfig {
   workJournal: WorkJournalConfig;
 }
 
+export type { BucketBreakdown } from './token-bucket-analyzer.js';
+
 export interface CompactorConfig {
   enabled: boolean;
   workingMemoryWindow: number;  // keep last N tool parts raw (default 8)

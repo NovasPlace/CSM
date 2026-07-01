@@ -4,6 +4,7 @@
 import pg from 'pg';
 import { DatabasePool, PluginConfig } from './types.js';
 import { initializeAllSchemas } from './schema/index.js';
+import { getLogger } from './logger.js';
 
 const { Pool } = pg;
 
@@ -26,14 +27,14 @@ export class Database {
 
       await pool.query('SELECT NOW()');
       this.pool = pool as unknown as DatabasePool;
-      console.log('[Database] Connected to PostgreSQL');
+      getLogger().info('Connected to PostgreSQL');
       try {
         await this.initializeSchema();
       } catch (error) {
-        console.error('[Database] Schema initialization failed; continuing with existing database:', error);
+        getLogger().error('Schema initialization failed; continuing with existing database', error instanceof Error ? error : undefined);
       }
     } catch (error) {
-      console.error('[Database] Connection failed:', error);
+      getLogger().error('Connection failed', error instanceof Error ? error : undefined);
       throw error;
     }
   }
@@ -42,13 +43,13 @@ export class Database {
     if (!this.pool) return;
     await this.pool.end();
     this.pool = null;
-    console.log('[Database] Disconnected from PostgreSQL');
+    getLogger().info('Disconnected from PostgreSQL');
   }
 
   private async initializeSchema(): Promise<void> {
     if (!this.pool) throw new Error('Database not connected');
     await initializeAllSchemas(this);
-    console.log('[Database] Schema initialized');
+    getLogger().info('Schema initialized');
   }
 
   getPool(): DatabasePool {

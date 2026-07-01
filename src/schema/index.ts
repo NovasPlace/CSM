@@ -15,6 +15,7 @@ import { initializeMemorySchema } from './memory-schema.js';
 import { migrateProjectIsolation } from './project-isolation-schema.js';
 import { isOwnershipLimitedSchemaError } from './schema-errors.js';
 import { initializeSessionSchema } from './session-schema.js';
+import { getLogger } from '../logger.js';
 
 export async function initializeAllSchemas(database: Database): Promise<void> {
   const pool = database.getPool();
@@ -43,17 +44,15 @@ export async function initializeAllSchemas(database: Database): Promise<void> {
     try {
       await step();
     } catch (error) {
-      if (isOwnershipLimitedSchemaError(error)) {
-        ownershipLimitedSteps.push(name);
-        continue;
-      }
-      console.error(`[Database] Schema step failed (${name}); continuing:`, error);
-    }
-  }
-
-  if (ownershipLimitedSteps.length > 0) {
-    console.log(
-      `[Database] Schema steps skipped due to ownership limits: ${ownershipLimitedSteps.join(', ')}`,
-    );
-  }
-}
+       if (isOwnershipLimitedSchemaError(error)) {
+         ownershipLimitedSteps.push(name);
+         continue;
+       }
+       getLogger().error(`Schema step failed (${name}); continuing`, error instanceof Error ? error : undefined);
+     }
+   }
+ 
+   if (ownershipLimitedSteps.length > 0) {
+     getLogger().info(`Schema steps skipped due to ownership limits: ${ownershipLimitedSteps.join(', ')}`);
+   }
+ }

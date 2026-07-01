@@ -2,6 +2,7 @@
 // Supports OpenAI API or local embedding models
 
 import { PluginConfig } from './types.js';
+import { getLogger } from './logger.js';
 
 export const EMBEDDING_DIMENSIONS = 1536;
 
@@ -88,10 +89,10 @@ export class EmbeddingGenerator {
       }
 
       const data = await response.json() as { data: { embedding: number[] }[] };
-      return data.data[0].embedding;
-    } catch (error) {
-      console.error('[Embedding] OpenAI API failed:', error);
-      // Fallback to hash embedding
+       return data.data[0].embedding;
+     } catch (error) {
+       getLogger().error('OpenAI API failed', error instanceof Error ? error : undefined);
+       // Fallback to hash embedding
       return this.generateHashEmbedding(text);
     }
   }

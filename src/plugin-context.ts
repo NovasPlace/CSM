@@ -57,7 +57,7 @@ export interface PluginContext {
   checkpointStore: CheckpointStore;
   checkpointToolDeps: CheckpointToolDeps;
   checkpointInjectDeps: CheckpointInjectDeps;
-  autoCheckpoint: AutoCheckpointFn;
+  autoCheckpoint: (sessionId: string, trigger: AutoCheckpointTrigger, details?: Record<string, unknown>) => Promise<void>;
   refreshActiveContext: (sessionId: string) => Promise<void>;
   syncActiveSession: (sessionId: string) => void;
   lastCompileResult: CompileResult | null;

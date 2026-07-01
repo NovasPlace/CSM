@@ -2,6 +2,8 @@
 // Separate [Checkpoint] bucket. Never mixed with v1 compaction accounting.
 // Logs to stdout (captured by OpenCode server.log), matching existing plugin pattern.
 
+import { getLogger } from './logger.js';
+
 export interface CheckpointCreatedEvent {
   sessionId: string;
   checkpointId: string;
@@ -41,39 +43,44 @@ export interface CheckpointInjectedEvent {
 }
 
 export function logCheckpointCreated(e: CheckpointCreatedEvent): void {
-  console.log(
-    `[Checkpoint] created: session=${e.sessionId} id=${e.checkpointId} ` +
+  getLogger().info(
+    `created: session=${e.sessionId} id=${e.checkpointId} ` +
     `source_msgs=${e.sourceMessages} input_tokens=${e.inputTokens} ` +
     `summary_tokens=${e.summaryTokens} refs=${e.refsPreserved} ` +
     `files=${e.filesDetected} tests=${e.testsDetected} ` +
     `risks=${e.risksDetected} inject_used=${e.injectBudgetUsed} ` +
     `elapsed_ms=${e.elapsedMs}`,
+    { sessionId: e.sessionId },
   );
 }
 
 export function logCheckpointExpanded(e: CheckpointExpandedEvent): void {
-  console.log(
-    `[Checkpoint] expanded: session=${e.sessionId} ref=${e.refId} ` +
+  getLogger().info(
+    `expanded: session=${e.sessionId} ref=${e.refId} ` +
     `found=${e.found} kind=${e.kind ?? 'null'} ` +
     `tokens=${e.tokenCount} elapsed_ms=${e.elapsedMs}`,
+    { sessionId: e.sessionId },
   );
 }
 
 export function logCheckpointListed(e: CheckpointListedEvent): void {
-  console.log(
-    `[Checkpoint] listed: session=${e.sessionId} count=${e.count} limit=${e.limit}`,
+  getLogger().info(
+    `listed: session=${e.sessionId} count=${e.count} limit=${e.limit}`,
+    { sessionId: e.sessionId },
   );
 }
 
 export function logCheckpointInjected(e: CheckpointInjectedEvent): void {
-  console.log(
-    `[Checkpoint] injected: session=${e.sessionId} id=${e.checkpointId} ` +
+  getLogger().info(
+    `injected: session=${e.sessionId} id=${e.checkpointId} ` +
     `tokens=${e.tokensInjected} budget=${e.budget} ` +
     `skipped=${e.skipped} reason=${e.reason}`,
+    { sessionId: e.sessionId },
   );
 }
 
 export function logCheckpointError(operation: string, error: unknown): void {
+  const err = error instanceof Error ? error : undefined;
   const msg = error instanceof Error ? error.message : String(error);
-  console.log(`[Checkpoint] error: op=${operation} msg=${msg}`);
+  getLogger().error(`op=${operation} msg=${msg}`, err);
 }

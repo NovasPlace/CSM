@@ -1,5 +1,6 @@
 import type { DatabasePool } from '../types.js';
 import { EMBEDDING_DIMENSIONS } from '../embeddings.js';
+import { getLogger } from '../logger.js';
 
 export async function ensureEmbeddingColumnContract(pool: DatabasePool): Promise<void> {
   const result = await pool.query(
@@ -27,13 +28,11 @@ export async function ensureEmbeddingColumnContract(pool: DatabasePool): Promise
 
   const legacyColumn = `embedding_legacy_${Date.now()}`;
   await pool.query(`ALTER TABLE memories RENAME COLUMN embedding TO ${legacyColumn}`);
-  await pool.query(
-    `ALTER TABLE memories ADD COLUMN embedding VECTOR(${EMBEDDING_DIMENSIONS})`,
-  );
-  console.warn(
-    `[Database] Renamed mismatched embedding column to ${legacyColumn}; regenerate embeddings to backfill ${expectedType}.`,
-  );
-}
+   await pool.query(
+     `ALTER TABLE memories ADD COLUMN embedding VECTOR(${EMBEDDING_DIMENSIONS})`,
+   );
+   getLogger().warn(`Renamed mismatched embedding column to ${legacyColumn}; regenerate embeddings to backfill ${expectedType}.`);
+ }
 
 export async function initializeMemorySchema(pool: DatabasePool): Promise<void> {
   await pool.query(`
@@ -121,11 +120,11 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_source ON memories(source)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_tags ON memories USING GIN(tags)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id)`);
-  try {
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived_at)`);
-  } catch (_error) {
-    console.warn('[Database] Archived-memory index skipped on legacy schema');
-  }
+   try {
+     await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived_at)`);
+   } catch (_error) {
+     getLogger().warn('Archived-memory index skipped on legacy schema');
+   }
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_created_ttl ON memories(created_at)`);
 
   // Partial unique index to prevent duplicate transcript captures (defense against

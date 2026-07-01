@@ -45,7 +45,7 @@ async function injectLessonWarning(ctx: PluginContext, input: any, output: any):
     await ctx.lessonTriggers.refresh();
     const warning = ctx.lessonTriggers.buildInjection(input.tool, output.args ?? {});
     if (warning) console.warn(`[LessonTriggers] Matched lesson for tool "${input.tool}":\n${warning}`);
-  } catch {}
+  } catch { /* lesson refresh failed, skip */ }
 }
 
 async function maybeCreateRiskyEditCheckpoint(

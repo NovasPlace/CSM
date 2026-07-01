@@ -175,7 +175,7 @@ export function compileContextWithLessons(
    alchemist?: { recall: (context: string) => AlchemistLesson[] },
    lessonTokenBudget: number = 500,
  ): CompileResult {
-  let telemetry: LessonTelemetry = { hits: 0, misses: 0, tokensUsed: 0, lessonsQueried: 0 };
+  const telemetry: LessonTelemetry = { hits: 0, misses: 0, tokensUsed: 0, lessonsQueried: 0 };
   let injectedLessons: AlchemistLesson[] = [];
 
   if (alchemist) {

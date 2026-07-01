@@ -7,6 +7,8 @@
  * — the compactor should have skipped it but didn't.
  */
 
+import { getLogger } from './logger.js';
+
 export interface ReprocessingEntry {
   partKey: string;
   compactCount: number;
@@ -19,7 +21,7 @@ export class CompactionTracker {
   record(partKey: string): number {
     const c = (this.counts.get(partKey) ?? 0) + 1;
     this.counts.set(partKey, c);
-    if (c > 1) console.warn(`[ContextCompactor] reprocessing: ${partKey} compacted ${c}x`);
+    if (c > 1) getLogger().warn(`reprocessing: ${partKey} compacted ${c}x`);
     return c;
   }
 
