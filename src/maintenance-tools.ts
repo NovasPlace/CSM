@@ -1,5 +1,53 @@
 import { tool } from '@opencode-ai/plugin/tool';
 import { EmbeddingBackfill, type EmbeddingBackfillConfig } from './embedding-backfill.js';
+import { DedupCandidateDetector, type DedupDetectorConfig } from './dedup-detector.js';
+
+export function memoryDedupDetectTool(detector: DedupCandidateDetector) {
+  return tool({
+    description:
+      'Find candidate duplicate memory clusters using exact content/title matching and embedding similarity. ' +
+      'Read-only: never modifies memory data. Reports clusters with representative + duplicate IDs.',
+    args: {
+      similarityThreshold: tool.schema.number().optional().describe('Cosine similarity threshold (0-1, default 0.92)'),
+      maxClusters: tool.schema.number().optional().describe('Max clusters to return (default 50)'),
+      allowedTypes: tool.schema.array(tool.schema.string()).optional().describe('Only check these memory types'),
+      includeDifferentTypes: tool.schema.boolean().optional().describe('Allow cross-type embedding clusters (default false)'),
+      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
+    },
+    async execute(args) {
+      const config: DedupDetectorConfig = {
+        similarityThreshold: args.similarityThreshold ?? 0.92,
+        maxClusters: args.maxClusters ?? 50,
+        allowedTypes: args.allowedTypes,
+        includeDifferentTypes: args.includeDifferentTypes ?? false,
+        projectId: args.projectId,
+      };
+
+      const report = await detector.findCandidates(config);
+
+      const lines = [
+        `Total candidates scanned: ${report.totalCandidates}`,
+        `Threshold used: ${report.thresholdUsed}`,
+        `Duplicate clusters found: ${report.clusters.length}`,
+        '',
+      ];
+      for (let i = 0; i < report.clusters.length; i++) {
+        const c = report.clusters[i];
+        lines.push(
+          `Cluster ${i + 1}: ${c.detectionMethod} (size=${c.clusterSize}, avgSim=${c.averageSimilarity.toFixed(4)})`,
+          `  Representative: id=${c.representative.id} type=${c.representative.memoryType} title="${c.representative.title}"`,
+          `  Duplicates: [${c.duplicateIds.join(', ')}]`,
+        );
+      }
+
+      return {
+        title: 'Dedup Candidate Detection',
+        output: lines.join('\n'),
+        metadata: report,
+      };
+    },
+  });
+}
 
 export function memoryBackfillEmbeddingsTool(backfill: EmbeddingBackfill) {
   return tool({
