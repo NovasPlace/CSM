@@ -6,7 +6,8 @@ import type {
   ResumeEntry,
   ResumePayload,
 } from './work-journal-types.js';
-import { inferNextStep, collectAllFiles, isMilestoneIntent, isErrorResult } from './work-journal-types.js';
+import { inferNextStep, collectAllFiles, isMilestoneIntent } from './work-journal-types.js';
+// isErrorResult imported but unused — Phase 3D
 import type { Redactor } from './redactor.js';
 import { getLogger } from './logger.js';
 
