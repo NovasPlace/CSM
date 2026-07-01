@@ -22,6 +22,8 @@ import type { AgentWorkJournal } from './agent-work-journal.js';
 import type { LessonTriggerCache } from './lesson-trigger-cache.js';
 import type { AutoCheckpointTrigger } from './helpers/auto-checkpoint.js';
 import type { CompileResult } from './context-compiler.js';
+import type { Redactor } from './redactor.js';
+import type { StatsWriter } from './stats-writer.js';
 
 export type AutoCheckpointFn = (
   sessionId: string,
@@ -63,5 +65,7 @@ export interface PluginContext {
   lastCompileResult: CompileResult | null;
   workJournal: AgentWorkJournal;
   lessonTriggers: LessonTriggerCache;
+  redactor: Redactor;
+  statsWriter: StatsWriter;
   state: PluginState;
 }
