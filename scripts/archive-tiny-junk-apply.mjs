@@ -1,6 +1,8 @@
 // Phase 2C.5: Tiny-Junk Archive dry-run/apply script
-// Run: node scripts/archive-tiny-junk-apply.mjs            (dry-run, no writes)
-// Run: node scripts/archive-tiny-junk-apply.mjs --apply    (WRITES — do NOT use against live DB in Phase 2C.5)
+// Run: node scripts/archive-tiny-junk-apply.mjs                        (dry-run, no writes)
+// Run: node scripts/archive-tiny-junk-apply.mjs --type=episodic        (dry-run, episodic only)
+// Run: node scripts/archive-tiny-junk-apply.mjs --apply                (WRITES)
+// Run: node scripts/archive-tiny-junk-apply.mjs --type=episodic --apply (WRITES, episodic only)
 // Run: node scripts/archive-tiny-junk-apply.mjs --restore-batch=<id> [--apply]
 import fs from 'node:fs';
 import pg from 'pg';
@@ -56,9 +58,16 @@ function formatReport(report) {
   ].join('\n');
 }
 
+function parseTypesArg() {
+  const raw = parseStringArg('--type=');
+  if (!raw) return undefined;
+  return raw.split(',').map((t) => t.trim()).filter(Boolean);
+}
+
 async function main() {
   const archiver = new TinyJunkArchiver({ getPool: () => pool });
   const restoreBatch = parseStringArg('--restore-batch=');
+  const junkTypes = parseTypesArg();
   const report = restoreBatch
     ? await archiver.restore({ apply: process.argv.includes('--apply'), batchId: restoreBatch })
     : await archiver.archive({
@@ -67,6 +76,7 @@ async function main() {
         source: parseStringArg('--source='),
         note: parseStringArg('--note='),
         maxTotal: parseNumberArg('--max-total=', 0),
+        junkTypes,
       });
 
   const mode = `${report.operation}-${report.dryRun ? 'dryrun' : 'apply'}`;
@@ -83,6 +93,7 @@ async function main() {
     operation: report.operation,
     dryRun: report.dryRun,
     batchId: report.batchId,
+    junkTypes: junkTypes ?? '(all)',
     totalActiveJunk: report.totalActiveJunk,
     eligibleCount: report.eligibleCount,
     targetedCount: report.targetedCount,

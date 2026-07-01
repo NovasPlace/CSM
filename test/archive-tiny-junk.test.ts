@@ -129,4 +129,69 @@ describe('TinyJunkArchiver', () => {
     const report = await makeArchiver(pool).archive({ apply: true, batchId: 'batch-tj-guard' });
     assert.equal(report.updatedCount, 1);
   });
+
+  it('dry-run with junkTypes=[episodic] targets episodic only', async () => {
+    const pool = makePool(async (sql, params) => {
+      if (sql.includes('WITH junk AS')) {
+        assert.deepEqual(params?.[0], ['episodic'], 'junkTypes filter must be [episodic]');
+        return { rows: [{ total_active_junk: 2, already_archived_reason: 0 }], rowCount: 1 };
+      }
+      if (sql.startsWith('SELECT m.id, m.memory_type')) {
+        assert.deepEqual(params?.[0], ['episodic']);
+        return { rows: [
+          { id: 61, memory_type: 'episodic', content: '[modified] a.ts' },
+          { id: 62, memory_type: 'episodic', content: '[modified] b.ts' },
+        ], rowCount: 2 };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    const report = await makeArchiver(pool).archive({ junkTypes: ['episodic'] });
+    assert.equal(report.dryRun, true);
+    assert.equal(report.targetedCount, 2);
+    assert.equal(report.byType.episodic, 2);
+    assert.equal(report.byType.conversation, undefined);
+  });
+
+  it('conversation candidates excluded when junkTypes=[episodic]', async () => {
+    const pool = makePool(async (sql, params) => {
+      if (sql.includes('WITH junk AS') || sql.startsWith('SELECT m.id, m.memory_type')) {
+        const types = params?.[0];
+        assert.ok(Array.isArray(types) && types.length === 1 && types[0] === 'episodic',
+          'must filter to episodic only');
+        assert.equal(types.includes('conversation'), false, 'conversation must not be in type filter');
+        return sql.includes('WITH junk AS')
+          ? { rows: [{ total_active_junk: 0, already_archived_reason: 0 }], rowCount: 1 }
+          : { rows: [], rowCount: 0 };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    const report = await makeArchiver(pool).archive({ junkTypes: ['episodic'] });
+    assert.equal(report.targetedCount, 0);
+  });
+
+  it('apply with junkTypes=[episodic] marks only episodic tiny junk', async () => {
+    const pool = makePool(async (sql, params) => {
+      if (sql.includes('WITH junk AS')) {
+        assert.deepEqual(params?.[0], ['episodic']);
+        return { rows: [{ total_active_junk: 1, already_archived_reason: 0 }], rowCount: 1 };
+      }
+      if (sql.startsWith('SELECT m.id, m.memory_type')) {
+        assert.deepEqual(params?.[0], ['episodic']);
+        return { rows: [{ id: 71, memory_type: 'episodic', content: '[modified] c.rs' }], rowCount: 1 };
+      }
+      if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [], rowCount: 0 };
+      if (sql.includes('SET archived_at = now()')) {
+        assert.deepEqual(params?.[0], [71]);
+        assert.equal(params?.[1], ARCHIVE_REASON);
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes('COUNT(*)::int AS cnt FROM memories WHERE archive_batch_id')) return { rows: [{ cnt: 1 }], rowCount: 1 };
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    const report = await makeArchiver(pool).archive({ apply: true, batchId: 'batch-tj-epi', junkTypes: ['episodic'] });
+    assert.equal(report.updatedCount, 1);
+    assert.equal(report.batchCountAfter, 1);
+    assert.equal(report.byType.episodic, 1);
+    assert.equal(report.byType.conversation, undefined);
+  });
 });
