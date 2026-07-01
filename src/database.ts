@@ -2,13 +2,17 @@ import type { DatabasePool, PluginConfig } from './types.js';
 import { createDatabasePool } from './db/database-pool.js';
 import { initializeAllSchemas } from './schema/index.js';
 import { getLogger } from './logger.js';
+import type { QueryDialect } from './db/query-dialect.js';
+import { dialectFromProvider } from './db/query-dialect.js';
 
 export class Database {
   private pool: DatabasePool | null = null;
   private config: PluginConfig;
+  readonly dialect: QueryDialect;
 
   constructor(config: PluginConfig) {
     this.config = config;
+    this.dialect = dialectFromProvider(config.databaseProvider);
   }
 
   async connect(): Promise<void> {
