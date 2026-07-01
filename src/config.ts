@@ -23,6 +23,20 @@ function getEnvNumber(key: string, defaultValue: number): number {
 // Determine if we're in production mode (strict mode)
 const isProduction = getEnvBoolean('CSM_REQUIRE_EXPLICIT_DATABASE_URL', false);
 
+// Database provider selection
+function getDatabaseProvider(): 'postgres' | 'sqlite' {
+  const provider = process.env['CSM_DATABASE_PROVIDER'] ?? 'postgres';
+  if (provider !== 'postgres' && provider !== 'sqlite') {
+    throw new Error(`Invalid CSM_DATABASE_PROVIDER: "${provider}". Must be "postgres" or "sqlite"`);
+  }
+  return provider;
+}
+
+// SQLite path
+function getSqlitePath(): string {
+  return process.env['CSM_SQLITE_PATH'] ?? '.data/csm-memory.db';
+}
+
 // Database URL handling: optional in dev/test, required in production
 function getDatabaseUrl(): string {
   const explicitUrl = getEnvString('CSM_DATABASE_URL');
@@ -48,8 +62,8 @@ function getOllamaHost(): string {
 
 // Validate configuration
 function validateConfig(config: PluginConfig): void {
-  // Production requires explicit database URL
-  if (isProduction && !process.env['CSM_DATABASE_URL']) {
+  // Production requires explicit database URL (only for postgres provider)
+  if (isProduction && config.databaseProvider === 'postgres' && !process.env['CSM_DATABASE_URL']) {
     throw new Error('CSM_DATABASE_URL is required in production mode');
   }
 
@@ -69,6 +83,8 @@ function validateConfig(config: PluginConfig): void {
 // Default configuration for the Cross-Session Memory Plugin
 export const DEFAULT_CONFIG: PluginConfig = {
   databaseUrl: getDatabaseUrl(),
+  databaseProvider: getDatabaseProvider(),
+  sqlitePath: getSqlitePath(),
   embeddingModel: getEmbeddingProvider() === 'openai' ? 'text-embedding-3-small' : 'nomic-embed-text',
   embeddingApiKey: getEmbeddingProvider() === 'openai' ? getOpenAIApiKey() : undefined,
   embeddingApiUrl: getEmbeddingProvider() === 'ollama' ? getOllamaHost() : undefined,

@@ -273,8 +273,12 @@ export interface AutoDocsConfig {
   groupMultipleEdits: boolean;
 }
 
+export type DatabaseProvider = 'postgres' | 'sqlite';
+
 export interface PluginConfig {
   databaseUrl: string;
+  databaseProvider: DatabaseProvider;
+  sqlitePath: string;
   embeddingModel: string;
   embeddingApiKey?: string;
   embeddingApiUrl?: string;

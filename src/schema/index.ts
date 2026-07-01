@@ -19,10 +19,11 @@ import { getLogger } from '../logger.js';
 
 export async function initializeAllSchemas(database: Database): Promise<void> {
   const pool = database.getPool();
+  const provider = database.getProvider();
   const ownershipLimitedSteps: string[] = [];
 
   const steps: Array<[string, () => Promise<void>]> = [
-    ['extension.vector', () => pool.query('CREATE EXTENSION IF NOT EXISTS vector').then(() => undefined)],
+    ['extension.vector', () => provider === 'sqlite' ? Promise.resolve() : pool.query('CREATE EXTENSION IF NOT EXISTS vector').then(() => undefined)],
     ['session', () => initializeSessionSchema(pool)],
     ['memory', () => initializeMemorySchema(pool)],
     ['core', () => initializeCoreSchema(pool)],

@@ -1,12 +1,7 @@
-// Database connection and schema for Cross-Session Memory
-// PostgreSQL with pgvector for semantic search
-
-import pg from 'pg';
-import { DatabasePool, PluginConfig } from './types.js';
+import type { DatabasePool, PluginConfig } from './types.js';
+import { createDatabasePool } from './db/database-pool.js';
 import { initializeAllSchemas } from './schema/index.js';
 import { getLogger } from './logger.js';
-
-const { Pool } = pg;
 
 export class Database {
   private pool: DatabasePool | null = null;
@@ -18,16 +13,14 @@ export class Database {
 
   async connect(): Promise<void> {
     try {
-      const pool = new Pool({
-        connectionString: this.config.databaseUrl,
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
+      this.pool = await createDatabasePool({
+        provider: this.config.databaseProvider,
+        databaseUrl: this.config.databaseUrl,
+        sqlitePath: this.config.sqlitePath,
       });
 
-      await pool.query('SELECT NOW()');
-      this.pool = pool as unknown as DatabasePool;
-      getLogger().info('Connected to PostgreSQL');
+      const label = this.config.databaseProvider === 'sqlite' ? 'SQLite' : 'PostgreSQL';
+      getLogger().info(`Connected to ${label}`);
       try {
         await this.initializeSchema();
       } catch (error) {
@@ -43,7 +36,7 @@ export class Database {
     if (!this.pool) return;
     await this.pool.end();
     this.pool = null;
-    getLogger().info('Disconnected from PostgreSQL');
+    getLogger().info('Database disconnected');
   }
 
   private async initializeSchema(): Promise<void> {
@@ -55,6 +48,10 @@ export class Database {
   getPool(): DatabasePool {
     if (!this.pool) throw new Error('Database not connected');
     return this.pool;
+  }
+
+  getProvider(): string {
+    return this.config.databaseProvider;
   }
 
   async close(): Promise<void> {
