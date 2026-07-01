@@ -61,7 +61,11 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
       accessed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       access_count INT DEFAULT 0,
       last_accessed_at TIMESTAMPTZ,
-      archived_at TIMESTAMPTZ
+      archived_at TIMESTAMPTZ,
+      archive_reason TEXT,
+      archive_batch_id TEXT,
+      archive_source TEXT,
+      archive_note TEXT
     )
   `);
 
@@ -91,9 +95,15 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS access_count INT DEFAULT 0`);
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archive_reason TEXT`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archive_batch_id TEXT`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archive_source TEXT`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archive_note TEXT`);
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_by BIGINT REFERENCES memories(id)`);
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_superseded ON memories(superseded_by) WHERE superseded_by IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_archive_batch ON memories(archive_batch_id) WHERE archive_batch_id IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_archive_reason ON memories(archive_reason) WHERE archive_reason IS NOT NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS memory_chunks (
