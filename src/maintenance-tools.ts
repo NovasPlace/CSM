@@ -1,6 +1,7 @@
 import { tool } from '@opencode-ai/plugin/tool';
 import { EmbeddingBackfill, type EmbeddingBackfillConfig } from './embedding-backfill.js';
 import { DedupCandidateDetector, type DedupDetectorConfig } from './dedup-detector.js';
+import { MemoryMerger, type MergeConfig } from './merge-tool.js';
 
 export function memoryDedupDetectTool(detector: DedupCandidateDetector) {
   return tool({
@@ -42,6 +43,61 @@ export function memoryDedupDetectTool(detector: DedupCandidateDetector) {
 
       return {
         title: 'Dedup Candidate Detection',
+        output: lines.join('\n'),
+        metadata: report,
+      };
+    },
+  });
+}
+
+export function memoryMergeDuplicatesTool(merger: MemoryMerger) {
+  return tool({
+    description:
+      'Merge exact content duplicate memories by marking superseded. ' +
+      'Dry-run first to review candidates. ' +
+      'Only exact normalized content matches. Lessons excluded by default.',
+    args: {
+      dryRun: tool.schema.boolean().optional().describe('Report without writing (default true)'),
+      memoryTypes: tool.schema.array(tool.schema.string()).optional().describe('Only process these types'),
+      excludeTypes: tool.schema.array(tool.schema.string()).optional().describe('Skip these types (default: ["lesson"])'),
+      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
+      maxGroups: tool.schema.number().optional().describe('Max groups to process, 0 = unlimited (default 0)'),
+    },
+    async execute(args) {
+      const config: MergeConfig = {
+        dryRun: args.dryRun ?? true,
+        memoryTypes: args.memoryTypes,
+        excludeTypes: args.excludeTypes,
+        projectId: args.projectId,
+        maxGroups: args.maxGroups,
+      };
+
+      const report = await merger.merge(config);
+
+      const lines = [
+        `Mode: ${report.dryRun ? 'DRY RUN (no writes)' : 'APPLY'}`,
+        `Active before: ${report.activeBefore}`,
+        `Active after: ${report.activeAfter}`,
+        `Canonical kept: ${report.totalCanonical}`,
+        `Duplicates marked superseded: ${report.totalDuplicates}`,
+        `Types processed: ${report.typesProcessed.length > 0 ? report.typesProcessed.join(', ') : '(all non-excluded)'}`,
+        `Excluded types: ${report.excludedTypes.join(', ')}`,
+        '',
+      ];
+      for (let i = 0; i < Math.min(report.groups.length, 30); i++) {
+        const g = report.groups[i];
+        lines.push(
+          `Group ${i + 1}: type=${g.memoryType} count=${g.duplicateCount}` +
+          ` canonical=#${g.canonicalId} dups=[${g.duplicateIds.join(',')}]`,
+          `  Content: ${g.content.slice(0, 100)}`,
+        );
+      }
+      if (report.groups.length > 30) {
+        lines.push(`... and ${report.groups.length - 30} more groups`);
+      }
+
+      return {
+        title: 'Memory Merge',
         output: lines.join('\n'),
         metadata: report,
       };

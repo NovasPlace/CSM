@@ -91,6 +91,9 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS access_count INT DEFAULT 0`);
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_by BIGINT REFERENCES memories(id)`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_superseded ON memories(superseded_by) WHERE superseded_by IS NOT NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS memory_chunks (
@@ -150,4 +153,19 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
   } catch (_error) {
     console.warn('[Database] FTS column/index skipped (may already exist or unsupported)');
   }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS memory_merges (
+      id BIGSERIAL PRIMARY KEY,
+      canonical_id BIGINT NOT NULL REFERENCES memories(id),
+      duplicate_ids JSONB NOT NULL,
+      reason TEXT NOT NULL,
+      normalized_hash TEXT NOT NULL,
+      duplicate_count INT NOT NULL,
+      merged_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      merged_by TEXT NOT NULL DEFAULT 'merge-tool',
+      dry_run BOOLEAN NOT NULL DEFAULT false
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_memory_merges_canonical ON memory_merges(canonical_id)`);
 }
