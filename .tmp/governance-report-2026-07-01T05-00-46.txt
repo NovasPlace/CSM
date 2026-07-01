@@ -1,0 +1,9 @@
+scanned=45178
+active=37937
+scored_active=37937
+superseded=7241
+low_quality=0
+stale=0
+low_access=1540
+superseded_duplicates=7241
+type_specific_junk=163
