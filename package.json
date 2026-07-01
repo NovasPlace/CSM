@@ -63,6 +63,7 @@
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.17.0",
+    "better-sqlite3": "^12.11.1",
     "pg": "^8.13.0",
     "pgvector": "^0.3.0"
   },
@@ -80,6 +81,7 @@
     }
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^26.0.1",
     "@types/pg": "^8.20.0",
     "eslint": "^9.39.4",

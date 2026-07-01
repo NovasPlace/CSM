@@ -15,11 +15,19 @@ import { initializeMemorySchema } from './memory-schema.js';
 import { migrateProjectIsolation } from './project-isolation-schema.js';
 import { isOwnershipLimitedSchemaError } from './schema-errors.js';
 import { initializeSessionSchema } from './session-schema.js';
+import { initializeMinimalSqliteSchema } from './sqlite/index.js';
 import { getLogger } from '../logger.js';
 
 export async function initializeAllSchemas(database: Database): Promise<void> {
   const pool = database.getPool();
   const provider = database.getProvider();
+
+  if (provider === 'sqlite') {
+    await initializeMinimalSqliteSchema(pool);
+    getLogger().info('SQLite minimal schema initialized');
+    return;
+  }
+
   const ownershipLimitedSteps: string[] = [];
 
   const steps: Array<[string, () => Promise<void>]> = [
