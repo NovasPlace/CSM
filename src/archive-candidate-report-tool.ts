@@ -28,8 +28,14 @@ export function formatArchiveCandidateReport(report: ArchiveCandidateReport) {
     `Overlap count: ${report.overlapCount}`,
     `Excluded low-access count: ${report.excludedCounts.lowAccess}`,
     `Excluded medium-band conversations: ${report.excludedCounts.mediumBandConversation}`,
-    '',
   ];
+  const summary = report.archivedSummary;
+  if (summary && summary.total > 0) {
+    lines.push('', `Archived (already actioned): ${summary.total}`);
+    const reasonEntries = Object.entries(summary.byReason ?? {}).sort((a, b) => b[1] - a[1]);
+    for (const [reason, count] of reasonEntries) lines.push(`  ${reason}: ${count}`);
+  }
+  lines.push('');
   addBucket(lines, 'Already superseded duplicate', report.categories.already_superseded_duplicate);
   addBucket(lines, 'Tiny type-specific junk', report.categories.tiny_type_specific_junk);
   return lines.join('\n');

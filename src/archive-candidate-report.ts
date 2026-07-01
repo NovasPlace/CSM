@@ -39,6 +39,10 @@ export interface ArchiveCandidateReport {
     lowAccess: number;
     mediumBandConversation: number;
   };
+  archivedSummary: {
+    total: number;
+    byReason: Record<string, number>;
+  };
   reasonCounts: Record<ArchiveReasonCode, number>;
   categories: Record<ArchiveReasonCode, ArchiveBucket>;
 }
@@ -46,7 +50,7 @@ export interface ArchiveCandidateReport {
 interface MemoryRow {
   id: number; memory_type: string; content: string; created_at: Date;
   access_count: number; superseded_by: number | null; quality_score: number | null;
-  quality_band: string | null; recall_count: number;
+  quality_band: string | null; recall_count: number; archived_at: Date | null; archive_reason: string | null;
 }
 
 const MAX_PER_REASON = 20;
@@ -58,15 +62,16 @@ export class ArchiveCandidateReportBuilder {
 
   async build(config: ArchiveCandidateReportConfig = {}): Promise<ArchiveCandidateReport> {
     const rows = await this.loadRows(config.projectId);
-    const active = rows.filter((row) => row.superseded_by == null);
+    const active = rows.filter((row) => row.superseded_by == null && row.archived_at == null);
+    const archived = rows.filter((row) => row.archived_at != null);
     const lowAccess = filterLowAccess(active);
     const junkBase = filterTinyTypeSpecificJunkBase(active);
     const junk = junkBase.filter((row) => !isMediumConversation(row));
-    const superseded = rows.filter((row) => row.superseded_by != null);
+    const superseded = rows.filter((row) => row.superseded_by != null && row.archived_at == null);
     const overlapCount = countOverlap(superseded, junk);
     const maxPerReason = config.maxPerReason ?? MAX_PER_REASON;
     const categories = {
-      already_superseded_duplicate: bucket(superseded, maxPerReason, 'already superseded duplicate', 'already_superseded_duplicate'),
+      already_superseded_duplicate: bucket(superseded, maxPerReason, 'already superseded duplicate (not archived)', 'already_superseded_duplicate'),
       tiny_type_specific_junk: bucket(junk, maxPerReason, 'tiny type-specific junk', 'tiny_type_specific_junk'),
     };
 
@@ -82,6 +87,10 @@ export class ArchiveCandidateReportBuilder {
         lowAccess: lowAccess.length,
         mediumBandConversation: junkBase.filter(isMediumConversation).length,
       },
+      archivedSummary: {
+        total: archived.length,
+        byReason: countByArchiveReason(archived),
+      },
       reasonCounts: mapCounts(categories),
       categories,
     };
@@ -94,7 +103,8 @@ export class ArchiveCandidateReportBuilder {
       `SELECT m.id, m.memory_type, m.content, m.created_at,
               COALESCE(m.access_count, 0) AS access_count, m.superseded_by,
               mq.score::float AS quality_score, mq.band AS quality_band,
-              COALESCE(r.recall_count, 0)::int AS recall_count
+              COALESCE(r.recall_count, 0)::int AS recall_count,
+              m.archived_at, m.archive_reason
        FROM memories m
        LEFT JOIN memory_quality_scores mq ON mq.memory_id = m.id
        LEFT JOIN LATERAL (
@@ -179,6 +189,14 @@ function mapCounts(categories: Record<ArchiveReasonCode, ArchiveBucket>) {
     already_superseded_duplicate: categories.already_superseded_duplicate.count,
     tiny_type_specific_junk: categories.tiny_type_specific_junk.count,
   };
+}
+
+function countByArchiveReason(rows: MemoryRow[]) {
+  return rows.reduce<Record<string, number>>((acc, row) => {
+    const reason = row.archive_reason ?? '(unknown)';
+    acc[reason] = (acc[reason] || 0) + 1;
+    return acc;
+  }, {});
 }
 
 function ageDays(value: Date) {

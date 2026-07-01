@@ -36,6 +36,8 @@ export interface GovernanceReport {
   activeMemories: number;
   scoredActive: number;
   supersededMemories: number;
+  archivedMemories: number;
+  archivedByReason: Record<string, number>;
   categoryCounts: Record<CandidateKind, number>;
   categories: Record<CandidateKind, GovernanceBucket>;
 }
@@ -43,7 +45,7 @@ export interface GovernanceReport {
 interface MemoryRow {
   id: number; memory_type: string; content: string; created_at: Date; accessed_at: Date | null;
   access_count: number; superseded_by: number | null; quality_score: number | null; quality_band: string | null;
-  recall_count: number;
+  recall_count: number; archived_at: Date | null; archive_reason: string | null;
 }
 
 interface GovernanceRules {
@@ -62,7 +64,8 @@ export class MemoryGovernanceReportBuilder {
   async build(config: GovernanceReportConfig = {}): Promise<GovernanceReport> {
     const rules = { ...DEFAULTS, ...config };
     const rows = await this.loadRows(config.projectId);
-    const active = rows.filter((row) => row.superseded_by == null);
+    const active = rows.filter((row) => row.superseded_by == null && row.archived_at == null);
+    const archived = rows.filter((row) => row.archived_at != null);
     const categories = this.collectCategories(rows, active, rules);
     return {
       generatedAt: new Date().toISOString(),
@@ -70,7 +73,9 @@ export class MemoryGovernanceReportBuilder {
       scannedTotal: rows.length,
       activeMemories: active.length,
       scoredActive: active.filter((row) => row.quality_score != null).length,
-      supersededMemories: rows.length - active.length,
+      supersededMemories: rows.filter((row) => row.superseded_by != null).length,
+      archivedMemories: archived.length,
+      archivedByReason: countByArchiveReason(archived),
       categoryCounts: mapCounts(categories),
       categories,
     };
@@ -83,7 +88,8 @@ export class MemoryGovernanceReportBuilder {
       `SELECT m.id, m.memory_type, m.content, m.created_at, COALESCE(m.last_accessed_at, m.accessed_at) AS accessed_at,
               COALESCE(m.access_count, 0) AS access_count, m.superseded_by,
               mq.score::float AS quality_score, mq.band AS quality_band,
-              COALESCE(r.recall_count, 0)::int AS recall_count
+              COALESCE(r.recall_count, 0)::int AS recall_count,
+              m.archived_at, m.archive_reason
        FROM memories m
        LEFT JOIN memory_quality_scores mq ON mq.memory_id = m.id
        LEFT JOIN LATERAL (
@@ -101,7 +107,7 @@ export class MemoryGovernanceReportBuilder {
       lowQuality: bucket(filterLowQuality(active, rules.lowQualityMaxScore), rules.maxPerCategory, 'low score band'),
       stale: bucket(filterStale(active, rules.staleDays), rules.maxPerCategory, `stale >= ${rules.staleDays}d`),
       lowAccess: bucket(filterLowAccess(active, rules.lowAccessMax), rules.maxPerCategory, `low access <= ${rules.lowAccessMax}`),
-      supersededDuplicates: bucket(rows.filter((row) => row.superseded_by != null), rules.maxPerCategory, 'already superseded'),
+      supersededDuplicates: bucket(rows.filter((row) => row.superseded_by != null && row.archived_at == null), rules.maxPerCategory, 'already superseded (not archived)'),
       typeSpecificJunk: bucket(filterTypeSpecificJunk(active, rules), rules.maxPerCategory, 'type-specific junk heuristic'),
     };
   }
@@ -168,6 +174,14 @@ function mapCounts(categories: Record<CandidateKind, GovernanceBucket>) {
     supersededDuplicates: categories.supersededDuplicates.count,
     typeSpecificJunk: categories.typeSpecificJunk.count,
   };
+}
+
+function countByArchiveReason(rows: MemoryRow[]) {
+  return rows.reduce<Record<string, number>>((acc, row) => {
+    const reason = row.archive_reason ?? '(unknown)';
+    acc[reason] = (acc[reason] || 0) + 1;
+    return acc;
+  }, {});
 }
 
 function ageDays(value: Date) {

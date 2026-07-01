@@ -34,8 +34,14 @@ function formatReport(report: GovernanceReport) {
     `Active memories: ${report.activeMemories}`,
     `Scored active: ${report.scoredActive}`,
     `Superseded memories: ${report.supersededMemories}`,
-    '',
+    `Archived memories: ${report.archivedMemories}`,
   ];
+  const reasonEntries = Object.entries(report.archivedByReason ?? {}).sort((a, b) => b[1] - a[1]);
+  if (reasonEntries.length > 0) {
+    lines.push(`Archived by reason:`);
+    for (const [reason, count] of reasonEntries) lines.push(`  ${reason}: ${count}`);
+  }
+  lines.push('');
   addBucket(lines, 'Low quality', report.categories.lowQuality);
   addBucket(lines, 'Stale', report.categories.stale);
   addBucket(lines, 'Low access', report.categories.lowAccess);

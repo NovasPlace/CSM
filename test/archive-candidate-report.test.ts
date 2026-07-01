@@ -17,6 +17,8 @@ function row(overrides: Record<string, unknown> = {}) {
     quality_score: 0.3,
     quality_band: 'low',
     recall_count: 0,
+    archived_at: null,
+    archive_reason: null,
     ...overrides,
   };
 }
@@ -50,6 +52,27 @@ describe('ArchiveCandidateReportBuilder', () => {
     assert.deepEqual(
       report.categories.already_superseded_duplicate.samples.map((sample) => sample.reasonCode),
       ['already_superseded_duplicate', 'already_superseded_duplicate'],
+    );
+  });
+
+  it('excludes archived rows from candidates and reports archived summary', async () => {
+    const builder = new ArchiveCandidateReportBuilder(db([
+      row({ id: 1, memory_type: 'procedural', superseded_by: 9, content: 'archived dupe', archived_at: daysAgo(1), archive_reason: 'already_superseded_duplicate' }),
+      row({ id: 2, memory_type: 'episodic', content: 'archived junk', archived_at: daysAgo(1), archive_reason: 'tiny_type_specific_junk' }),
+      row({ id: 3, memory_type: 'conversation', content: 'still here', quality_score: 0.35, quality_band: 'low' }),
+    ]) as any);
+
+    const report = await builder.build({ maxPerReason: 10 });
+
+    assert.equal(report.reasonCounts.already_superseded_duplicate, 0);
+    assert.equal(report.reasonCounts.tiny_type_specific_junk, 1);
+    assert.equal(report.candidateCount, 1);
+    assert.equal(report.archivedSummary.total, 2);
+    assert.equal(report.archivedSummary.byReason['already_superseded_duplicate'], 1);
+    assert.equal(report.archivedSummary.byReason['tiny_type_specific_junk'], 1);
+    assert.deepEqual(
+      report.categories.tiny_type_specific_junk.samples.map((sample) => sample.memoryId),
+      [3],
     );
   });
 });
