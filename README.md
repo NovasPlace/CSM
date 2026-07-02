@@ -1,6 +1,6 @@
 # Cross-Session Memory Plugin
 
-A full-stack memory and context management system for AI coding assistants. Persists knowledge across sessions, compacts context on the fly, checkpoints progress, and auto-documents your codebase, all backed by PostgreSQL and pgvector.
+A full-stack memory and context management system for AI coding assistants. Persists knowledge across sessions, compacts context on the fly, checkpoints progress, and auto-documents your codebase. Backed by PostgreSQL + pgvector (default) or SQLite (lightweight alternative).
 
 ## Quick Start
 
@@ -160,7 +160,7 @@ This plugin gives an AI assistant long-term memory. Without it, every new sessio
 
 - **No CLI requirement** - This is runtime/API-first. Maintenance actions like embedding backfill are explicit tools, not startup jobs.
 - **Thin adapter architecture** - Keep the Postgres memory core stable; add host bridges around it instead of forking runtime logic per assistant.
-- **PostgreSQL + pgvector only** - No SQLite, Redis, or ORM.
+- **PostgreSQL + pgvector (default), SQLite (alternative)** - No Redis or ORM. SQLite is a codebase-compatible backend for zero-dependency setups, trading vector search for simpler infrastructure.
 - **No raw query telemetry by default** - Recall telemetry stores only hashed queries.
 - **Fail closed on token overflow** - If the prompt exceeds the hard limit, the system rejects it rather than truncating context silently.
 
@@ -170,7 +170,8 @@ Current source of truth is the test runner output. The suite includes fresh-sche
 
 | Suite | What It Covers |
 |-------|----------------|
-| `hybrid-search` | Vector + text + entity retrieval |
+| `hybrid-search` | Vector + text + entity retrieval (PG); text + entity (SQLite) |
+| `backend-contract` | 26 shared CRUD + search contract tests (PG + SQLite) |
 | `fresh-schema-contract` | Empty DB -> schema init -> runtime contract verification |
 | `backfill-recall-telemetry` | Explicit embedding backfill + hashed recall telemetry |
 | `codex-bridge` | Codex bridge bootstrap, context brief, and bridge/plugin parity |
@@ -198,7 +199,7 @@ npm install
 npm run build
 ```
 
-Requires a running PostgreSQL instance with pgvector extension and an embedding provider configuration.
+Requires a running PostgreSQL instance with pgvector extension (for `CSM_DATABASE_PROVIDER=postgres`) or a writable file path (for `CSM_DATABASE_PROVIDER=sqlite`). An embedding provider is needed for memory extraction (not for SQLite vector search, which degrades to text).
 
 ## Codex Bridge
 
@@ -284,3 +285,56 @@ All memory tools are registered with the `csm_` prefix to avoid collisions:
 | `csm_context_pressure` | Inspect an explicit message snapshot against the context window |
 | `csm_compaction_audit` | Audit compaction telemetry for correctness |
 | `csm_runtime_status` | Diagnostic: plugin status, DB connectivity, tool registry |
+
+## SQLite (Lightweight Mode)
+
+Cross-Session Memory can run on SQLite instead of PostgreSQL. This trades vector search for zero-dependency setup.
+
+### Quickstart
+
+```bash
+# Install (same as PostgreSQL path)
+npm install
+npm run build
+
+# Configure for SQLite
+$env:CSM_DATABASE_PROVIDER = "sqlite"
+$env:CSM_SQLITE_PATH = "./csm.db"
+npm run verify
+```
+
+The full test suite runs against both backends:
+
+```bash
+npm run build && npm run typecheck && npx tsx --test test/*.test.ts
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CSM_DATABASE_PROVIDER` | `postgres` | `postgres` or `sqlite` |
+| `CSM_SQLITE_PATH` | `./csm.db` | Path to SQLite database file |
+
+`.env.example` reference:
+
+```bash
+CSM_DATABASE_PROVIDER=sqlite
+CSM_SQLITE_PATH=./csm.db
+# Embedding provider (used for memory extraction, not vector search on SQLite)
+CSM_EMBEDDING_PROVIDER=ollama
+OLLAMA_HOST=http://localhost:11434
+```
+
+All other config variables (embedding provider, session management, context pipeline) work identically for both backends.
+
+### Known Limitations
+
+- **No vector ANN** — SQLite has no pgvector equivalent. Semantic search degrades to text search (`LIKE`-based fallback) when the provider is `sqlite`.
+- **No embedding index** — Embeddings are stored as TEXT (for compatibility) but not used for retrieval.
+- **No PG→SQLite migration tool yet** — Existing PostgreSQL databases cannot be migrated to SQLite. Start fresh with `CSM_DATABASE_PROVIDER=sqlite`.
+- **Cascade search fallback** works identically on both backends (project → legacy → global scope).
+- **Hybrid search** degrades to text search + entity matching (no vector similarity leg).
+- **Full-text search** (`ftsSearch`) falls back to `LIKE`-based text matching on SQLite.
+- **CRUD operations** are fully supported on SQLite (all 26 backend contract tests pass).
+- **Verify metadata**: `embeddings_model`, `hybrid_search_mode`, `hybrid_search_version` are recorded as `'sqlite-degraded'` when running on SQLite.
