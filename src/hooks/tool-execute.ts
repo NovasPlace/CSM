@@ -4,8 +4,42 @@ import type { ToolCallRecord } from '../types.js';
 import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
 
+/** Before-hook input shape (matches OpenCode plugin API). */
+interface ToolExecuteBeforeInput {
+  tool: string;
+  sessionID: string;
+  callID: string;
+}
+
+/** Before-hook output shape — args is the tool's input parameters. */
+interface ToolExecuteBeforeOutput {
+  args: Record<string, unknown>;
+}
+
+/** After-hook input shape — includes the resolved args. */
+interface ToolExecuteAfterInput {
+  tool: string;
+  sessionID: string;
+  callID: string;
+  args: Record<string, unknown>;
+}
+
+/** After-hook output shape — tool execution result. */
+interface ToolExecuteAfterOutput {
+  title: string;
+  output: string;
+  metadata: ToolExecuteMetadata;
+}
+
+/** Tool execution metadata from the host. */
+interface ToolExecuteMetadata {
+  tokenCount?: number;
+  error?: string;
+  exitCode?: number;
+}
+
 export function createToolExecuteBeforeHook(ctx: PluginContext) {
-  return async (input: any, output: any) => {
+  return async (input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput) => {
     try {
       ctx.syncActiveSession(input.sessionID);
       const result = ctx.loopDetector.recordCall(input.tool, output.args);
@@ -19,7 +53,7 @@ export function createToolExecuteBeforeHook(ctx: PluginContext) {
 }
 
 export function createToolExecuteAfterHook(ctx: PluginContext) {
-  return async (input: any, output: any) => {
+  return async (input: ToolExecuteAfterInput, output: ToolExecuteAfterOutput) => {
     try {
       ctx.syncActiveSession(input.sessionID);
       const sid = ctx.state.currentSessionId;
@@ -40,7 +74,7 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
   };
 }
 
-async function injectLessonWarning(ctx: PluginContext, input: any, output: any): Promise<void> {
+async function injectLessonWarning(ctx: PluginContext, input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput): Promise<void> {
   try {
     await ctx.lessonTriggers.refresh();
     const warning = ctx.lessonTriggers.buildInjection(input.tool, output.args ?? {});
@@ -50,8 +84,8 @@ async function injectLessonWarning(ctx: PluginContext, input: any, output: any):
 
 async function maybeCreateRiskyEditCheckpoint(
   ctx: PluginContext,
-  input: any,
-  output: any,
+  input: ToolExecuteBeforeInput,
+  output: ToolExecuteBeforeOutput,
 ): Promise<void> {
   const sid = ctx.state.currentSessionId;
   const autoConfig = ctx.config.checkpoint.auto;
@@ -101,8 +135,8 @@ function summarizeToolOutput(output: unknown): string {
 
 function recordWorkJournal(
   ctx: PluginContext,
-  input: any,
-  output: any,
+  input: ToolExecuteAfterInput,
+  output: ToolExecuteAfterOutput,
   sid: string | null,
   toolOutput: string,
   tokenSnapshot: number,
@@ -123,8 +157,8 @@ function recordWorkJournal(
 
 async function recordDistilledToolCall(
   ctx: PluginContext,
-  input: any,
-  output: any,
+  input: ToolExecuteAfterInput,
+  output: ToolExecuteAfterOutput,
   sid: string | null,
   toolOutput: string,
 ): Promise<void> {
@@ -148,8 +182,8 @@ async function recordDistilledToolCall(
 
 async function recordContinuitySignals(
   ctx: PluginContext,
-  input: any,
-  output: any,
+  input: ToolExecuteAfterInput,
+  output: ToolExecuteAfterOutput,
   sid: string | null,
   toolOutput: string,
 ): Promise<void> {

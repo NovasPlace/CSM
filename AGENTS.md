@@ -7,7 +7,7 @@
 - Database URL: dev/test=localhost, production=explicit flag
 - CI with Postgres service container
 - ESLint rules start as warnings, tighten later
-- Lint warning baseline: **154 warnings** (max-warnings=154 prevents unbounded growth)
+- Lint warning baseline: **140 warnings** (max-warnings=140 prevents unbounded growth)
 - `caughtErrorsIgnorePattern: '^_'` added to `@typescript-eslint/no-unused-vars` — catch blocks with `_err` are allowed
 - `better-sqlite3` doesn't support `?NNN` format with spread `.run()` — must use anonymous `?` parameters
 - SQLite schema: TEXT for timestamps/JSON/arrays/embeddings; INTEGER PRIMARY KEY AUTOINCREMENT for PKs
@@ -18,7 +18,7 @@
 - **0 `no-console` warnings**: All 15 intentional console calls documented with `eslint-disable-next-line no-console` rationale
 - **~140 `no-explicit-any` warnings**: Typed-debt — NOT mechanical cleanup. Requires per-module type-design work (typed DTOs, generic row mappers). Do not attempt blanket `any`→`unknown` replacement (proven to cause 55+ cascading build errors)
 - **~7 `no-unused-vars` warnings**: External API generic params (`opentui.d.ts`) — skipped by design
-- **`max-warnings=154`** — any new warning added to src/ will fail lint
+- **`max-warnings=140`** — any new warning added to src/ will fail lint
 
 ## Progress
 ### Done
@@ -33,7 +33,7 @@
 - **Phase 2B (Embedding Backfill)**: `src/embedding-backfill.ts` — batch/offset/resume/rate-limited. Tool `csm_memory_backfill_embeddings`. Tests: 6/6 pass.
 - **Phase 2A.1 (Dedup Detection)**: `src/dedup-detector.ts` — exact content/title + embedding ANN. Tool `csm_memory_dedup_detect` (read-only). Tests: 8/8 pass.
 - **Phase 2A.2 (Safe Merge)**: `src/merge-tool.ts` — exact normalized content duplicates only. Schema: `memory_merges` table, `superseded_by`/`superseded_at`. Tool `csm_memory_merge`. Tests: 7/7 pass.
-- **Lint Baseline Lock**: `max-warnings=154`. Added `caughtErrorsIgnorePattern: '^_'` to ESLint config (dropped 2 catch-var warnings). Documented `any` warnings as typed-debt, `console` warnings as intentional. Confirmed: blanket `any`→`unknown` causes 55+ build errors — do not attempt.
+- **Lint Baseline Lock**: `max-warnings=140`. Added `caughtErrorsIgnorePattern: '^_'` to ESLint config (dropped 2 catch-var warnings). Documented `any` warnings as typed-debt, `console` warnings as intentional. Confirmed: blanket `any`→`unknown` causes 55+ build errors — do not attempt.
 - **Phase 2C (Governance/Archive)**: Archive system (7,379 memories archived: 7,241 superseded + 138 tiny-junk). Governance status reports with invariant checks. Archive-aware candidate reports.
 - **Phase 3A (SQLite Design)**: `docs/PHASE3A_SQLITE_DESIGN.md` — 57 files, 24 tables catalogued. Phased plan.
 - **Phase 3B (Adapter Interface)**: `src/db/database-pool.ts` factory, `src/db/postgres-pool.ts` wrapper, `src/db/sqlite-pool.ts` adapter ($N→? translation, ::cast stripping, RETURNING detection). `DatabaseProvider` type. 11 new tests (9 sqlite + 2 postgres).
@@ -97,7 +97,7 @@
 - `src/types.ts`: `DatabaseProvider`, `DatabasePool`, `DatabaseClient`, `PluginConfig`
 - `src/config.ts`: `CSM_DATABASE_PROVIDER`, `CSM_SQLITE_PATH` parsing
 - `eslint.config.mjs`: ESLint v9 flat config, `caughtErrorsIgnorePattern: '^_'`, src strict, tests relaxed
-- `package.json`: `max-warnings=154` on `lint:src`
+- `package.json`: `max-warnings=140` on `lint:src`
 
 ## Remaining Test Lint Debt
 - 774+ errors, 261+ warnings across test files (`**/*.{test,spec}.ts`)

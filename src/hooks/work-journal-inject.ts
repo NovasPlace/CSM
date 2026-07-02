@@ -29,7 +29,7 @@ export function createWorkJournalInjectHook(ctx: PluginContext) {
       output.system = output.system || [];
       output.system.push(injection);
 
-      getLogger().info('[WorkJournal] Injected resume payload', { sessionId: sid.slice(0, 8), entries: payload.totalEntries });
+      getLogger().info(`[WorkJournal] Injected resume payload for session ${sid.slice(0, 8)} (${payload.totalEntries} entries)`);
     } catch (error) {
       console.error('[WorkJournal] Inject hook error:', error);
     }

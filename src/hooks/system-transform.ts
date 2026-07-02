@@ -238,7 +238,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             };
             const injection = buildResumeInjection(payload, deps);
             output.system.push(injection);
-            getLogger().info('[WorkJournal] Injected resume payload', { sessionId: input.sessionID.slice(0, 8), entries: payload.totalEntries });
+            getLogger().info(`[WorkJournal] Injected resume payload for session ${input.sessionID.slice(0, 8)} (${payload.totalEntries} entries)`);
           }
         } catch (wjErr) {
           console.error('[WorkJournal] Inject hook error:', wjErr);
@@ -635,7 +635,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         systemPrompt: sysTokens, toolSchemas: 0, pluginInserts: 0,
         opencodeInternal: 0,
       };
-      getLogger().debug(`[TokenBuckets] system`, { breakdown: formatBreakdown(sysBuckets) });
+      getLogger().debug(`[TokenBuckets] system: ${formatBreakdown(sysBuckets)}`);
 
       return output;
     } catch (error) {
