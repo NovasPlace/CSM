@@ -1,5 +1,6 @@
 import { Database } from "./database.js";
 import type { Memory, MemorySearchOptions } from "./types.js";
+import { ilikeExpr } from "./db/query-dialect.js";
 
 export type HybridWeights = {
   vector: number;
@@ -66,20 +67,21 @@ export async function entityMatchBoost(
   projectId?: string,
 ): Promise<Array<{ id: number; boost: number }>> {
   const pool = db.getPool();
+  const d = db.dialect;
   const like = `%${query.replace(/[%_]/g, '\\$&')}%`;
   const conceptsJson = JSON.stringify([query]);
   try {
     const result = await pool.query(
       `SELECT id,
         CASE
-          WHEN content ILIKE $1 THEN 2.0
+          WHEN ${ilikeExpr(d, 'content', 1)} THEN 2.0
           WHEN metadata->'extracted_concepts' @> $2::jsonb THEN 1.8
-          WHEN tags::text ILIKE $1 THEN 1.5
+          WHEN ${ilikeExpr(d, 'tags::text', 1)} THEN 1.5
           ELSE 0.0
         END AS boost
        FROM memories
-       WHERE (content ILIKE $1
-              OR tags::text ILIKE $1
+       WHERE (${ilikeExpr(d, 'content', 1)}
+              OR ${ilikeExpr(d, 'tags::text', 1)}
               OR metadata->'extracted_concepts' @> $2::jsonb)
          ${projectId ? 'AND project_id = $3' : ''}
        LIMIT ${limit}`,

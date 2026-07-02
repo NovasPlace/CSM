@@ -20,6 +20,13 @@ export function ilikeExpr(d: QueryDialect, col: string, paramIndex: number): str
   return `${col} ILIKE $${paramIndex}`;
 }
 
+export function ilikeLiteralExpr(d: QueryDialect, col: string, literal: string): string {
+  if (d === 'sqlite') {
+    return `LOWER(${col}) LIKE LOWER('${literal}')`;
+  }
+  return `${col} ILIKE '${literal}'`;
+}
+
 export function jsonKeyExists(d: QueryDialect, col: string, key: string): string {
   if (d === 'sqlite') {
     return `json_type(${col}, '$.${key}') IS NOT NULL`;

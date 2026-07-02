@@ -7,6 +7,7 @@
  */
 import { DatabasePool } from './types.js';
 import { Redactor } from './redactor.js';
+import { ilikeExpr, dialectFromPool } from './db/query-dialect.js';
 
 export type CacheKind = 'turn' | 'tool_output' | 'file_read' | 'error' | 'decision';
 
@@ -65,10 +66,11 @@ export async function fetchItem(
 export async function searchItems(
   pool: DatabasePool, sessionId: string, query: string, limit: number,
 ): Promise<CacheItem[]> {
+  const d = dialectFromPool(pool);
   const pattern = `%${query.replace(/[%_]/g, '\\$&')}%`;
   const res = await pool.query(
     `SELECT * FROM context_cache
-     WHERE session_id = $1 AND (summary ILIKE $2 OR content ILIKE $2)
+     WHERE session_id = $1 AND (${ilikeExpr(d, 'summary', 2)} OR ${ilikeExpr(d, 'content', 2)})
      ORDER BY created_at DESC LIMIT $3`,
     [sessionId, pattern, limit],
   );
@@ -129,13 +131,14 @@ export async function fetchLatestDecisionBySource(
 export async function searchLatestDecisionBySources(
   pool: DatabasePool, sessionId: string, query: string, sources: string[],
 ): Promise<CacheItem | null> {
+  const d = dialectFromPool(pool);
   const words = query.replace(/[%_]/g, ' ').split(/\s+/).filter(w => w.length > 2);
   if (words.length === 0) return null;
   const params: unknown[] = [sessionId, sources];
   const conditions = words.map((w) => {
     const idx = params.length + 1;
     params.push(`%${w}%`);
-    return `(summary ILIKE $${idx} OR content ILIKE $${idx} OR metadata->>'task' ILIKE $${idx})`;
+    return `(${ilikeExpr(d, 'summary', idx)} OR ${ilikeExpr(d, 'content', idx)} OR ${ilikeExpr(d, "metadata->>'task'", idx)})`;
   });
   const res = await pool.query(
     `SELECT * FROM context_cache

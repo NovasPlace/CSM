@@ -1,5 +1,6 @@
 import type { DatabasePool } from './types.js';
 import { redact } from './redactor.js';
+import { ilikeLiteralExpr, dialectFromPool } from './db/query-dialect.js';
 
 export type CausalRole =
   | 'problem'
@@ -264,9 +265,10 @@ export class CausalThreadHydrator {
 
   private async fetchAdjacentDecisions(rootId: number, radius: number) {
     try {
+      const d = dialectFromPool(this.pool);
       const result = await this.pool.query(
         `SELECT id, content, created_at FROM memories
-         WHERE (content ILIKE '%decision%' OR content ILIKE '%decided%' OR content ILIKE '%trade-off%')
+         WHERE (${ilikeLiteralExpr(d, 'content', '%decision%')} OR ${ilikeLiteralExpr(d, 'content', '%decided%')} OR ${ilikeLiteralExpr(d, 'content', '%trade-off%')})
          AND id != $1
          ORDER BY created_at DESC
          LIMIT $2`,

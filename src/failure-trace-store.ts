@@ -1,6 +1,7 @@
 import type { DatabasePool } from './types.js';
 import type { FailureTrace, FailureTraceStorage } from './failure-trace-types.js';
 import { redact } from './redactor.js';
+import { ilikeExpr, dialectFromPool } from './db/query-dialect.js';
 
 const CREATE_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS failure_traces (
@@ -84,9 +85,10 @@ export class FailureTraceStore implements FailureTraceStorage {
   }
 
   async recallByProblem(problemPattern: string, limit = 10): Promise<FailureTrace[]> {
+    const d = dialectFromPool(this.pool);
     const res = await this.pool.query(
       `SELECT * FROM failure_traces
-       WHERE problem ILIKE $1
+       WHERE ${ilikeExpr(d, 'problem', 1)}
        ORDER BY created_at DESC
        LIMIT $2`,
       [`%${problemPattern}%`, limit]
