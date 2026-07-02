@@ -1,5 +1,5 @@
 ## Goal
-- Framework Hardening Phase 1 complete; Phase 2A/2B/2C/2D complete; Phase 3A/3B/3C/3D/3F complete; lint baseline locked at 249 warnings
+- Framework Hardening Phase 1 complete; Phase 2A/2B/2C/2D complete; Phase 3A/3B/3C/3D/3F/3G/3H complete; lint baseline locked at 249 warnings
 
 ## Constraints & Preferences
 - Each sub-phase is behavior-preserving, boring, verbatim moves first
@@ -45,6 +45,8 @@
 - **Phase 3F.1 (SQLite Search Indexes)**: Added `idx_memories_project`, `idx_memories_type`, `idx_memories_importance_created` to SQLite schema for search query performance.
 - **Phase 3F.2 (Embedding Generation Optimization)**: Moved `embeddings.generate()` call after the SQLite dialect check in `searchMemories`, eliminating wasted API calls on SQLite.
 - **Phase 3F.3 (Hybrid Search Filter Fix)**: Fixed `hybridSearch` to propagate `type`, `tags`, and `minImportance` filters to all sub-searchers (`vectorSearch`, `ftsSearch`, `entityMatchBoost`). Added `buildWhereClause` helper for dynamic SQL filter construction. This fixes a long-standing bug where type/tag filters were silently ignored on PG.
+- **Phase 3G (SQLite MVP Documentation)**: `docs/PHASE3G_SQLITE_MVP.md` — covers how to enable SQLite, supported/degraded/unsupported features, verification results, known gaps, and architecture notes.
+- **Phase 3H (Fix Backfill Recall Telemetry Test Debt)**: Root cause: `pg` returns `COUNT(*)` (bigint) as string, so `typeof r.recall_count === 'number'` was false → `recallCount` defaulted to 0 → prune-scorer never saw recall data. Fixed by using `Number()` cast instead of `typeof` check for both `recall_count` and `graph_links` in `loadPruneRows`. Full suite now 622/622 green.
 
 ### In Progress
 - None
@@ -53,7 +55,8 @@
 - **`no-explicit-any` cleanup (~190 warnings)**: Blocked by cascading type errors. Requires Phase 2X (Type Debt Reduction) — per-module typed DTOs and generic row mappers, not blanket replacement.
 
 ### Pre-existing Test Debt
-- **1 failing test**: `test/backfill-recall-telemetry.test.ts` line 209 — "protects old recalled memories while still surfacing old unrecalled ones" fails because prune-protection by recall count is not working for PG. Present since Phase 3B (`ae5e309`). Not caused by Phase 3D changes. Root cause: `pruneMemories`/`loadPruneRows` recall_count LATERAL join returns 0 even when `memory_recall_events` rows exist. Needs investigation in prune-scorer logic.
+- ~~**1 failing test**: `test/backfill-recall-telemetry.test.ts` line 209 — "protects old recalled memories while still surfacing old unrecalled ones" fails because prune-protection by recall count is not working for PG. Present since Phase 3B (`ae5e309`). Not caused by Phase 3D changes. Root cause: `pruneMemories`/`loadPruneRows` recall_count LATERAL join returns 0 even when `memory_recall_events` rows exist. Needs investigation in prune-scorer logic.~~
+- **Resolved in Phase 3H**: Root cause was `pg` returning `COUNT(*)` as string (bigint). `typeof r.recall_count === 'number'` was always false, so recallCount defaulted to 0. Fixed by using `Number()` cast instead of `typeof` check.
 
 ## Key Decisions
 - Plain `sessionState` object (not getter-based wrappers) for mutable state shared across hook modules
@@ -70,12 +73,11 @@
 ## Next Steps
 1. Phase 2X (Type Debt Reduction): reduce `no-explicit-any` warnings module by module
 2. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
-3. Fix pre-existing prune-protection test failure in backfill-recall-telemetry.test.ts
 
 ## Critical Context
 - Windows/PowerShell environment: `grep`→`rg`, `wc`→manual count, `&&`/`||`→PowerShell syntax
 - All checks green: typecheck, build, lint:src (0 errors, 249 warnings)
-- Full test suite: **621/622 pass, 1 pre-existing failure** (`backfill-recall-telemetry` prune-protection)
+- Full test suite: **622/622 pass**
 - `git restore src/` + `git restore eslint.config.mjs` restores clean working tree
 - Live DB: 45,178 total memories; 37,799 active; 7,573 with embeddings
 - Schema additions: `memory_merges` table, `memories.superseded_by`/`superseded_at`, `memory_recall_events`

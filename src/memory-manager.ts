@@ -855,8 +855,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     const memories: Memory[] = result.rows.map((row: unknown) => {
       const r = row as Record<string, unknown>;
       const memory = this.mapMemory(r);
-      const graphLinks = typeof r.graph_links === 'number' ? r.graph_links : 0;
-      const recallCount = typeof r.recall_count === 'number' ? r.recall_count : 0;
+      const graphLinks = r.graph_links == null ? 0 : Number(r.graph_links);
+      const recallCount = r.recall_count == null ? 0 : Number(r.recall_count);
       return {
         ...memory,
         graphLinks,
