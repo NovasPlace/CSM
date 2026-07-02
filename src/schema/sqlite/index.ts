@@ -98,6 +98,9 @@ export async function initializeMinimalSqliteSchema(pool: DatabasePool): Promise
 
   await pool.query('CREATE INDEX IF NOT EXISTS idx_memories_session_id ON memories(session_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_memories_superseded_by ON memories(superseded_by) WHERE superseded_by IS NOT NULL');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(memory_type)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_memories_importance_created ON memories(importance DESC, created_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_memory_merges_canonical_id ON memory_merges(canonical_id)');
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_quality_scores_memory_id ON memory_quality_scores(memory_id)');
 

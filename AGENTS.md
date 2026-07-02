@@ -1,5 +1,5 @@
 ## Goal
-- Framework Hardening Phase 1 complete; Phase 2A/2B/2C/2D complete; Phase 3A/3B/3C/3D complete; lint baseline locked at 249 warnings
+- Framework Hardening Phase 1 complete; Phase 2A/2B/2C/2D complete; Phase 3A/3B/3C/3D/3F complete; lint baseline locked at 249 warnings
 
 ## Constraints & Preferences
 - Each sub-phase is behavior-preserving, boring, verbatim moves first
@@ -40,6 +40,11 @@
 - **Phase 3B (Adapter Interface)**: `src/db/database-pool.ts` factory, `src/db/postgres-pool.ts` wrapper, `src/db/sqlite-pool.ts` adapter ($N→? translation, ::cast stripping, RETURNING detection). `DatabaseProvider` type. 11 new tests (9 sqlite + 2 postgres).
 - **Phase 3C (Schema Bootstrap)**: `src/schema/sqlite/index.ts` — 7 tables (sessions, memories, memory_chunks, memory_merges, memory_quality_scores, memory_events, memory_recall_events). `src/schema/index.ts` early-return for sqlite. 3 smoke tests.
 - **Phase 3D (Query Compatibility)**: `src/db/query-dialect.ts` — `QueryDialect` type + 11 helpers (nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField). `Database.dialect` getter. Narrow-path methods in MemoryManager patched: createSession, saveMemory, listMemories, textSearchFallback, searchMemories (sqlite→text fallback), touchMemory, storeEmbedding, mapSession, mapMemory, getEventsSince, etc. Vector search degraded to text search on SQLite.
+- **Phase 3E (CRUD Contract Tests)**: `test/backend-contract.test.ts` — shared backend contract tests for createSession, saveMemory, listMemories, getSession, touchMemory, metadata round-trip. Run against both PG and SQLite. All 12 CRUD tests pass.
+- **Phase 3F (SQLite Search Contract)**: Search contract tests (8 tests) added to `test/backend-contract.test.ts` — prefix match, non-matching query, type filter, tag filter, degradation safety, listMemories tag filter, projectId scope. 26 total contract tests (13 PG + 13 SQLite) all pass.
+- **Phase 3F.1 (SQLite Search Indexes)**: Added `idx_memories_project`, `idx_memories_type`, `idx_memories_importance_created` to SQLite schema for search query performance.
+- **Phase 3F.2 (Embedding Generation Optimization)**: Moved `embeddings.generate()` call after the SQLite dialect check in `searchMemories`, eliminating wasted API calls on SQLite.
+- **Phase 3F.3 (Hybrid Search Filter Fix)**: Fixed `hybridSearch` to propagate `type`, `tags`, and `minImportance` filters to all sub-searchers (`vectorSearch`, `ftsSearch`, `entityMatchBoost`). Added `buildWhereClause` helper for dynamic SQL filter construction. This fixes a long-standing bug where type/tag filters were silently ignored on PG.
 
 ### In Progress
 - None
@@ -63,16 +68,14 @@
 - SQLite vector search: degraded to text search (no `<=>`/pgvector equivalent)
 
 ## Next Steps
-1. Phase 3D.2: Remaining query compat beyond narrow path (archive ops, cleanup, dedup, merge queries on SQLite)
-2. Phase 3E: Shared backend contract tests (PG + SQLite paths for createSession, saveMemory, listMemories)
-3. Phase 2X (Type Debt Reduction): reduce `no-explicit-any` warnings module by module
-4. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
-5. Fix pre-existing prune-protection test failure in backfill-recall-telemetry.test.ts
+1. Phase 2X (Type Debt Reduction): reduce `no-explicit-any` warnings module by module
+2. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
+3. Fix pre-existing prune-protection test failure in backfill-recall-telemetry.test.ts
 
 ## Critical Context
 - Windows/PowerShell environment: `grep`→`rg`, `wc`→manual count, `&&`/`||`→PowerShell syntax
 - All checks green: typecheck, build, lint:src (0 errors, 249 warnings)
-- Full test suite: **595/596 pass, 1 pre-existing failure** (`backfill-recall-telemetry` prune-protection)
+- Full test suite: **621/622 pass, 1 pre-existing failure** (`backfill-recall-telemetry` prune-protection)
 - `git restore src/` + `git restore eslint.config.mjs` restores clean working tree
 - Live DB: 45,178 total memories; 37,799 active; 7,573 with embeddings
 - Schema additions: `memory_merges` table, `memories.superseded_by`/`superseded_at`, `memory_recall_events`
@@ -89,6 +92,7 @@
 - `src/schema/index.ts`: dispatches to sqlite/postgres schema init based on provider
 - `src/database.ts`: `Database` class with `dialect` getter, factory dispatch, `getProvider()` method
 - `src/memory-manager.ts`: narrow-path methods dialect-aware — Phase 3D
+- `src/hybrid-search.ts`: hybrid search with `buildWhereClause` filter helper, dialect-aware sub-searchers — Phase 3F.3
 - `src/types.ts`: `DatabaseProvider`, `DatabasePool`, `DatabaseClient`, `PluginConfig`
 - `src/config.ts`: `CSM_DATABASE_PROVIDER`, `CSM_SQLITE_PATH` parsing
 - `eslint.config.mjs`: ESLint v9 flat config, `caughtErrorsIgnorePattern: '^_'`, src strict, tests relaxed

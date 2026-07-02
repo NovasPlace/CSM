@@ -394,7 +394,6 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     telemetry?: { sessionId?: string; source?: RecallTelemetrySource },
   ): Promise<{ memory: Memory; score: number }[]> {
     const pool = this.database.getPool();
-    const queryEmbedding = await this.embeddings.generate(options.query);
 
     // SQLite: skip vector search entirely, go to text fallback
     if (this.database.dialect === 'sqlite') {
@@ -402,13 +401,15 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       return this.textSearchFallback(options);
     }
 
+    const queryEmbedding = await this.embeddings.generate(options.query);
+
     try {
       const results = await hybridSearch(
         this.database,
         options.query,
         queryEmbedding,
         options.limit ?? 10,
-        { projectId: options.projectId, type: options.type, weights: (options as any).weights },
+        { projectId: options.projectId, type: options.type, tags: options.tags, minImportance: options.minImportance, searchMode: options.searchMode, weights: (options as any).weights },
       );
 
       const memories: { memory: Memory; score: number }[] = [];

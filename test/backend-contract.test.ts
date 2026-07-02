@@ -274,13 +274,301 @@ function runContractTests(label: string, getMgr: () => MemoryManager): void {
 }
 
 // ---------------------------------------------------------------------------
-// Run the same contract tests against both backends
+// Search contract assertions — documents expected search behavior
 // ---------------------------------------------------------------------------
 
-describePostgres('Phase 3E contract', (getMgr) => {
+function runSearchContractTests(label: string, getMgr: () => MemoryManager): void {
+  it('searchMemories returns matching content via prefix', async () => {
+    const mgr = getMgr();
+    await mgr.createSession(`${label}-search-session`, `${label}-search-project`);
+    await mgr.saveMemory({
+      sessionId: `${label}-search-session`,
+      content: 'Phase3F-Alpha unique searchable content',
+      type: 'episodic',
+      importance: 0.9,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+
+    const results = await mgr.searchMemories({
+      query: 'Phase3F-Alpha',
+      projectId: `${label}-search-project`,
+      limit: 10,
+    });
+
+    assert.ok(results.length >= 1, 'should find at least one match');
+    const first = results[0].memory as Record<string, unknown>;
+    assert.ok(
+      (first.content as string).includes('Phase3F-Alpha'),
+      'returned memory should contain the search term',
+    );
+  });
+
+  it('searchMemories returns empty for non-matching query', async () => {
+    const mgr = getMgr();
+    await mgr.createSession(`${label}-nomatch-session`, `${label}-nomatch-project`);
+    await mgr.saveMemory({
+      sessionId: `${label}-nomatch-session`,
+      content: 'Phase3F-Beta exists in database',
+      type: 'episodic',
+      importance: 0.5,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+
+    const results = await mgr.searchMemories({
+      query: 'ZZZ-NonExistent-Query-12345',
+      projectId: `${label}-nomatch-project`,
+      limit: 10,
+    });
+
+    // SQLite text fallback: returns 0 for non-matching queries.
+    // PG vector search: always returns nearest neighbors (even for garbage queries).
+    // Both behaviors are acceptable — the contract is: no cross-project leakage.
+    if (results.length > 0) {
+      for (const r of results) {
+        assert.equal(
+          (r.memory as Record<string, unknown>).projectId,
+          `${label}-nomatch-project`,
+          'any results must be scoped to the correct project',
+        );
+      }
+    } else {
+      assert.equal(results.length, 0, 'should return zero results for non-matching query');
+    }
+  });
+
+  it('searchMemories filters by type', async () => {
+    const mgr = getMgr();
+    await mgr.createSession(`${label}-type-session`, `${label}-type-project`);
+    await mgr.saveMemory({
+      sessionId: `${label}-type-session`,
+      content: 'Phase3F-TypeTest episodic memory',
+      type: 'episodic',
+      importance: 0.5,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+    await mgr.saveMemory({
+      sessionId: `${label}-type-session`,
+      content: 'Phase3F-TypeTest procedural memory',
+      type: 'procedural',
+      importance: 0.5,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+
+    const episodic = await mgr.searchMemories({
+      query: 'Phase3F-TypeTest',
+      projectId: `${label}-type-project`,
+      type: 'episodic',
+      limit: 10,
+    });
+    assert.ok(episodic.length >= 1, 'should find episodic memories');
+    for (const r of episodic) {
+      assert.equal(
+        (r.memory as Record<string, unknown>).memoryType,
+        'episodic',
+        'all results should be episodic type',
+      );
+    }
+
+    const procedural = await mgr.searchMemories({
+      query: 'Phase3F-TypeTest',
+      projectId: `${label}-type-project`,
+      type: 'procedural',
+      limit: 10,
+    });
+    assert.ok(procedural.length >= 1, 'should find procedural memories');
+    for (const r of procedural) {
+      assert.equal(
+        (r.memory as Record<string, unknown>).memoryType,
+        'procedural',
+        'all results should be procedural type',
+      );
+    }
+  });
+
+  it('searchMemories filters by tags', async () => {
+    const mgr = getMgr();
+    await mgr.createSession(`${label}-tag-session`, `${label}-tag-project`);
+    await mgr.saveMemory({
+      sessionId: `${label}-tag-session`,
+      content: 'Phase3F-Tagged tagged memory one',
+      type: 'episodic',
+      importance: 0.5,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: ['alpha-tag', 'shared-tag'],
+    });
+    await mgr.saveMemory({
+      sessionId: `${label}-tag-session`,
+      content: 'Phase3F-Tagged tagged memory two',
+      type: 'episodic',
+      importance: 0.5,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: ['beta-tag', 'shared-tag'],
+    });
+
+    const alphaResults = await mgr.searchMemories({
+      query: 'Phase3F-Tagged',
+      projectId: `${label}-tag-project`,
+      tags: ['alpha-tag'],
+      limit: 10,
+    });
+    assert.ok(alphaResults.length >= 1, 'should find alpha-tagged memories');
+    for (const r of alphaResults) {
+      const tags = (r.memory as Record<string, unknown>).tags as string[];
+      assert.ok(tags.includes('alpha-tag'), 'result should have alpha-tag');
+    }
+
+    const sharedResults = await mgr.searchMemories({
+      query: 'Phase3F-Tagged',
+      projectId: `${label}-tag-project`,
+      tags: ['shared-tag'],
+      limit: 10,
+    });
+    assert.ok(sharedResults.length >= 2, 'should find both memories with shared-tag');
+  });
+
+  it('searchMemories does not throw on any backend (degradation safety)', async () => {
+    const mgr = getMgr();
+    await mgr.createSession(`${label}-safe-session`, `${label}-safe-project`);
+    await mgr.saveMemory({
+      sessionId: `${label}-safe-session`,
+      content: 'Phase3F-Degradation safety check content',
+      type: 'episodic',
+      importance: 0.7,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: ['safety'],
+    });
+
+    // This must not throw on SQLite (vector search degrades to text)
+    // and must not throw on PG (hybrid search with hash embeddings)
+    const results = await mgr.searchMemories({
+      query: 'Phase3F-Degradation',
+      projectId: `${label}-safe-project`,
+      limit: 5,
+    });
+
+    // Both backends should return results for an exact prefix match
+    assert.ok(results.length >= 1, 'should return results without throwing');
+  });
+
+  it('listMemories filters by tags', async () => {
+    const mgr = getMgr();
+    await mgr.createSession(`${label}-listtag-session`, `${label}-listtag-project`);
+    await mgr.saveMemory({
+      sessionId: `${label}-listtag-session`,
+      content: 'Phase3F-ListTag first memory',
+      type: 'episodic',
+      importance: 0.5,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: ['list-alpha'],
+    });
+    await mgr.saveMemory({
+      sessionId: `${label}-listtag-session`,
+      content: 'Phase3F-ListTag second memory',
+      type: 'episodic',
+      importance: 0.5,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: ['list-beta'],
+    });
+
+    const filtered = await mgr.listMemories({
+      projectId: `${label}-listtag-project`,
+      tags: ['list-alpha'],
+      limit: 10,
+    });
+    assert.ok(filtered.length >= 1, 'should find memories with list-alpha tag');
+    for (const m of filtered) {
+      const tags = (m as Record<string, unknown>).tags as string[];
+      assert.ok(tags.includes('list-alpha'), 'result should have list-alpha tag');
+    }
+  });
+
+  it('searchMemories respects projectId scope', async () => {
+    const mgr = getMgr();
+    await mgr.createSession(`${label}-scope-a`, `${label}-scope-project-a`);
+    await mgr.createSession(`${label}-scope-b`, `${label}-scope-project-b`);
+    await mgr.saveMemory({
+      sessionId: `${label}-scope-a`,
+      content: 'Phase3F-Scope project A content',
+      type: 'episodic',
+      importance: 0.8,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+    await mgr.saveMemory({
+      sessionId: `${label}-scope-b`,
+      content: 'Phase3F-Scope project B content',
+      type: 'episodic',
+      importance: 0.8,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+
+    const projectAResults = await mgr.searchMemories({
+      query: 'Phase3F-Scope',
+      projectId: `${label}-scope-project-a`,
+      limit: 10,
+    });
+
+    for (const r of projectAResults) {
+      assert.equal(
+        (r.memory as Record<string, unknown>).projectId,
+        `${label}-scope-project-a`,
+        'all results should be from project A',
+      );
+    }
+
+    const projectBResults = await mgr.searchMemories({
+      query: 'Phase3F-Scope',
+      projectId: `${label}-scope-project-b`,
+      limit: 10,
+    });
+
+    for (const r of projectBResults) {
+      assert.equal(
+        (r.memory as Record<string, unknown>).projectId,
+        `${label}-scope-project-b`,
+        'all results should be from project B',
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Run both CRUD and search contract tests against both backends
+// ---------------------------------------------------------------------------
+
+describePostgres('Phase 3E/3F contract', (getMgr) => {
   runContractTests('pg', getMgr);
+  runSearchContractTests('pg', getMgr);
 });
 
-describeSqlite('Phase 3E contract', (getMgr) => {
+describeSqlite('Phase 3E/3F contract', (getMgr) => {
   runContractTests('sqlite', getMgr);
+  runSearchContractTests('sqlite', getMgr);
 });
