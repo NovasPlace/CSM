@@ -7,7 +7,7 @@
  */
 import { DatabasePool } from './types.js';
 import { Redactor } from './redactor.js';
-import { ilikeExpr, dialectFromPool, jsonExtractText } from './db/query-dialect.js';
+import { ilikeExpr, dialectFromPool, jsonExtractText, colInParamArray, jsonParam } from './db/query-dialect.js';
 
 export type CacheKind = 'turn' | 'tool_output' | 'file_read' | 'error' | 'decision';
 
@@ -136,7 +136,7 @@ export async function searchLatestDecisionBySources(
   const d = dialectFromPool(pool);
   const words = query.replace(/[%_]/g, ' ').split(/\s+/).filter(w => w.length > 2);
   if (words.length === 0) return null;
-  const params: unknown[] = [sessionId, sources];
+  const params: unknown[] = [sessionId, jsonParam(d, sources)];
   const conditions = words.map((w) => {
     const idx = params.length + 1;
     params.push(`%${w}%`);
@@ -144,7 +144,7 @@ export async function searchLatestDecisionBySources(
   });
   const res = await pool.query(
     `SELECT * FROM context_cache
-     WHERE session_id = $1 AND kind = 'decision' AND metadata->>'source' = ANY($2)
+     WHERE session_id = $1 AND kind = 'decision' AND ${colInParamArray(d, jsonExtractText(d, 'metadata', 'source'), 2)}
        AND (${conditions.join(' OR ')})
      ORDER BY created_at DESC LIMIT 1`,
     params,

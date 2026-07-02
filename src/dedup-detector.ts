@@ -1,5 +1,5 @@
 import type { Database } from './database.js';
-import { jsonExtractText, dialectFromPool } from './db/query-dialect.js';
+import { jsonExtractText, dialectFromPool, colInParamArray, jsonParam } from './db/query-dialect.js';
 
 export interface DedupDetectorConfig {
   similarityThreshold?: number;
@@ -89,8 +89,8 @@ export class DedupCandidateDetector {
 
     if (allowedTypes && allowedTypes.length > 0) {
       paramIdx++;
-      sql += ` AND memory_type = ANY($${paramIdx})`;
-      params.push(allowedTypes);
+      sql += ` AND ${colInParamArray(dialectFromPool(this.pool), 'memory_type', paramIdx)}`;
+      params.push(jsonParam(dialectFromPool(this.pool), allowedTypes));
     }
 
     sql += ' ORDER BY id ASC';

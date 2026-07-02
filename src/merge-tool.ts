@@ -1,5 +1,6 @@
 import type { Database } from './database.js';
 import { getLogger } from './logger.js';
+import { nowFn, dialectFromPool, colInParamArray, colNotInParamArray, jsonParam } from './db/query-dialect.js';
 
 export interface MergeConfig {
   dryRun?: boolean;
@@ -89,11 +90,12 @@ export class MemoryMerger {
   }
 
   private async countActive(config?: MergeConfig): Promise<number> {
+    const d = dialectFromPool(this.pool);
     let sql = 'SELECT COUNT(*)::int AS cnt FROM memories WHERE superseded_by IS NULL';
     const params: unknown[] = [];
     if (config?.memoryTypes && config.memoryTypes.length > 0) {
-      sql += ' AND memory_type = ANY($1)';
-      params.push(config.memoryTypes);
+      sql += ` AND ${colInParamArray(d, 'memory_type', 1)}`;
+      params.push(jsonParam(d, config.memoryTypes));
     }
     if (config?.projectId) {
       const idx = params.length + 1;
@@ -110,20 +112,21 @@ export class MemoryMerger {
     const memoryTypes = config?.memoryTypes;
     const projectId = config?.projectId;
 
+    const d = dialectFromPool(this.pool);
     const conditions: string[] = ['m.superseded_by IS NULL'];
     const params: unknown[] = [];
     let paramIdx = 0;
 
     if (excludeTypes.length > 0) {
       paramIdx++;
-      conditions.push(`m.memory_type != ALL($${paramIdx})`);
-      params.push(excludeTypes);
+      conditions.push(colNotInParamArray(d, 'm.memory_type', paramIdx));
+      params.push(jsonParam(d, excludeTypes));
     }
 
     if (memoryTypes && memoryTypes.length > 0) {
       paramIdx++;
-      conditions.push(`m.memory_type = ANY($${paramIdx})`);
-      params.push(memoryTypes);
+      conditions.push(colInParamArray(d, 'm.memory_type', paramIdx));
+      params.push(jsonParam(d, memoryTypes));
     }
 
     if (projectId) {
@@ -183,11 +186,11 @@ export class MemoryMerger {
 
     await this.pool.query(
       `UPDATE memories
-       SET superseded_by = $1, superseded_at = now()
-       WHERE id = ANY($2)
+       SET superseded_by = $1, superseded_at = ${nowFn(dialectFromPool(this.pool))}
+       WHERE ${colInParamArray(dialectFromPool(this.pool), 'id', 2)}
          AND superseded_by IS NULL
          AND id != $1`,
-      [group.canonicalId, duplicateIds],
+      [group.canonicalId, jsonParam(dialectFromPool(this.pool), duplicateIds)],
     );
 
     await this.pool.query(

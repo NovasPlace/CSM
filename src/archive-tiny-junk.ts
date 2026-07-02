@@ -2,6 +2,8 @@
 // Reversible archive machinery for tiny_type_specific_junk candidates.
 // Candidate definition mirrors src/memory-governance-report.ts filterTypeSpecificJunk.
 import type { DatabaseClient, DatabasePool } from './types.js';
+import { nowFn, dialectFromPool, colInParamArray, jsonParam, ageDaysExpr } from './db/query-dialect.js';
+import type { QueryDialect } from './db/query-dialect.js';
 
 export const ARCHIVE_REASON = 'tiny_type_specific_junk';
 const ARCHIVE_SOURCE = 'phase2c5_archive_tiny_junk';
@@ -82,7 +84,8 @@ export class TinyJunkArchiver {
     const report = baseArchiveReport(options, counts, rows, batchId);
     if (report.dryRun || rows.length === 0) return report;
     const ids = rows.map((r) => r.id);
-    report.updatedCount = await withTransaction(pool, (client) => applyArchive(client, ids, batchId, report.source, report.note));
+    const d = dialectFromPool(pool);
+    report.updatedCount = await withTransaction(pool, (client) => applyArchive(client, d, ids, batchId, report.source, report.note));
     report.batchCountAfter = await countBatch(pool, batchId);
     return report;
   }
@@ -163,26 +166,27 @@ function baseRestoreReport(options: TinyJunkRestoreOptions, ids: number[]): Tiny
   };
 }
 
-function junkWhereClause() {
+function junkWhereClause(d: QueryDialect) {
   return [
     'm.superseded_by IS NULL',
     'm.archived_at IS NULL',
-    `m.memory_type = ANY($1::text[])`,
+    colInParamArray(d, 'm.memory_type', 1),
     `length(m.content) < $2`,
-    `EXTRACT(EPOCH FROM (now() - m.created_at)) / 86400 >= $3`,
+    `${ageDaysExpr(d, 'm.created_at')} >= $3`,
     `COALESCE(m.access_count, 0) <= $4`,
     `COALESCE(r.recall_count, 0) = 0`,
     `COALESCE(mq.score, 0.3) <= $5`,
   ].join(' AND ');
 }
 
-function junkParams(params: JunkParams) {
-  return [params.junkTypes, params.maxContentLength, params.minAgeDays, params.lowAccessMax, params.maxQualityScore];
+function junkParams(params: JunkParams, d: QueryDialect) {
+  return [jsonParam(d, params.junkTypes), params.maxContentLength, params.minAgeDays, params.lowAccessMax, params.maxQualityScore];
 }
 
 async function loadCounts(pool: DatabasePool, params: JunkParams): Promise<CountRow> {
-  const where = junkWhereClause();
-  const args = junkParams(params);
+  const d = dialectFromPool(pool);
+  const where = junkWhereClause(d);
+  const args = junkParams(params, d);
   const result = await pool.query(
     `WITH junk AS (
        SELECT m.id
@@ -202,8 +206,9 @@ async function loadCounts(pool: DatabasePool, params: JunkParams): Promise<Count
 }
 
 async function loadCandidates(pool: DatabasePool, params: JunkParams, maxTotal: number): Promise<CandidateRow[]> {
-  const where = junkWhereClause();
-  const args = junkParams(params);
+  const d = dialectFromPool(pool);
+  const where = junkWhereClause(d);
+  const args = junkParams(params, d);
   const limited = maxTotal > 0 ? ' LIMIT $6' : '';
   const limitedArgs = maxTotal > 0 ? [...args, maxTotal] : args;
   const result = await pool.query(
@@ -228,18 +233,18 @@ async function loadBatchIds(pool: DatabasePool, batchId: string): Promise<number
   return result.rows.map((row) => Number((row as { id: number }).id));
 }
 
-async function applyArchive(client: DatabaseClient, ids: number[], batchId: string, source: string, note: string | null) {
+async function applyArchive(client: DatabaseClient, d: QueryDialect, ids: number[], batchId: string, source: string, note: string | null) {
   const result = await client.query(
     `UPDATE memories
-     SET archived_at = now(),
+     SET archived_at = ${nowFn(d)},
          archive_reason = $2,
          archive_batch_id = $3,
          archive_source = $4,
          archive_note = $5
-     WHERE id = ANY($1::bigint[])
+     WHERE ${colInParamArray(d, 'id', 1)}
        AND superseded_by IS NULL
        AND archived_at IS NULL`,
-    [ids, ARCHIVE_REASON, batchId, source, note],
+    [jsonParam(d, ids), ARCHIVE_REASON, batchId, source, note],
   );
   return result.rowCount ?? 0;
 }

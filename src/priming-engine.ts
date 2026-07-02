@@ -3,6 +3,7 @@
 // Traverses linked memories to find related context
 
 import { Database } from './database.js';
+import { paramInColArray } from './db/query-dialect.js';
 import { Memory } from './types.js';
 
 export interface CascadeResult {
@@ -152,7 +153,7 @@ export class PrimingEngine {
     
     const result = await pool.query(
       `SELECT * FROM memories 
-       WHERE $1 = ANY(linked_memory_ids)
+       WHERE ${paramInColArray(this.database.dialect, 1, 'linked_memory_ids')}
        ORDER BY importance DESC, accessed_at DESC`,
       [memoryId]
     );
@@ -189,7 +190,7 @@ export class PrimingEngine {
     await pool.query(
       `UPDATE memories 
        SET linked_memory_ids = array_append(linked_memory_ids, $1)
-       WHERE id = $2 AND NOT ($1 = ANY(linked_memory_ids))`,
+       WHERE id = $2 AND NOT (${paramInColArray(this.database.dialect, 1, 'linked_memory_ids')})`,
       [memoryId2, memoryId1]
     );
 
@@ -197,7 +198,7 @@ export class PrimingEngine {
     await pool.query(
       `UPDATE memories 
        SET linked_memory_ids = array_append(linked_memory_ids, $1)
-       WHERE id = $2 AND NOT ($1 = ANY(linked_memory_ids))`,
+       WHERE id = $2 AND NOT (${paramInColArray(this.database.dialect, 1, 'linked_memory_ids')})`,
       [memoryId1, memoryId2]
     );
   }

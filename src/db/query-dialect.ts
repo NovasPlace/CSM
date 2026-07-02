@@ -63,6 +63,36 @@ export function jsonExtractValue(d: QueryDialect, col: string, key: string): str
   return `${col}->'${key}'`;
 }
 
+/** Age in days: PG EXTRACT(EPOCH)/86400, SQLite julianday diff */
+export function ageDaysExpr(d: QueryDialect, col: string): string {
+  if (d === 'sqlite') {
+    return `julianday('now') - julianday(${col})`;
+  }
+  return `EXTRACT(EPOCH FROM (now() - ${col})) / 86400`;
+}
+export function colInParamArray(d: QueryDialect, col: string, paramIndex: number): string {
+  if (d === 'sqlite') {
+    return `${col} IN (SELECT value FROM json_each($${paramIndex}))`;
+  }
+  return `${col} = ANY($${paramIndex})`;
+}
+
+/** $N = ANY(col_array): PG scalar-in-column-array, SQLite json_each membership. */
+export function paramInColArray(d: QueryDialect, paramIndex: number, col: string): string {
+  if (d === 'sqlite') {
+    return `EXISTS (SELECT 1 FROM json_each(${col}) WHERE json_each.value = $${paramIndex})`;
+  }
+  return `$${paramIndex} = ANY(${col})`;
+}
+
+/** col != ALL($N): PG scalar-not-in-param-array, SQLite NOT IN json_each. */
+export function colNotInParamArray(d: QueryDialect, col: string, paramIndex: number): string {
+  if (d === 'sqlite') {
+    return `${col} NOT IN (SELECT value FROM json_each($${paramIndex}))`;
+  }
+  return `${col} != ALL($${paramIndex})`;
+}
+
 /** JSON containment: PG col @> $N::jsonb, SQLite json_each membership */
 export function jsonContainsParam(d: QueryDialect, col: string, paramIndex: number): string {
   if (d === 'sqlite') {

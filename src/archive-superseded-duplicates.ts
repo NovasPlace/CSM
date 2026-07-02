@@ -1,4 +1,6 @@
 import type { DatabaseClient, DatabasePool } from './types.js';
+import { nowFn, dialectFromPool, colInParamArray, jsonParam } from './db/query-dialect.js';
+import type { QueryDialect } from './db/query-dialect.js';
 
 export const ARCHIVE_REASON = 'already_superseded_duplicate';
 const ARCHIVE_SOURCE = 'phase2c4_archive_apply';
@@ -52,7 +54,8 @@ export class SupersededDuplicateArchiver {
     const batchId = options.batchId ?? makeBatchId();
     const report = baseArchiveReport(options, counts, ids, batchId);
     if (report.dryRun || ids.length === 0) return report;
-    report.updatedCount = await withTransaction(pool, (client) => applyArchive(client, ids, batchId, report.source, report.note));
+    const d = dialectFromPool(pool);
+    report.updatedCount = await withTransaction(pool, (client) => applyArchive(client, d, ids, batchId, report.source, report.note));
     report.batchCountAfter = await countBatch(pool, batchId);
     return report;
   }
@@ -138,18 +141,18 @@ async function loadBatchIds(pool: DatabasePool, batchId: string): Promise<number
   return result.rows.map((row) => Number((row as { id: number }).id));
 }
 
-async function applyArchive(client: DatabaseClient, ids: number[], batchId: string, source: string, note: string | null) {
+async function applyArchive(client: DatabaseClient, d: QueryDialect, ids: number[], batchId: string, source: string, note: string | null) {
   const result = await client.query(
     `UPDATE memories
-     SET archived_at = now(),
+     SET archived_at = ${nowFn(d)},
          archive_reason = $2,
          archive_batch_id = $3,
          archive_source = $4,
          archive_note = $5
-     WHERE id = ANY($1::bigint[])
+     WHERE ${colInParamArray(d, 'id', 1)}
        AND superseded_by IS NOT NULL
        AND (archived_at IS NULL OR archive_reason IS DISTINCT FROM $2)`,
-    [ids, ARCHIVE_REASON, batchId, source, note],
+    [jsonParam(d, ids), ARCHIVE_REASON, batchId, source, note],
   );
   return result.rowCount ?? 0;
 }
