@@ -1,8 +1,9 @@
 import { PluginContext } from "../plugin-context.js";
 import { promises as fs } from "fs";
-import { join, normalize } from "path";
+import { join } from "path";
 import { autoDocumentChange, reconcileSystemMap, initializeDocsForProject } from "./doc-analyzer.js";
 import { reconcileArchitectureDoc } from "./architecture-doc.js";
+import { getLogger } from "../logger.js";
 
 export const DEFAULT_AUTO_DOCS_CONFIG = {
   enabled: true,
@@ -121,11 +122,11 @@ export async function flushDocUpdates(context?: PluginContext, workspaceDir?: st
   try {
     const reconResult = await reconcileSystemMap(docsDir, projectDir);
     if (reconResult.added > 0 || reconResult.updated > 0 || reconResult.removed > 0) {
-      console.log(`[auto-docs] SYSTEM_MAP reconciled: +${reconResult.added} ~${reconResult.updated} -${reconResult.removed}`);
+      getLogger().info(`[auto-docs] SYSTEM_MAP reconciled`, { added: reconResult.added, updated: reconResult.updated, removed: reconResult.removed });
     }
     const archResult = await reconcileArchitectureDoc(docsDir, projectDir);
     if (archResult.wrote) {
-      console.log(`[auto-docs] ARCHITECTURE refreshed: files=${archResult.fileCount} edges=${archResult.edgeCount}`);
+      getLogger().info(`[auto-docs] ARCHITECTURE refreshed`, { fileCount: archResult.fileCount, edgeCount: archResult.edgeCount });
     }
   } catch (err) {
     console.error("[auto-docs] reconcile error:", err);
@@ -176,7 +177,7 @@ export async function ensureProjectDocsInitialized(projectDir: string): Promise<
   initializedProjects.add(projectDir);
   try {
     await initializeDocsForProject(projectDir);
-    console.log(`[auto-docs] Initialized docs for project: ${projectDir}`);
+    getLogger().info(`[auto-docs] Initialized docs`, { projectDir });
   } catch (err) {
     console.error(`[auto-docs] Failed to initialize docs for ${projectDir}:`, err);
   }

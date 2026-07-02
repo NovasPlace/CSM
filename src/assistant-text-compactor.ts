@@ -3,7 +3,7 @@
 
 import { estimateTokens } from './token-bucket-analyzer.js';
 
-const CHARS_PER_TOKEN = 4;
+// chars per token constant removed — unused
 
 export interface AssistantCompactorConfig {
   enabled: boolean;

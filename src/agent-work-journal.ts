@@ -131,7 +131,7 @@ export class AgentWorkJournal {
           ? (this.redactor ? this.redactor.redact(entry.errorSummary).text : entry.errorSummary)
           : null;
 
-        const result = await this.pool.query(
+        const _result = await this.pool.query(
           `INSERT INTO agent_work_journal
            (session_id, project_id, entry_type, tool_name, intent, target,
             result_summary, error_summary, files_touched, token_snapshot)

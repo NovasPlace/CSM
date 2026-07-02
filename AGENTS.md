@@ -1,5 +1,5 @@
 ## Goal
-- Framework Hardening Phase 1 complete; Phase 2A/2B/2C/2D complete; Phase 3A/3B/3C/3D/3F/3G/3H complete; lint baseline locked at 249 warnings
+- Framework Hardening Phase 1 complete; Phase 2A/2B/2C/2D complete; Phase 3A/3B/3C/3D/3F/3G/3H/3I complete; lint baseline locked at 249 warnings
 
 ## Constraints & Preferences
 - Each sub-phase is behavior-preserving, boring, verbatim moves first
@@ -7,7 +7,7 @@
 - Database URL: dev/test=localhost, production=explicit flag
 - CI with Postgres service container
 - ESLint rules start as warnings, tighten later
-- Lint warning baseline: **249 warnings** (max-warnings=249 prevents unbounded growth)
+- Lint warning baseline: **154 warnings** (max-warnings=249 prevents unbounded growth)
 - `caughtErrorsIgnorePattern: '^_'` added to `@typescript-eslint/no-unused-vars` — catch blocks with `_err` are allowed
 - `better-sqlite3` doesn't support `?NNN` format with spread `.run()` — must use anonymous `?` parameters
 - SQLite schema: TEXT for timestamps/JSON/arrays/embeddings; INTEGER PRIMARY KEY AUTOINCREMENT for PKs
@@ -15,11 +15,10 @@
 - `memories.session_id` is nullable (FK on sessions, NULL bypasses it)
 
 ## Lint Debt Classification (Locked)
-- **8 `no-console` warnings**: Intentional/allowlisted (benchmark, hooks, logger internal) — not to be fixed
-- **~190 `no-explicit-any` warnings**: Typed-debt — NOT mechanical cleanup. Requires per-module type-design work (typed DTOs, generic row mappers). Do not attempt blanket `any`→`unknown` replacement (proven to cause 55+ cascading build errors)
-- **~51 `no-unused-vars` warnings**: Mix of unused imports and unused function args — some safe to fix, some need interface conformance
-- **~5 `no-case-declarations` + misc**: Minor, fixable opportunistically
-- `max-warnings=249` — any new warning added to src/ will fail lint
+- **0 `no-console` warnings**: All 15 intentional console calls documented with `eslint-disable-next-line no-console` rationale
+- **~140 `no-explicit-any` warnings**: Typed-debt — NOT mechanical cleanup. Requires per-module type-design work (typed DTOs, generic row mappers). Do not attempt blanket `any`→`unknown` replacement (proven to cause 55+ cascading build errors)
+- **~7 `no-unused-vars` warnings**: External API generic params (`opentui.d.ts`) — skipped by design
+- **`max-warnings=249`** — any new warning added to src/ will fail lint
 
 ## Progress
 ### Done
@@ -52,7 +51,7 @@
 - None
 
 ### Blocked
-- **`no-explicit-any` cleanup (~190 warnings)**: Blocked by cascading type errors. Requires Phase 2X (Type Debt Reduction) — per-module typed DTOs and generic row mappers, not blanket replacement.
+- **`no-explicit-any` cleanup (~140 warnings)**: Blocked by cascading type errors. Requires Phase 2X (Type Debt Reduction) — per-module typed DTOs and generic row mappers, not blanket replacement.
 
 ### Pre-existing Test Debt
 - ~~**1 failing test**: `test/backfill-recall-telemetry.test.ts` line 209 — "protects old recalled memories while still surfacing old unrecalled ones" fails because prune-protection by recall count is not working for PG. Present since Phase 3B (`ae5e309`). Not caused by Phase 3D changes. Root cause: `pruneMemories`/`loadPruneRows` recall_count LATERAL join returns 0 even when `memory_recall_events` rows exist. Needs investigation in prune-scorer logic.~~
@@ -111,7 +110,7 @@
 - ✅ Removed ~20 unused imports (warnings 271 → 251 → 249)
 
 ## Current Lint Status
-- `npm run lint:src`: 0 errors, **249 warnings** → exits 0
+- `npm run lint:src`: 0 errors, **154 warnings** → exits 0
 - `npm run lint:all`: ~774 errors + ~261 warnings across test files (excluded from lint:src)
 
 ## Phase 2X: Type Debt Reduction (Future)

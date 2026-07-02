@@ -1,4 +1,4 @@
-import type { CompactionReport, SessionAnalytics, ProviderPricing, BudgetMode, CompressedPartDetail, ToolDominanceTrendPoint } from './types.js';
+import type { CompactionReport, SessionAnalytics, ProviderPricing, BudgetMode, CompressedPartDetail } from './types.js';
 import type { CompileResult } from './context-compiler.js';
 import { estimateTokens } from './token-bucket-analyzer.js';
 

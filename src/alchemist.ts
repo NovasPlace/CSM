@@ -3,7 +3,7 @@ import type {
   AlchemistSource, AlchemistConfig, ExtractedCapability,
   GapReport, Blueprint,
 } from './types.js';
-import { estimateTokens } from './token-bucket-analyzer.js';
+
 import type { Redactor } from './redactor.js';
 
 export const DEFAULT_ALCHEMIST_CONFIG: AlchemistConfig = {

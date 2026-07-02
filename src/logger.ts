@@ -74,11 +74,13 @@ export class Logger {
 
   debug(message: string, context?: LoggerContext): void {
     if (this.verbose) {
+      // eslint-disable-next-line no-console -- logger's own internal debug output
       console.log(this.formatMessage('debug', message, context));
     }
   }
 
   info(message: string, context?: LoggerContext): void {
+    // eslint-disable-next-line no-console -- logger's own internal info output
     console.log(this.formatMessage('info', message, context));
   }
 

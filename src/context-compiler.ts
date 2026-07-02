@@ -472,7 +472,7 @@ export function compileContext(
   let allDetails: CompressedPartDetail[] = [];
   let totalSaved = 0;
   for (let pass = 0; pass < 3; pass++) {
-    const { candidates, pinnedCategories } = classifyAndCollect(messages, adaptiveWindow, pressureRatio);
+    const { candidates, pinnedCategories: _pinnedCategories } = classifyAndCollect(messages, adaptiveWindow, pressureRatio);
     const overBudget = beforeTokens - totalSaved - budget;
     if (overBudget <= 0) break;
     const { saved, details } = compressToFit(candidates, overBudget);

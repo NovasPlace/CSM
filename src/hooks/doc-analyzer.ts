@@ -1,6 +1,5 @@
-import { PluginContext } from "../plugin-context.js";
 import { promises as fs } from "fs";
-import { join, normalize, sep } from "path";
+import { join } from "path";
 import { reconcileArchitectureDoc } from "./architecture-doc.js";
 
 interface CodeChange {
@@ -358,7 +357,7 @@ export async function reconcileSystemMap(docsDir?: string, projectDir?: string):
   }
 
   const docEntries = parseSystemMapEntries(systemMapContent);
-  const docFileSet = new Set(docEntries.map(e => e.filePath));
+  const _docFileSet = new Set(docEntries.map(e => e.filePath));
   const tableHeader = "| File | Exports | Type | Role |";
 
   for (const sf of allSourceFiles) {

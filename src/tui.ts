@@ -37,7 +37,7 @@ function readStats(kv: { get: (key: string, fallback: null) => unknown }): Memor
         compactions: typeof s.compactions === "number" ? s.compactions : 0,
       };
     }
-     } catch (e) {
+     } catch (_e) {
        // Error reading stats, return defaults
      }
   return defaultStats;
@@ -115,7 +115,7 @@ const mod: TuiPluginModule = {
 
     try {
       api.slots.register({
-        sidebar_content: (props: { session_id: string }) => {
+        sidebar_content: (_props: { session_id: string }) => {
           try {
             const s = readStats(api.kv);
             if (s.totalMemories === 0 || !h) return null;
@@ -131,25 +131,25 @@ const mod: TuiPluginModule = {
                 ? h("text", { dim: true }, `  Last: ${new Date(s.lastCheckpoint).toLocaleString()}`)
                 : null,
              );
-           } catch (err) {
+           } catch (_err) {
             getLogger().warn('sidebar_content render failed');
             return null;
           }
         },
-        sidebar_footer: (props: { session_id: string }) => {
+        sidebar_footer: (_props: { session_id: string }) => {
           try {
             const s = readStats(api.kv);
             if (s.totalMemories === 0 || !h) return null;
 
             return h("text", { dim: true },
               `  ${s.totalMemories} mem | ${s.contextPressure}% ${formatPressure(s.contextPressure)}`);
-           } catch (err) {
+           } catch (_err) {
             getLogger().warn('sidebar_footer render failed');
             return null;
           }
         },
            });
-           } catch (err) {
+           } catch (_err) {
              getLogger().warn('route render failed');
              return;
            }
@@ -172,7 +172,7 @@ const mod: TuiPluginModule = {
               h("text", {}, `  Compactions:       ${s.compactions}`),
               h("text", {}, `  Last Checkpoint:   ${s.lastCheckpoint ? new Date(s.lastCheckpoint).toLocaleString() : "none"}`),
             );
-           } catch (err) {
+           } catch (_err) {
              getLogger().warn('route render failed');
              return;
            }
@@ -180,7 +180,7 @@ const mod: TuiPluginModule = {
       }]);
 
        disposes.push(routeDispose);
-     } catch (err) {
+     } catch (_err) {
       getLogger().warn('Route registration failed');
     }
 
@@ -193,7 +193,7 @@ const mod: TuiPluginModule = {
             description: "Show cross-session memory statistics",
             category: "Memory",
             onSelect: () => {
-              try { api.route.navigate("memory"); } catch (e) {
+              try { api.route.navigate("memory"); } catch (_e) {
                // Navigation failed
              }
             },
@@ -209,13 +209,13 @@ const mod: TuiPluginModule = {
       api.lifecycle.onDispose(() => {
         clearInterval(pollTimer);
         for (const fn of disposes) {
-           try { fn(); } catch (e) {
+           try { fn(); } catch (_e) {
              // Disposal failed
            }
         }
         disposes.length = 0;
        });
-        } catch (e) {
+        } catch (_e) {
           // Lifecycle hook registration failed
         }
 

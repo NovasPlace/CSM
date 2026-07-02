@@ -5,7 +5,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { MemoryManager } from './memory-manager.js';
-import { MemorySaveOptions } from './types.js';
 import { getLogger } from './logger.js';
 
 const execAsync = promisify(exec);

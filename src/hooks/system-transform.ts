@@ -4,17 +4,15 @@ import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../
 import { buildManifest } from '../context-cache-manifest.js';
 import { getActiveGoal } from '../goal-schema.js';
 import { SelfContinuityGenerator } from '../self-continuity-generator.js';
-import { SelfContinuityIntegration } from '../self-continuity-integration.js';
 import { CrossSessionCausalStitcher } from '../cross-session-causal-stitcher.js';
-import { FailureTraceStore, formatFailureTraceForInjection } from '../failure-trace-store.js';
+import { FailureTraceStore } from '../failure-trace-store.js';
+import { getLogger } from '../logger.js';
 import { CANONICAL_PHASES, CANONICAL_LINKS } from '../self-continuity-narrative-canonical.js';
 import { CANONICAL_STITCHES } from '../self-continuity-narrative-canonical.js';
 import { MemoryGovernance } from '../memory_governance.js';
 import { buildResumeInjection, type WorkJournalInjectDeps } from '../work-journal-inject.js';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-
-const LESSON_INJECTION_POSITION = 'after-evidence';
 
 const TELEMETRY_LOG = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.cross-session-memory', 'self-continuity-telemetry.jsonl');
 const PROMPT_INJECTION_DISABLE_ENV = 'CSM_DISABLE_PROMPT_INJECTION';
@@ -113,7 +111,7 @@ export function createSystemTransformHook(ctx: PluginContext) {
     try {
       output.system = normalizeSystemEntries(output.system);
       if (process.env[PROMPT_INJECTION_DISABLE_ENV] === '1') {
-        console.log('[CrossSessionMemory] Prompt injection disabled via CSM_DISABLE_PROMPT_INJECTION=1');
+        getLogger().warn('[CrossSessionMemory] Prompt injection disabled via CSM_DISABLE_PROMPT_INJECTION=1');
         return output;
       }
 
@@ -240,7 +238,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             };
             const injection = buildResumeInjection(payload, deps);
             output.system.push(injection);
-            console.log(`[WorkJournal] Injected resume payload for session ${input.sessionID.slice(0, 8)} (${payload.totalEntries} entries)`);
+            getLogger().info('[WorkJournal] Injected resume payload', { sessionId: input.sessionID.slice(0, 8), entries: payload.totalEntries });
           }
         } catch (wjErr) {
           console.error('[WorkJournal] Inject hook error:', wjErr);
@@ -637,7 +635,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         systemPrompt: sysTokens, toolSchemas: 0, pluginInserts: 0,
         opencodeInternal: 0,
       };
-      console.log(`[TokenBuckets] system: ${formatBreakdown(sysBuckets)}`);
+      getLogger().debug(`[TokenBuckets] system`, { breakdown: formatBreakdown(sysBuckets) });
 
       return output;
     } catch (error) {

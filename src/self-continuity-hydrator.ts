@@ -3,7 +3,6 @@ import type {
   SelfContinuityRecord,
   SelfContinuityConfig,
 } from './self-continuity-types.js';
-import { DEFAULT_SELF_CONTINUITY_CONFIG } from './self-continuity-types.js';
 import { SelfContinuityGenerator } from './self-continuity-generator.js';
 import { redact } from './redactor.js';
 import { jsonExtractText, dialectFromPool } from './db/query-dialect.js';

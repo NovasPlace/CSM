@@ -5,7 +5,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { MemoryManager } from './memory-manager.js';
-import { MemorySaveOptions } from './types.js';
 import { autoDocumentChange } from './hooks/doc-analyzer.js';
 import { getLogger } from './logger.js';
 
@@ -342,7 +341,7 @@ This README is maintained by the auto-docs system. When files are added to this 
    */
   private formatFileChange(event: FileChangeEvent, symbols: string[]): string {
     const fileName = path.basename(event.filePath);
-    const ext = this.getFileExtension(event.filePath);
+    const _ext = this.getFileExtension(event.filePath);
     
     let content = `[${event.eventType}] ${fileName}`;
     

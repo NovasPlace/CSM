@@ -1,5 +1,3 @@
-import { Database } from "./database.js";
-
 export type ExtractedConcept = {
   type: "file" | "function" | "error" | "decision" | "tool" | "concept" | "dependency";
   value: string;
@@ -23,7 +21,7 @@ const ERROR_REGEX = /(?:Error|Exception|Fail|Failed|panic|crash|traceback|stack 
 const DECISION_KEYWORDS = ["decided", "decision", "chose", "selected", "picked", "will use", "going to use", "switching to", "migrating to", "adopted", "replaced with"];
 const TOOL_PATTERNS = ["memory_search", "memory_save", "memory_recall", "context_compact", "checkpoint_create", "checkpoint_list", "auto_docs", "csm_memory_search", "csm_memory_save", "csm_memory_list", "csm_memory_context", "csm_memory_lesson", "csm_memory_transcript", "csm_memory_distill", "csm_memory_distilled_view", "csm_memory_compact"];
 
-export function extractConcepts(text: string, sessionId?: string): ExtractionResult {
+export function extractConcepts(text: string, _sessionId?: string): ExtractionResult {
   const concepts: ExtractedConcept[] = [];
 
   // Extract file paths

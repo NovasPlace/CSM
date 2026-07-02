@@ -12,7 +12,6 @@ import { MemoryManager } from './memory-manager.js';
 import { MemoryExtractor } from './memory-extractor.js';
 import { PrimingEngine } from './priming-engine.js';
 import { ContextRecallDaemon } from './context-recall.js';
-import { getLogger } from './logger.js';
 import { SubconsciousWatcher } from './subconscious.js';
 import { GitWatcher } from './git-watcher.js';
 import { LoopDetector } from './loop-detector.js';
@@ -40,7 +39,7 @@ import { disposeAll } from './hooks/dispose-hooks.js';
 export async function registerHooks(
   ctx: PluginInput,
   options?: PluginOptions,
-  defaultExports: any = {}
+  _defaultExports: any = {}
 ): Promise<Hooks> {
   const config = validateAndReturnConfig();
   const mergedConfig = { ...config, ...(options as any ?? {}) };
@@ -68,14 +67,14 @@ export async function registerHooks(
   const memoryExtractor = new MemoryExtractor(database, memoryManager, config.extractor);
   const primingEngine = new PrimingEngine(database);
   const contextRecall = new ContextRecallDaemon(database, config.contextRecallInterval);
-  const tokenLedger = new TokenBudgetLedger(database.getPool());
+  const _tokenLedger = new TokenBudgetLedger(database.getPool());
   const subconscious = new SubconsciousWatcher(memoryManager, config.subconsciousWatchInterval, config.filterBuildArtifacts);
   const gitWatcher = new GitWatcher(memoryManager, config.gitPollInterval);
   const loopDetector = new LoopDetector(config.loopDetectionThreshold);
   const contextPressure = new ContextPressure(config.contextPressureRecommend, config.contextPressureDemand);
   const toolDistiller = new ToolCallDistiller(config.distiller);
   const contextCompactor = new ContextCompactor(config.compactor);
-  const contextGovernor = new AdaptiveContextGovernor(config.contextCompiler, config.contextGovernor);
+  const _contextGovernor = new AdaptiveContextGovernor(config.contextCompiler, config.contextGovernor);
 
   const projectId = ctx.directory;
 
@@ -109,7 +108,7 @@ export async function registerHooks(
     projectId: ctx.directory ?? null,
   };
   const checkpointInjectDeps: CheckpointInjectDeps = { store: checkpointStore, config: config.checkpoint };
-  const autoCheckpointCtx = { checkpointStore, config: config.checkpoint };
+  const _autoCheckpointCtx = { checkpointStore, config: config.checkpoint };
 
   const workJournal = new AgentWorkJournal(database.getPool(), config.workJournal, redactor);
   const lessonTriggers = new LessonTriggerCache(database.getPool());

@@ -5,7 +5,7 @@ import { tool } from '@opencode-ai/plugin/tool';
 import { MemoryManager } from './memory-manager.js';
 import { ContextRecallDaemon } from './context-recall.js';
 import { PrimingEngine } from './priming-engine.js';
-import { Memory, MemoryType, MemoryCandidate, MemoryApproval } from './types.js';
+import { MemoryType, MemoryApproval } from './types.js';
 import { MemoryExtractor } from './memory-extractor.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
@@ -140,7 +140,7 @@ export function memoryDeleteTool(memoryManager: MemoryManager) {
     args: {
       id: tool.schema.number().describe('Memory ID to delete'),
     },
-    async execute(args, context) {
+    async execute(args, _context) {
       const deleted = await memoryManager.deleteMemory(args.id);
 
       if (deleted) {
@@ -167,7 +167,7 @@ export function memoryContextTool(contextRecall: ContextRecallDaemon) {
   return tool({
     description: 'Get the current context brief for this session when the user explicitly asks about memory or prior context. Do not use for simple greetings or small talk.',
     args: {},
-    async execute(args, context) {
+    async execute(_args, _context) {
       const contextBrief = await contextRecall.getContextBrief();
 
       if (!contextBrief) {
@@ -445,7 +445,7 @@ export function memoryCandidateListTool(memoryExtractor: MemoryExtractor) {
       sessionId: tool.schema.string().optional().describe('Filter by session ID'),
       limit: tool.schema.number().optional().describe('Max results (default 50)'),
     },
-    async execute(args, context) {
+    async execute(args, _context) {
       const candidates = await memoryExtractor.getPendingCandidates(args.sessionId, args.limit ?? 50);
 
       let output = `Found ${candidates.length} pending candidates:\n\n`;
@@ -482,7 +482,7 @@ export function memoryCandidateApproveTool(memoryExtractor: MemoryExtractor) {
       editedImportance: tool.schema.number().optional().describe('Edited importance 0-1 (optional)'),
       editedTags: tool.schema.array(tool.schema.string()).optional().describe('Edited tags (optional)'),
     },
-    async execute(args, context) {
+    async execute(args, _context) {
       const approval: MemoryApproval = {
         candidateId: args.id,
         action: 'approve',
@@ -514,7 +514,7 @@ export function memoryCandidateRejectTool(memoryExtractor: MemoryExtractor) {
     args: {
       id: tool.schema.string().describe('Candidate ID to reject'),
     },
-    async execute(args, context) {
+    async execute(args, _context) {
       const approval: MemoryApproval = {
         candidateId: args.id,
         action: 'reject',
@@ -540,7 +540,7 @@ export function memoryProjectListTool(memoryManager: MemoryManager) {
   return tool({
     description: 'List all project scopes with memory counts.',
     args: {},
-    async execute(args, context) {
+    async execute(_args, _context) {
       const projects = await memoryManager.getAllProjectScopes();
 
       let output = `Found ${projects.length} projects:\n\n`;
@@ -567,7 +567,7 @@ export function memoryCleanupTool(memoryManager: MemoryManager) {
   return tool({
     description: 'Run cleanup of expired memories and candidates based on TTL config.',
     args: {},
-    async execute(args, context) {
+    async execute(_args, _context) {
       const result = await memoryManager.cleanupExpiredMemories();
 
       return {
@@ -731,7 +731,7 @@ export function memoryCompactTool(contextCompactor: ContextCompactor) {
     description:
       'Report on context compaction: last compaction result plus cumulative session savings. Shows how many tool-call outputs were replaced with distilled references and how many tokens were saved.',
     args: {},
-    async execute(args, context) {
+    async execute(_args, _context) {
       const result = contextCompactor.getLastResult();
       const cumulative = contextCompactor.getCumulativeStats();
 

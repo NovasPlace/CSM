@@ -1,8 +1,6 @@
 import type {
   GrowthCategory,
   GrowthEvent,
-  GrowthEventOutcome,
-  BaselineComparison,
   GrowthMetrics,
   CategoryMetrics,
   BehavioralGrowthTracker,

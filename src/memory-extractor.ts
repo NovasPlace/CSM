@@ -7,10 +7,8 @@ import { MemoryManager } from './memory-manager.js';
 import { getLogger } from './logger.js';
 import { nowFn } from './db/query-dialect.js';
 import {
-  Memory,
   MemoryType,
   MemoryEmotion,
-  MemorySource,
   MemoryCandidate,
   MemoryCandidateStatus,
   MemoryApproval,

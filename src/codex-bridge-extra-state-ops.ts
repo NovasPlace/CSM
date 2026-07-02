@@ -93,7 +93,7 @@ export async function runtimeStatusOp(deps: CodexBridgeExtraDeps, sessionId?: st
     const countResult = await deps.database.getPool().query('SELECT COUNT(*) as count FROM memories');
     databaseConnected = true;
     postgresMemoryCount = parseInt(String((countResult.rows[0] as Record<string, unknown>).count ?? 0), 10);
-   } catch (e) {
+   } catch (_e) {
      // Database not available, skip memory count
    }
   return {

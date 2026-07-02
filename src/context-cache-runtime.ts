@@ -102,7 +102,7 @@ export async function cacheOldContext(
           tokens,
           messageIndex: i,
         }, redactor);
-      } catch (e) {
+      } catch (_e) {
         continue;
       }
 

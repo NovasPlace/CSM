@@ -25,7 +25,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
   const {
     memoryManager, database, primingEngine, contextRecall,
     toolDistiller, memoryExtractor, redactor, contextCompactor,
-    checkpointStore, checkpointToolDeps, config, embeddings,
+    checkpointStore: _checkpointStore, checkpointToolDeps, config, embeddings,
   } = pluginCtx;
 
   const backfill = new EmbeddingBackfill(database, embeddings);

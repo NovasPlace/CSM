@@ -1,4 +1,3 @@
-import type { DatabasePool } from './types.js';
 import type { HydratedSelfContinuityRecord } from './self-continuity-hydrator.js';
 import type { HydratedCausalThread } from './self-continuity-causal-thread.js';
 import { measureDrift } from './self-drift-tracker.js';

@@ -1,4 +1,3 @@
-import path from 'node:path';
 import readline from 'node:readline';
 import { CodexMemoryBridge } from './codex-bridge.js';
 import { invokeMcpTool, MCP_TOOLS } from './codex-mcp-tools.js';
@@ -27,13 +26,6 @@ function textResult(payload: unknown) {
     content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
     structuredContent: payload,
   };
-}
-
-function requireString(value: unknown, name: string): string {
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`${name} must be a non-empty string.`);
-  }
-  return value.trim();
 }
 
 function getBridge(): Promise<CodexMemoryBridge> {

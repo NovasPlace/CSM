@@ -24,14 +24,6 @@ function extractText(parts: any[] | undefined): string {
     .join('\n');
 }
 
-function extractToolNames(parts: any[] | undefined): string[] {
-  if (!parts) return [];
-  return parts
-    .filter((p) => p?.type === 'tool')
-    .map((p) => p.tool)
-    .filter((t): t is string => typeof t === 'string');
-}
-
 function extractFilePaths(parts: any[] | undefined): string[] {
   if (!parts) return [];
   const paths: string[] = [];

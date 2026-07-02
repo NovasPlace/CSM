@@ -1,5 +1,5 @@
 import { Database } from "./database.js";
-import type { Memory, MemorySearchOptions } from "./types.js";
+import type { MemorySearchOptions } from "./types.js";
 import { ilikeExpr, jsonContainsParam, jsonExtractValue } from "./db/query-dialect.js";
 
 export type HybridWeights = {

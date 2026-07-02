@@ -130,7 +130,7 @@ export async function buildLinksForMemory(
           created_at: row.created_at,
         });
       }
-     } catch (err) {
+     } catch (_err) {
        getLogger().warn('Failed to create link');
      }
   }

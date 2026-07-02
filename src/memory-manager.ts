@@ -4,15 +4,15 @@
 import { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { extractConcepts } from './concept-extractor.js';
-import { buildLinksForMemory, findSharedEntities } from './memory-graph.js';
-import { hybridSearch, DEFAULT_WEIGHTS, type HybridWeights } from './hybrid-search.js';
+import { buildLinksForMemory } from './memory-graph.js';
+import { hybridSearch } from './hybrid-search.js';
 import { pruneMemories } from './prune-scorer.js';
 import { Redactor } from './redactor.js';
 import { DEFAULT_PRUNE_CONFIG } from './types.js';
 import { recordRecallBatch, type RecallTelemetrySource } from './recall-telemetry.js';
 import { applyTypeQuota } from './memory-type-quota.js';
 import { getLogger } from './logger.js';
-import { QueryDialect, nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField } from './db/query-dialect.js';
+import { nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField } from './db/query-dialect.js';
 import {
   Memory,
   MemoryType,
@@ -426,7 +426,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       }
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
-    } catch (err) {
+    } catch (_err) {
       getLogger().warn('Hybrid search failed, falling back to vector-only');
     }
 
@@ -482,7 +482,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       }
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
-    } catch (err) {
+    } catch (_err) {
       getLogger().warn('Vector search failed, falling back to text search');
       const memories = await this.textSearchFallback(options);
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
