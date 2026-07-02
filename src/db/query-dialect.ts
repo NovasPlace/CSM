@@ -4,6 +4,11 @@ export function dialectFromProvider(provider: string): QueryDialect {
   return provider === 'sqlite' ? 'sqlite' : 'pg';
 }
 
+/** Resolves the dialect from a pool, defaulting to 'pg' when getDialect is absent (e.g. raw pg.Pool). */
+export function dialectFromPool(pool: { getDialect?: () => QueryDialect }): QueryDialect {
+  return pool.getDialect?.() ?? 'pg';
+}
+
 export function nowFn(d: QueryDialect): string {
   return d === 'sqlite' ? "datetime('now')" : 'now()';
 }

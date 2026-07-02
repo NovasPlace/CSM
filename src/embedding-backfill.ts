@@ -1,6 +1,7 @@
 import type { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { getLogger } from './logger.js';
+import { nowFn } from './db/query-dialect.js';
 
 export interface EmbeddingBackfillConfig {
   /** Memories per batch (default 50) */
@@ -25,6 +26,7 @@ export interface EmbeddingBackfillResult {
 }
 
 export class EmbeddingBackfill {
+  private database: Database;
   private pool: ReturnType<Database['getPool']>;
   private embeddings: EmbeddingGenerator;
 
@@ -32,6 +34,7 @@ export class EmbeddingBackfill {
     database: Database,
     embeddings: EmbeddingGenerator,
   ) {
+    this.database = database;
     this.pool = database.getPool();
     this.embeddings = embeddings;
   }
@@ -119,10 +122,10 @@ export class EmbeddingBackfill {
     };
   }
 
-  private async storeEmbedding(memoryId: number, content: string, embedding: number[]): Promise<void> {
+   private async storeEmbedding(memoryId: number, content: string, embedding: number[]): Promise<void> {
     const vector = `[${embedding.join(',')}]`;
     await this.pool.query(
-      `UPDATE memories SET embedding = $1, updated_at = now() WHERE id = $2`,
+      `UPDATE memories SET embedding = $1, updated_at = ${nowFn(this.database.dialect)} WHERE id = $2`,
       [vector, memoryId],
     );
     await this.pool.query(

@@ -532,6 +532,8 @@ export interface DatabasePool {
   query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number | null }>;
   connect: () => Promise<DatabaseClient>;
   end: () => Promise<void>;
+  /** Returns the SQL dialect. Defaults to 'pg' when not implemented (e.g. raw pg.Pool). */
+  getDialect?: () => 'pg' | 'sqlite';
 }
 
 /** Transactional client acquired via pool.connect(); release() returns it to the pool. */

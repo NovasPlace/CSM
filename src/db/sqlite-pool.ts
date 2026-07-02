@@ -31,14 +31,17 @@ export function createSqlitePool(filepath: string): Promise<DatabasePool> {
     release: () => {},
   });
 
-  const wrapped: DatabasePool = {
-    query: (text: string, params?: unknown[]) => Promise.resolve(execQuery(text, params)),
-    connect: () => Promise.resolve(makeClient()),
-    end: () => {
-      db.close();
-      return Promise.resolve();
-    },
-  };
+   const wrapped: DatabasePool = {
+     query: (text: string, params?: unknown[]) => Promise.resolve(execQuery(text, params)),
+     connect: () => Promise.resolve(makeClient()),
+     end: () => {
+       db.close();
+       return Promise.resolve();
+     },
+     getDialect() {
+       return 'sqlite';
+     },
+   };
 
   return Promise.resolve(wrapped);
 }

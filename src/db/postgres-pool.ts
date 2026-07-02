@@ -27,11 +27,14 @@ export function createPostgresPool(databaseUrl: string): Promise<DatabasePool> {
           client.release();
         },
       };
-    },
-    async end() {
-      await pool.end();
-    },
-  };
+     },
+     async end() {
+       await pool.end();
+     },
+     getDialect() {
+       return 'pg';
+     },
+   };
 
   return Promise.resolve(wrapped);
 }

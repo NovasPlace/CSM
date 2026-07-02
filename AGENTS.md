@@ -1,5 +1,5 @@
 ## Goal
-- Framework Hardening Phase 1 complete; Phase 2B/2A.1/2A.2 complete; lint baseline locked at 249 warnings
+- Framework Hardening Phase 1 complete; Phase 2A/2B/2C/2D complete; Phase 3A/3B/3C/3D complete; lint baseline locked at 249 warnings
 
 ## Constraints & Preferences
 - Each sub-phase is behavior-preserving, boring, verbatim moves first
@@ -9,6 +9,10 @@
 - ESLint rules start as warnings, tighten later
 - Lint warning baseline: **249 warnings** (max-warnings=249 prevents unbounded growth)
 - `caughtErrorsIgnorePattern: '^_'` added to `@typescript-eslint/no-unused-vars` — catch blocks with `_err` are allowed
+- `better-sqlite3` doesn't support `?NNN` format with spread `.run()` — must use anonymous `?` parameters
+- SQLite schema: TEXT for timestamps/JSON/arrays/embeddings; INTEGER PRIMARY KEY AUTOINCREMENT for PKs
+- PostgreSQL remains default; SQLite is adapter path, not rewrite; no vector search in SQLite MVP
+- `memories.session_id` is nullable (FK on sessions, NULL bypasses it)
 
 ## Lint Debt Classification (Locked)
 - **8 `no-console` warnings**: Intentional/allowlisted (benchmark, hooks, logger internal) — not to be fixed
@@ -31,12 +35,20 @@
 - **Phase 2A.1 (Dedup Detection)**: `src/dedup-detector.ts` — exact content/title + embedding ANN. Tool `csm_memory_dedup_detect` (read-only). Tests: 8/8 pass.
 - **Phase 2A.2 (Safe Merge)**: `src/merge-tool.ts` — exact normalized content duplicates only. Schema: `memory_merges` table, `superseded_by`/`superseded_at`. Tool `csm_memory_merge`. Tests: 7/7 pass.
 - **Lint Baseline Lock**: `max-warnings=249`. Added `caughtErrorsIgnorePattern: '^_'` to ESLint config (dropped 2 catch-var warnings). Documented `any` warnings as typed-debt, `console` warnings as intentional. Confirmed: blanket `any`→`unknown` causes 55+ build errors — do not attempt.
+- **Phase 2C (Governance/Archive)**: Archive system (7,379 memories archived: 7,241 superseded + 138 tiny-junk). Governance status reports with invariant checks. Archive-aware candidate reports.
+- **Phase 3A (SQLite Design)**: `docs/PHASE3A_SQLITE_DESIGN.md` — 57 files, 24 tables catalogued. Phased plan.
+- **Phase 3B (Adapter Interface)**: `src/db/database-pool.ts` factory, `src/db/postgres-pool.ts` wrapper, `src/db/sqlite-pool.ts` adapter ($N→? translation, ::cast stripping, RETURNING detection). `DatabaseProvider` type. 11 new tests (9 sqlite + 2 postgres).
+- **Phase 3C (Schema Bootstrap)**: `src/schema/sqlite/index.ts` — 7 tables (sessions, memories, memory_chunks, memory_merges, memory_quality_scores, memory_events, memory_recall_events). `src/schema/index.ts` early-return for sqlite. 3 smoke tests.
+- **Phase 3D (Query Compatibility)**: `src/db/query-dialect.ts` — `QueryDialect` type + 11 helpers (nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField). `Database.dialect` getter. Narrow-path methods in MemoryManager patched: createSession, saveMemory, listMemories, textSearchFallback, searchMemories (sqlite→text fallback), touchMemory, storeEmbedding, mapSession, mapMemory, getEventsSince, etc. Vector search degraded to text search on SQLite.
 
 ### In Progress
 - None
 
 ### Blocked
 - **`no-explicit-any` cleanup (~190 warnings)**: Blocked by cascading type errors. Requires Phase 2X (Type Debt Reduction) — per-module typed DTOs and generic row mappers, not blanket replacement.
+
+### Pre-existing Test Debt
+- **1 failing test**: `test/backfill-recall-telemetry.test.ts` line 209 — "protects old recalled memories while still surfacing old unrecalled ones" fails because prune-protection by recall count is not working for PG. Present since Phase 3B (`ae5e309`). Not caused by Phase 3D changes. Root cause: `pruneMemories`/`loadPruneRows` recall_count LATERAL join returns 0 even when `memory_recall_events` rows exist. Needs investigation in prune-scorer logic.
 
 ## Key Decisions
 - Plain `sessionState` object (not getter-based wrappers) for mutable state shared across hook modules
@@ -45,32 +57,40 @@
 - `any`→`unknown` substitution is NOT safe at scale — requires per-file analysis and typed DTOs/generic mappers
 - Lint baseline locked at 249 — new warnings fail CI; existing debt is classified and documented
 - `caughtErrorsIgnorePattern: '^_'` allows `catch (_err)` without warning
+- SQLite RETURNING and ON CONFLICT DO UPDATE work (SQLite 3.24+/3.35+ bundled with better-sqlite3)
+- SQLite JSON ops: `json_type(col, '$.key')` replaces `col ? 'key'`; `json_extract(col, '$.key')` replaces `col->>'key'`; `json_each(col)` replaces `col && $N`
+- SQLite empty-result security: `LOWER(col) LIKE LOWER($N)` replaces `col ILIKE $N`
+- SQLite vector search: degraded to text search (no `<=>`/pgvector equivalent)
 
 ## Next Steps
-1. Phase 2X (Type Debt Reduction): reduce `no-explicit-any` warnings module by module. Rule: no broad `any` replacement. Each PR reduces warning count and keeps all checks green.
-2. Fix safe `no-unused-vars` warnings (unused imports, prefixable args) to further lower baseline
-3. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
-4. Run `csm_memory_merge` in dry-run on procedural/conversation, then apply
-5. Proceed to Phase 2D (Quality Scoring) or 2C per remaining order
+1. Phase 3D.2: Remaining query compat beyond narrow path (archive ops, cleanup, dedup, merge queries on SQLite)
+2. Phase 3E: Shared backend contract tests (PG + SQLite paths for createSession, saveMemory, listMemories)
+3. Phase 2X (Type Debt Reduction): reduce `no-explicit-any` warnings module by module
+4. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
+5. Fix pre-existing prune-protection test failure in backfill-recall-telemetry.test.ts
 
 ## Critical Context
 - Windows/PowerShell environment: `grep`→`rg`, `wc`→manual count, `&&`/`||`→PowerShell syntax
 - All checks green: typecheck, build, lint:src (0 errors, 249 warnings)
+- Full test suite: **595/596 pass, 1 pre-existing failure** (`backfill-recall-telemetry` prune-protection)
 - `git restore src/` + `git restore eslint.config.mjs` restores clean working tree
-- Live DB: 45,177 total memories; 7,573 with embeddings
-- Schema additions: `memory_merges` table, `memories.superseded_by`/`superseded_at`
+- Live DB: 45,178 total memories; 37,799 active; 7,573 with embeddings
+- Schema additions: `memory_merges` table, `memories.superseded_by`/`superseded_at`, `memory_recall_events`
+- SQLite schema: 7 tables, all indexed — `src/schema/sqlite/index.ts`
 - `src/context-compiler.ts`: 19 `any` usages — highest-risk file for `any` cleanup (compression pipeline)
 - `src/checkpoint-store.ts`: `rowToCheckpoint()` uses `row: any` — needs typed DTO
 
 ## Relevant Files
-- `src/embedding-backfill.ts`: `EmbeddingBackfill` class — Phase 2B
-- `src/dedup-detector.ts`: `DedupCandidateDetector` class — Phase 2A.1
-- `src/merge-tool.ts`: `MemoryMerger` class — Phase 2A.2
-- `src/maintenance-tools.ts`: wires all three maintenance tools
-- `src/hooks/tool-hooks.ts`: Wires maintenance tools from pluginCtx
-- `src/schema/memory-schema.ts`: `superseded_by`/`superseded_at` + `memory_merges` table
-- `src/hooks-registration.ts`: 134 LOC (thin orchestrator)
-- `src/hooks/event-hooks.ts`, `src/hooks/tool-hooks.ts`, `src/hooks/dispose-hooks.ts`: split hook modules
+- `src/db/query-dialect.ts`: `QueryDialect` type + 11 dialect helpers — Phase 3D
+- `src/db/database-pool.ts`: `DatabaseProvider` type, `createDatabasePool()` factory — Phase 3B
+- `src/db/postgres-pool.ts`: wraps `pg.Pool` → `DatabasePool`
+- `src/db/sqlite-pool.ts`: `better-sqlite3` adapter, param translation, cast stripping
+- `src/schema/sqlite/index.ts`: 7-table SQLite DDL — Phase 3C
+- `src/schema/index.ts`: dispatches to sqlite/postgres schema init based on provider
+- `src/database.ts`: `Database` class with `dialect` getter, factory dispatch, `getProvider()` method
+- `src/memory-manager.ts`: narrow-path methods dialect-aware — Phase 3D
+- `src/types.ts`: `DatabaseProvider`, `DatabasePool`, `DatabaseClient`, `PluginConfig`
+- `src/config.ts`: `CSM_DATABASE_PROVIDER`, `CSM_SQLITE_PATH` parsing
 - `eslint.config.mjs`: ESLint v9 flat config, `caughtErrorsIgnorePattern: '^_'`, src strict, tests relaxed
 - `package.json`: `max-warnings=249` on `lint:src`
 

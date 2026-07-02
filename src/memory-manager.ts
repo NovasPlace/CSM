@@ -79,8 +79,8 @@ export class MemoryManager {
     
     await pool.query(
       `UPDATE sessions 
-       SET updated_at = now(),
-           ended_at = now(),
+       SET updated_at = ${nowFn(this.database.dialect)},
+           ended_at = ${nowFn(this.database.dialect)},
            summary = COALESCE($1, summary)
        WHERE id = $2`,
       [summary, sessionId]
@@ -330,7 +330,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     
     await pool.query(
       `UPDATE memories 
-       SET accessed_at = now(), access_count = access_count + 1
+       SET accessed_at = ${nowFn(this.database.dialect)}, access_count = access_count + 1
        WHERE id = $1`,
       [id]
     );

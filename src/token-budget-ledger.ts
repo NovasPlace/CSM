@@ -1,4 +1,5 @@
 import type { DatabasePool } from './types.js';
+import { nowFn, dialectFromPool } from './db/query-dialect.js';
 
 export interface SessionTokenUsage {
   sessionId: string;
@@ -35,7 +36,7 @@ export class TokenBudgetLedger {
         input_tokens BIGINT NOT NULL DEFAULT 0,
         output_tokens BIGINT NOT NULL DEFAULT 0,
         turn_count INTEGER NOT NULL DEFAULT 0,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT ${nowFn(dialectFromPool(this.pool))},
         PRIMARY KEY (session_id, date)
       )
     `);
@@ -54,7 +55,7 @@ export class TokenBudgetLedger {
          input_tokens = session_token_usage.input_tokens + EXCLUDED.input_tokens,
          output_tokens = session_token_usage.output_tokens + EXCLUDED.output_tokens,
          turn_count = session_token_usage.turn_count + EXCLUDED.turn_count,
-         updated_at = now()`,
+         updated_at = ${nowFn(dialectFromPool(this.pool))}`,
       [entry.sessionId, entry.inputTokens, entry.outputTokens, entry.turnCount],
     );
   }
