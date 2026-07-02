@@ -10,10 +10,43 @@
 import { estimateTokens } from './token-bucket-analyzer.js';
 import type { ContextCompilerConfig, BudgetMode, CompressedPartDetail, AlchemistLesson, LessonTelemetry } from './types.js';
 
+interface SdkPart {
+  type?: string;
+  text?: string;
+  tool?: string;
+  synthetic?: boolean;
+  id?: string;
+  sessionID?: string;
+  messageID?: string;
+  state?: {
+    status?: string;
+    type?: string;
+    output?: string;
+    exitCode?: number | string;
+    input?: {
+      command?: string;
+      filePath?: string;
+      pattern?: string;
+      exitCode?: number;
+    };
+  };
+  metadata?: Record<string, unknown>;
+}
+
+interface SdkMessage {
+  info?: Record<string, unknown> & {
+    role?: string;
+    sessionID?: string;
+    id?: string;
+    time?: Record<string, unknown>;
+  };
+  parts?: SdkPart[];
+}
+
 function buildSyntheticLessonMessage(
-  messages: { info?: Record<string, unknown> & { role?: string; sessionID?: string }; parts?: any[] }[],
+  messages: SdkMessage[],
   lessonBlock: string,
-): { info?: Record<string, unknown> & { role?: string; sessionID?: string }; parts?: any[] } {
+): SdkMessage {
   const template = [...messages].reverse().find((message) => message.info?.role === 'assistant');
   const sessionID = String(template?.info?.sessionID ?? 'lesson-session');
   const messageID = `${sessionID}-lesson-${Date.now()}`;
@@ -66,9 +99,9 @@ function buildSyntheticLessonMessage(
 }
 
 function buildLessonPart(
-  message: { info?: Record<string, unknown> & { role?: string; sessionID?: string }; parts?: any[] },
+  message: SdkMessage,
   lessonBlock: string,
-): any {
+): SdkPart {
   const messageID = String(message.info?.id ?? `${message.info?.sessionID ?? 'lesson-session'}-lesson-${Date.now()}`);
   const sessionID = String(message.info?.sessionID ?? 'lesson-session');
   const template = message.parts?.find((part) => part?.type === 'text');
@@ -116,7 +149,7 @@ const LESSON_TYPE_PRIORITY: Record<string, number> = {
   procedure: 1,
 };
 
-function extractTaskConcepts(messages: { info?: { role?: string }; parts?: any[] }[]): string {
+function extractTaskConcepts(messages: SdkMessage[]): string {
   const concepts: string[] = [];
   for (const msg of messages) {
     const role = msg.info?.role ?? '';
@@ -170,7 +203,7 @@ export function formatLessonBlock(injected: AlchemistLesson[]): string {
 }
 
 export function compileContextWithLessons(
-   messages: { info?: { role?: string; sessionID?: string }; parts?: any[] }[],
+   messages: SdkMessage[],
    config: ContextCompilerConfig,
    alchemist?: { recall: (context: string) => AlchemistLesson[] },
    lessonTokenBudget: number = 500,
@@ -233,7 +266,7 @@ const LOW_SIGNAL_TOOLS = new Set(['glob', 'ls', 'directory']);
 const CRITICAL_TOOLS = new Set(['edit', 'write', 'bash']);
 
 /** Score tool output criticality: 0=low, 1=medium, 2=critical */
-export function scoreCriticality(part: any): number {
+export function scoreCriticality(part: SdkPart): number {
   if (part.type !== 'tool') return 0;
   if (part.state?.status === 'error' || part.state?.type === 'error') return 2;
   const tool = String(part.tool ?? '');
@@ -255,7 +288,7 @@ export function scoreCriticality(part: any): number {
   return 0;
 }
 
-function isAlreadyCompressed(part: any): boolean {
+function isAlreadyCompressed(part: SdkPart): boolean {
   const text = part.text ?? part.state?.output ?? '';
   return ALREADY_COMPACTED.some(m => String(text).startsWith(m));
 }
@@ -274,7 +307,7 @@ function adaptiveRecentWindow(
 
 /** Returns pinned category string or 'compressible' */
 function classifyPart(
-  part: any, msgIndex: number, totalMsgs: number, role: string,
+  part: SdkPart, msgIndex: number, totalMsgs: number, role: string,
   adaptiveWindow: number, pressureRatio: number,
 ): string {
   if (isAlreadyCompressed(part)) return 'compressible';
@@ -299,7 +332,7 @@ function classifyPart(
   if (criticality >= 2 && pressureRatio <= 3.0) return 'critical_raw';
   if (criticality >= 2) return 'compressible_critical';
   if (criticality >= 1) return 'compressible_critical';
-  if (STEP_TYPES.includes(part.type)) return 'step_type';
+  if (STEP_TYPES.includes(part.type ?? '')) return 'step_type';
   if (part.type === 'tool' && (part.state?.status === 'completed' || part.state?.type === 'completed')) {
     if (estimateTokens(String(part.state.output ?? '')) > 100) return 'compressible';
     if (pressureRatio > 1.0) return 'compressible';
@@ -313,7 +346,7 @@ function classifyPart(
   return 'other';
 }
 
-function estimateMessageTokens(messages: { parts?: any[] }[]): number {
+function estimateMessageTokens(messages: SdkMessage[]): number {
   let total = 0;
   for (const msg of messages) {
     for (const part of msg.parts ?? []) {
@@ -323,7 +356,7 @@ function estimateMessageTokens(messages: { parts?: any[] }[]): number {
   return total;
 }
 
-function buildToolSummary(tool: string, input: any, lines: number): string {
+function buildToolSummary(tool: string, input: Record<string, unknown>, lines: number): string {
    const formatLines = (count: number): string => {
      if (count < 1000) return `${count} lines`;
      const k = Math.ceil(count / 100) / 10;
@@ -335,8 +368,8 @@ function buildToolSummary(tool: string, input: any, lines: number): string {
      return `~${k}K results`;
    };
    switch (tool) {
-     case 'read': return `[TOOL:read] ${input.filePath ?? ''} — ${formatLines(lines)}`;
-     case 'write': case 'edit': return `[TOOL:${tool}] ${input.filePath ?? ''} — applied`;
+      case 'read': return `[TOOL:read] ${String(input.filePath ?? '')} — ${formatLines(lines)}`;
+      case 'write': case 'edit': return `[TOOL:${tool}] ${String(input.filePath ?? '')} — applied`;
      case 'bash': return `[TOOL:bash] "${String(input.command ?? '').slice(0, 60)}" — ${formatLines(lines)}`;
      case 'grep': case 'glob': return `[TOOL:${tool}] "${String(input.pattern ?? '').slice(0, 40)}" — ${formatResults(lines)}`;
      case 'task': return `[TOOL:task] "${String(input.description ?? '').slice(0, 50)}" — completed`;
@@ -344,7 +377,7 @@ function buildToolSummary(tool: string, input: any, lines: number): string {
    }
  }
 
-function toolRiskAndSignals(tool: string, input: any, before: number): { risk: CompressedPartDetail['risk']; reason: string; signals: string[] } {
+function toolRiskAndSignals(tool: string, input: Record<string, unknown>, before: number): { risk: CompressedPartDetail['risk']; reason: string; signals: string[] } {
   if (tool === 'read') return { risk: 'low', reason: before > 1000 ? 'large_log' : 'old_tool_output', signals: ['file_path', 'line_count'] };
   if (tool === 'bash') return { risk: 'low', reason: 'large_log', signals: ['command', 'line_count'] };
   if (tool === 'edit' || tool === 'write') return { risk: 'medium', reason: 'old_tool_output', signals: ['file_path', 'status'] };
@@ -352,7 +385,7 @@ function toolRiskAndSignals(tool: string, input: any, before: number): { risk: C
   return { risk: 'low', reason: 'old_tool_output', signals: ['tool_name', 'line_count'] };
 }
 
-function compressToolOutput(part: any): CompressedPartDetail | null {
+function compressToolOutput(part: SdkPart): CompressedPartDetail | null {
   if (part.state?.status !== 'completed' && part.state?.type !== 'completed') return null;
   const output = String(part.state.output ?? '');
   const before = estimateTokens(output);
@@ -399,7 +432,7 @@ function compressToolOutput(part: any): CompressedPartDetail | null {
   };
 }
 
-function compressTextPart(part: any): CompressedPartDetail | null {
+function compressTextPart(part: SdkPart): CompressedPartDetail | null {
   if (part.type !== 'text') return null;
   const text = String(part.text ?? '');
   const before = estimateTokens(text);
@@ -415,9 +448,9 @@ function compressTextPart(part: any): CompressedPartDetail | null {
 }
 
 function classifyAndCollect(
-  messages: { info?: { role?: string }; parts?: any[] }[], adaptiveWindow: number, pressureRatio: number,
-): { candidates: { part: any; tokens: number }[]; pinnedCategories: Record<string, number> } {
-  const candidates: { part: any; tokens: number }[] = [];
+  messages: SdkMessage[], adaptiveWindow: number, pressureRatio: number,
+): { candidates: { part: SdkPart; tokens: number }[]; pinnedCategories: Record<string, number> } {
+  const candidates: { part: SdkPart; tokens: number }[] = [];
   const pinnedCategories: Record<string, number> = {};
   const totalMsgs = messages.length;
   for (let i = 0; i < totalMsgs; i++) {
@@ -455,7 +488,7 @@ function compressToFit(
 
 /** Compile messages to fit within a token budget. */
 export function compileContext(
-  messages: { info?: { role?: string }; parts?: any[] }[], config: ContextCompilerConfig,
+  messages: SdkMessage[], config: ContextCompilerConfig,
 ): CompileResult {
   const empty: CompileResult = {
     beforeTokens: 0, afterTokens: 0, budget: 0, partsCompressed: 0, partsPinned: 0,
