@@ -39,6 +39,8 @@ export async function initializeMinimalSqliteSchema(pool: DatabasePool): Promise
       tags TEXT DEFAULT '[]',
       linked_memory_ids TEXT DEFAULT '[]',
       metadata TEXT DEFAULT '{}',
+      access_count INTEGER NOT NULL DEFAULT 0,
+      turn_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
