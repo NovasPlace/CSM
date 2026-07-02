@@ -328,7 +328,7 @@ export function memoryListTool(memoryManager: MemoryManager) {
       }, {
         sessionId: args.sessionId,
         projectId: args.projectId,
-        type: args.type as any,
+        type: args.type as MemoryType | undefined,
         tags: args.tags,
         entityType: args.entityType,
         entityValue: args.entityValue,
@@ -352,8 +352,8 @@ export function memoryListTool(memoryManager: MemoryManager) {
       for (const m of memories) {
         const date = new Date(m.createdAt).toLocaleString();
         const tags = m.tags.length ? ` [${m.tags.join(', ')}]` : '';
-        const concepts = (m.metadata as any)?.extracted_concepts ?? [];
-        const conceptStr = concepts.length ? ` | ${concepts.map((c: any) => `${c.type}:${c.value}`).join(', ')}` : '';
+        const concepts = (m.metadata as { extracted_concepts?: { type: string; value: string }[] })?.extracted_concepts ?? [];
+        const conceptStr = concepts.length ? ` | ${concepts.map(c => `${c.type}:${c.value}`).join(', ')}` : '';
         output += `#${m.id} ${m.memoryType} (${m.importance.toFixed(2)})${tags}${conceptStr}\n  ${date} — ${m.content.substring(0, 120)}${m.content.length > 120 ? '...' : ''}\n\n`;
       }
 
@@ -487,7 +487,7 @@ export function memoryCandidateApproveTool(memoryExtractor: MemoryExtractor) {
         candidateId: args.id,
         action: 'approve',
         editedContent: args.editedContent,
-        editedType: args.editedType as any,
+        editedType: args.editedType as MemoryType | undefined,
         editedImportance: args.editedImportance,
         editedTags: args.editedTags,
         reviewedBy: 'user',

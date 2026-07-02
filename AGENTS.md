@@ -1,5 +1,5 @@
 ## Goal
-- SQLite MVP complete (Phase 3). Lint debt reduction in progress: Phase L1+L2, L3.1, L3.2 done. Baseline locked at **132 warnings**.
+- SQLite MVP complete (Phase 3). Lint debt reduction in progress: Phase L1+L2, L3.1, L3.2, L3.3 done. Baseline locked at **120 warnings**.
 
 ## Constraints & Preferences
 - Each sub-phase is behavior-preserving, boring, verbatim moves first
@@ -7,7 +7,7 @@
 - Database URL: dev/test=localhost, production=explicit flag
 - CI with Postgres service container
 - ESLint rules start as warnings, tighten later
-- Lint warning baseline: **132 warnings** (max-warnings=132 prevents unbounded growth)
+- Lint warning baseline: **120 warnings** (max-warnings=120 prevents unbounded growth)
 - `caughtErrorsIgnorePattern: '^_'` added to `@typescript-eslint/no-unused-vars` — catch blocks with `_err` are allowed
 - `better-sqlite3` doesn't support `?NNN` format with spread `.run()` — must use anonymous `?` parameters
 - SQLite schema: TEXT for timestamps/JSON/arrays/embeddings; INTEGER PRIMARY KEY AUTOINCREMENT for PKs
@@ -16,9 +16,9 @@
 
 ## Lint Debt Classification (Locked)
 - **0 `no-console` warnings**: All 15 intentional console calls documented with `eslint-disable-next-line no-console` rationale
-- **~132 `no-explicit-any` warnings**: Typed-debt — NOT mechanical cleanup. Requires per-module type-design work (typed DTOs, generic row mappers). Do not attempt blanket `any`→`unknown` replacement (proven to cause 55+ cascading build errors)
+- **~120 `no-explicit-any` warnings**: Typed-debt — NOT mechanical cleanup. Requires per-module type-design work (typed DTOs, generic row mappers). Do not attempt blanket `any`→`unknown` replacement (proven to cause 55+ cascading build errors)
 - **~7 `no-unused-vars` warnings**: External API generic params (`opentui.d.ts`) — skipped by design
-- **`max-warnings=132`** — any new warning added to src/ will fail lint
+- **`max-warnings=120`** — any new warning added to src/ will fail lint
 
 ## Progress
 ### Done
@@ -51,14 +51,14 @@
 - **Phase L1+L2 (Lint Cleanup 249→154)**: no-console 15→0 (7 migrated, 8 eslint-disable+rationale). no-unused-vars 86→7 (73 fixed: unused imports removed, unused args prefixed). 37 files changed. `max-warnings` ratcheted to 154. Committed `d90570f`.
 - **Phase L3.1 (Type Tool Execute Hook Payloads)**: Defined 5 DTOs (`ToolExecuteBeforeInput`, `ToolExecuteBeforeOutput`, `ToolExecuteAfterInput`, `ToolExecuteAfterOutput`, `ToolExecuteMetadata`). Replaced all 14 `any` in `src/hooks/tool-execute.ts` → 0. Fixed 6 logger context type errors. Warnings: 154→140. `max-warnings` locked at 140. Committed `4fae542`.
 - **Phase L3.2 (Type Checkpoint Tool Rows)**: Replaced 8 `any` in `src/checkpoint-tool.ts` → 0. Defined `SdkMessage` + `SessionMessagesClient` interfaces. Changed `toSessionMessages` param from `SessionMessage[]` to `SdkMessage[]`. Added `SessionPart` import. Warnings: 140→132. `max-warnings` ratcheted to 132.
+- **Phase L3.3 (Type Memory Graph Row DTOs)**: Defined `CandidateRow`, `SourceRow`, `LinkRow`, `RelatedRow` row-mapper DTOs. Replaced 8 `as any[]` casts → typed and `any` in some callback → typed. Warnings: 132→124. `max-warnings` ratcheted to 124.
+- **Phase L3.4 (Type Tools Payloads)**: Replaced 4 `any` in `src/tools.ts` with `MemoryType` and typed metadata access. Warnings: 124→120. `max-warnings` ratcheted to 120.
 
 ### In Progress
-- **Phase L3.3 (Type Memory Graph Row DTOs)**: Planned — reduce `no-explicit-any` in `src/memory-graph.ts`.
-- **Phase L3.4 (Type Tools Payloads)**: Planned — reduce `no-explicit-any` in `src/tools.ts`.
 - **Phase L3.5 (Type Context Compiler Rows)**: Planned — reduce `no-explicit-any` in `src/context-compiler.ts`.
 
 ### Blocked
-- **`no-explicit-any` cleanup (~132 warnings)**: Blocked by cascading type errors. Requires per-module typed DTOs and generic row mappers, not blanket replacement.
+- **`no-explicit-any` cleanup (~120 warnings)**: Blocked by cascading type errors. Requires per-module typed DTOs and generic row mappers, not blanket replacement.
 
 ### Pre-existing Test Debt
 - ~~**1 failing test**: `test/backfill-recall-telemetry.test.ts` line 209 — "protects old recalled memories while still surfacing old unrecalled ones" fails because prune-protection by recall count is not working for PG. Present since Phase 3B (`ae5e309`). Not caused by Phase 3D changes. Root cause: `pruneMemories`/`loadPruneRows` recall_count LATERAL join returns 0 even when `memory_recall_events` rows exist. Needs investigation in prune-scorer logic.~~
@@ -77,14 +77,12 @@
 - SQLite vector search: degraded to text search (no `<=>`/pgvector equivalent)
 
 ## Next Steps
-1. Phase L3.3: type `src/memory-graph.ts` — replace `any` row mappers with typed DTOs
-2. Phase L3.4: type `src/tools.ts` — replace `any` tool payload params
-3. Phase L3.5: type `src/context-compiler.ts` — replace `any` in compression pipeline (highest risk)
-4. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
+1. Phase L3.5: type `src/context-compiler.ts` — replace `any` in compression pipeline (highest risk)
+2. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
 
 ## Critical Context
 - Windows/PowerShell environment: `grep`→`rg`, `wc`→manual count, `&&`/`||`→PowerShell syntax
-- All checks green: typecheck, build, lint:src (0 errors, 132 warnings)
+- All checks green: typecheck, build, lint:src (0 errors, 120 warnings)
 - Full test suite: **622/622 pass**
 - `git restore src/` + `git restore eslint.config.mjs` restores clean working tree
 - Live DB: 45,178 total memories; 37,799 active; 7,573 with embeddings
@@ -92,7 +90,7 @@
 - SQLite schema: 7 tables, all indexed — `src/schema/sqlite/index.ts`
 - `src/checkpoint-store.ts`: `rowToCheckpoint()` uses `row: any` — needs typed DTO (Phase L4 target)
 - `src/memory-graph.ts`: ~8 `any` usages — next cleanup target (Phase L3.3)
-- `src/tools.ts`: ~12 `any` usages — Phase L3.4 target
+- `src/context-compiler.ts`: 19 `any` usages — highest-risk file (Phase L3.5)
 - `src/context-compiler.ts`: 19 `any` usages — highest-risk file (Phase L3.5)
 
 ## Relevant Files
@@ -108,7 +106,7 @@
 - `src/types.ts`: `DatabaseProvider`, `DatabasePool`, `DatabaseClient`, `PluginConfig`
 - `src/config.ts`: `CSM_DATABASE_PROVIDER`, `CSM_SQLITE_PATH` parsing
 - `eslint.config.mjs`: ESLint v9 flat config, `caughtErrorsIgnorePattern: '^_'`, src strict, tests relaxed
-- `package.json`: `max-warnings=132` on `lint:src`
+- `package.json`: `max-warnings=120` on `lint:src`
 
 ## Remaining Test Lint Debt
 - 774+ errors, 261+ warnings across test files (`**/*.{test,spec}.ts`)
@@ -121,7 +119,7 @@
 - ✅ Removed ~20 unused imports (warnings 271 → 251)
 
 ## Current Lint Status
-- `npm run lint:src`: 0 errors, **132 warnings** → exits 0
+- `npm run lint:src`: 0 errors, **120 warnings** → exits 0
 - `npm run lint:all`: ~774 errors + ~261 warnings across test files (excluded from lint:src)
 
 ## Phase 2X: Type Debt Reduction (Future)
