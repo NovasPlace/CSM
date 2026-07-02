@@ -1,4 +1,5 @@
 import type { DatabasePool } from './types.js';
+import { jsonExtractText, dialectFromPool } from './db/query-dialect.js';
 import type {
   SelfContinuityRecord,
   SelfContinuityTriggerType,
@@ -25,6 +26,10 @@ export class SelfContinuityGenerator {
   private pool: DatabasePool;
   private sessionId: string;
   private projectId: string | undefined;
+
+  private get syntheticTestExpr(): string {
+    return jsonExtractText(dialectFromPool(this.pool), 'metadata', 'synthetic_test');
+  }
 
   constructor(pool: DatabasePool, sessionId: string, projectId?: string) {
     this.pool = pool;
@@ -301,7 +306,7 @@ export class SelfContinuityGenerator {
       const result = await this.pool.query(
         `SELECT * FROM self_continuity_records
          WHERE (project_id = $1 OR project_id IS NULL)
-         AND (metadata->>'synthetic_test' IS NULL OR metadata->>'synthetic_test' != 'true')
+         AND (${this.syntheticTestExpr} IS NULL OR ${this.syntheticTestExpr} != 'true')
          ORDER BY created_at DESC
          LIMIT $2`,
         [this.projectId ?? null, limit],
@@ -319,6 +324,7 @@ export class SelfContinuityGenerator {
   ): Promise<SelfContinuityRecord[]> {
     const seen = new Set<number>();
     const results: SelfContinuityRecord[] = [];
+    const stExpr = jsonExtractText(dialectFromPool(pool), 'metadata', 'synthetic_test');
 
     const addRecord = (row: Record<string, unknown>) => {
       const id = row.id as number;
@@ -340,7 +346,7 @@ export class SelfContinuityGenerator {
     const recentRows = await safeQuery(
       `SELECT * FROM self_continuity_records
        WHERE (project_id = $1 OR project_id IS NULL)
-       AND (metadata->>'synthetic_test' IS NULL OR metadata->>'synthetic_test' != 'true')
+       AND (${stExpr} IS NULL OR ${stExpr} != 'true')
        ORDER BY created_at DESC
        LIMIT $2`,
       [projectId ?? null, limit],
@@ -350,7 +356,7 @@ export class SelfContinuityGenerator {
     const similarRows = await safeQuery(
       `SELECT * FROM self_continuity_records
        WHERE (project_id = $1 OR project_id IS NULL)
-       AND (metadata->>'synthetic_test' IS NULL OR metadata->>'synthetic_test' != 'true')
+       AND (${stExpr} IS NULL OR ${stExpr} != 'true')
        ORDER BY continuity_confidence DESC
        LIMIT $2`,
       [projectId ?? null, limit],
@@ -360,7 +366,7 @@ export class SelfContinuityGenerator {
     const driftRows = await safeQuery(
       `SELECT * FROM self_continuity_records
        WHERE (project_id = $1 OR project_id IS NULL)
-       AND (metadata->>'synthetic_test' IS NULL OR metadata->>'synthetic_test' != 'true')
+       AND (${stExpr} IS NULL OR ${stExpr} != 'true')
        AND identity_drift::text != '{}'
        ORDER BY created_at DESC
        LIMIT $2`,

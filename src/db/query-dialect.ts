@@ -50,9 +50,25 @@ export function jsonArrayContains(d: QueryDialect, col: string, paramIndex: numb
 
 export function jsonContainsPath(d: QueryDialect, col: string, path: string, paramIndex: number): string {
   if (d === 'sqlite') {
-    return `EXISTS (SELECT 1 FROM json_each(json_extract(${col}, '${path}')) WHERE json_each.value IN (SELECT value FROM json_each($${paramIndex})))`;
+    return `EXISTS (SELECT 1 FROM json_each(json_extract(${col}, '$.${path}')) WHERE json_each.value IN (SELECT value FROM json_each($${paramIndex})))`;
   }
   return `${col}->'${path}' @> $${paramIndex}`;
+}
+
+/** value-form JSON extract: PG col->'key', SQLite json_extract(col, '$.key') */
+export function jsonExtractValue(d: QueryDialect, col: string, key: string): string {
+  if (d === 'sqlite') {
+    return `json_extract(${col}, '$.${key}')`;
+  }
+  return `${col}->'${key}'`;
+}
+
+/** JSON containment: PG col @> $N::jsonb, SQLite json_each membership */
+export function jsonContainsParam(d: QueryDialect, col: string, paramIndex: number): string {
+  if (d === 'sqlite') {
+    return `EXISTS (SELECT 1 FROM json_each(${col}) WHERE json_each.value IN (SELECT value FROM json_each($${paramIndex})))`;
+  }
+  return `${col} @> $${paramIndex}::jsonb`;
 }
 
 export function isUniqueViolation(d: QueryDialect, error: unknown): boolean {

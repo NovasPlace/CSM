@@ -1,6 +1,6 @@
 import { Database } from "./database.js";
 import type { Memory, MemorySearchOptions } from "./types.js";
-import { ilikeExpr } from "./db/query-dialect.js";
+import { ilikeExpr, jsonContainsParam, jsonExtractValue } from "./db/query-dialect.js";
 
 export type HybridWeights = {
   vector: number;
@@ -75,14 +75,14 @@ export async function entityMatchBoost(
       `SELECT id,
         CASE
           WHEN ${ilikeExpr(d, 'content', 1)} THEN 2.0
-          WHEN metadata->'extracted_concepts' @> $2::jsonb THEN 1.8
+          WHEN ${jsonContainsParam(d, jsonExtractValue(d, 'metadata', 'extracted_concepts'), 2)} THEN 1.8
           WHEN ${ilikeExpr(d, 'tags::text', 1)} THEN 1.5
           ELSE 0.0
         END AS boost
        FROM memories
        WHERE (${ilikeExpr(d, 'content', 1)}
               OR ${ilikeExpr(d, 'tags::text', 1)}
-              OR metadata->'extracted_concepts' @> $2::jsonb)
+              OR ${jsonContainsParam(d, jsonExtractValue(d, 'metadata', 'extracted_concepts'), 2)})
          ${projectId ? 'AND project_id = $3' : ''}
        LIMIT ${limit}`,
       projectId ? [like, conceptsJson, projectId] : [like, conceptsJson],

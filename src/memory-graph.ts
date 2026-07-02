@@ -2,6 +2,7 @@ import { Database } from "./database.js";
 import type { ExtractedConcept } from "./concept-extractor.js";
 import type { Memory } from "./types.js";
 import { getLogger } from "./logger.js";
+import { jsonExtractValue } from "./db/query-dialect.js";
 
 export type MemoryLink = {
   id: number;
@@ -67,13 +68,14 @@ export async function buildLinksForMemory(
   if (concepts.length === 0) return [];
 
   const pool = db.getPool();
+  const d = db.dialect;
   const entityValues = concepts.map(c => c.value);
 
   const memoryRows = await pool.query(
-    `SELECT m.id, m.content, m.created_at, m.metadata->'extracted_concepts' AS concepts
+    `SELECT m.id, m.content, m.created_at, ${jsonExtractValue(d, 'm.metadata', 'extracted_concepts')} AS concepts
      FROM memories m
      WHERE m.id != $1
-       AND m.metadata->'extracted_concepts' IS NOT NULL
+       AND ${jsonExtractValue(d, 'm.metadata', 'extracted_concepts')} IS NOT NULL
      ORDER BY m.created_at DESC
      LIMIT 50`,
     [memoryId]

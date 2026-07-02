@@ -7,7 +7,7 @@
  */
 import { DatabasePool } from './types.js';
 import { Redactor } from './redactor.js';
-import { ilikeExpr, dialectFromPool } from './db/query-dialect.js';
+import { ilikeExpr, dialectFromPool, jsonExtractText } from './db/query-dialect.js';
 
 export type CacheKind = 'turn' | 'tool_output' | 'file_read' | 'error' | 'decision';
 
@@ -80,10 +80,11 @@ export async function searchItems(
 export async function fetchFileReads(
   pool: DatabasePool, sessionId: string, filePath: string,
 ): Promise<CacheItem[]> {
+  const d = dialectFromPool(pool);
   const res = await pool.query(
     `SELECT * FROM context_cache
      WHERE session_id = $1 AND kind = 'file_read'
-       AND metadata->>'filePath' = $2
+       AND ${jsonExtractText(d, 'metadata', 'filePath')} = $2
      ORDER BY created_at DESC LIMIT 5`,
     [sessionId, filePath],
   );
@@ -118,9 +119,10 @@ export async function fetchDecisions(
 export async function fetchLatestDecisionBySource(
   pool: DatabasePool, sessionId: string, source: string,
 ): Promise<CacheItem | null> {
+  const d = dialectFromPool(pool);
   const res = await pool.query(
     `SELECT * FROM context_cache
-     WHERE session_id = $1 AND kind = 'decision' AND metadata->>'source' = $2
+     WHERE session_id = $1 AND kind = 'decision' AND ${jsonExtractText(d, 'metadata', 'source')} = $2
      ORDER BY created_at DESC LIMIT 1`,
     [sessionId, source],
   );
@@ -138,7 +140,7 @@ export async function searchLatestDecisionBySources(
   const conditions = words.map((w) => {
     const idx = params.length + 1;
     params.push(`%${w}%`);
-    return `(${ilikeExpr(d, 'summary', idx)} OR ${ilikeExpr(d, 'content', idx)} OR ${ilikeExpr(d, "metadata->>'task'", idx)})`;
+    return `(${ilikeExpr(d, 'summary', idx)} OR ${ilikeExpr(d, 'content', idx)} OR ${ilikeExpr(d, jsonExtractText(d, 'metadata', 'task'), idx)})`;
   });
   const res = await pool.query(
     `SELECT * FROM context_cache

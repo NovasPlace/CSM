@@ -742,7 +742,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         SET metadata = jsonb_set(metadata, '{archived}', 'true')
         WHERE created_at < ${now} - interval '30 days'
         AND created_at >= ${now} - interval '90 days'
-        AND (metadata->>'archived') IS DISTINCT FROM 'true'`
+        AND (${jsonExtractText(this.database.dialect, 'metadata', 'archived')}) IS DISTINCT FROM 'true'`
     );
     
     // Clean up old candidates

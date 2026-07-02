@@ -1,4 +1,5 @@
 import type { Database } from './database.js';
+import { jsonExtractText, dialectFromPool } from './db/query-dialect.js';
 
 export interface DedupDetectorConfig {
   similarityThreshold?: number;
@@ -74,7 +75,7 @@ export class DedupCandidateDetector {
     projectId?: string,
     allowedTypes?: string[],
   ): Promise<DedupMemoryRef[]> {
-    let sql = `SELECT id, content, memory_type, COALESCE(metadata->>'title', '') AS title,
+    let sql = `SELECT id, content, memory_type, COALESCE(${jsonExtractText(dialectFromPool(this.pool), 'metadata', 'title')}, '') AS title,
                       created_at::text AS created_at
                FROM memories WHERE embedding IS NOT NULL`;
     const params: unknown[] = [];
