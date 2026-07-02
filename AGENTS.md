@@ -1,5 +1,5 @@
 ## Goal
-- Framework Hardening Phase 1 complete; Phase 2A/2B/2C/2D complete; Phase 3A/3B/3C/3D/3F/3G/3H/3I complete; lint baseline locked at 249 warnings
+- SQLite MVP complete (Phase 3). Lint debt reduction in progress: Phase L1+L2, L3.1, L3.2 done. Baseline locked at **132 warnings**.
 
 ## Constraints & Preferences
 - Each sub-phase is behavior-preserving, boring, verbatim moves first
@@ -7,7 +7,7 @@
 - Database URL: dev/test=localhost, production=explicit flag
 - CI with Postgres service container
 - ESLint rules start as warnings, tighten later
-- Lint warning baseline: **140 warnings** (max-warnings=140 prevents unbounded growth)
+- Lint warning baseline: **132 warnings** (max-warnings=132 prevents unbounded growth)
 - `caughtErrorsIgnorePattern: '^_'` added to `@typescript-eslint/no-unused-vars` — catch blocks with `_err` are allowed
 - `better-sqlite3` doesn't support `?NNN` format with spread `.run()` — must use anonymous `?` parameters
 - SQLite schema: TEXT for timestamps/JSON/arrays/embeddings; INTEGER PRIMARY KEY AUTOINCREMENT for PKs
@@ -16,9 +16,9 @@
 
 ## Lint Debt Classification (Locked)
 - **0 `no-console` warnings**: All 15 intentional console calls documented with `eslint-disable-next-line no-console` rationale
-- **~140 `no-explicit-any` warnings**: Typed-debt — NOT mechanical cleanup. Requires per-module type-design work (typed DTOs, generic row mappers). Do not attempt blanket `any`→`unknown` replacement (proven to cause 55+ cascading build errors)
+- **~132 `no-explicit-any` warnings**: Typed-debt — NOT mechanical cleanup. Requires per-module type-design work (typed DTOs, generic row mappers). Do not attempt blanket `any`→`unknown` replacement (proven to cause 55+ cascading build errors)
 - **~7 `no-unused-vars` warnings**: External API generic params (`opentui.d.ts`) — skipped by design
-- **`max-warnings=140`** — any new warning added to src/ will fail lint
+- **`max-warnings=132`** — any new warning added to src/ will fail lint
 
 ## Progress
 ### Done
@@ -46,12 +46,19 @@
 - **Phase 3F.3 (Hybrid Search Filter Fix)**: Fixed `hybridSearch` to propagate `type`, `tags`, and `minImportance` filters to all sub-searchers (`vectorSearch`, `ftsSearch`, `entityMatchBoost`). Added `buildWhereClause` helper for dynamic SQL filter construction. This fixes a long-standing bug where type/tag filters were silently ignored on PG.
 - **Phase 3G (SQLite MVP Documentation)**: `docs/PHASE3G_SQLITE_MVP.md` — covers how to enable SQLite, supported/degraded/unsupported features, verification results, known gaps, and architecture notes.
 - **Phase 3H (Fix Backfill Recall Telemetry Test Debt)**: Root cause: `pg` returns `COUNT(*)` (bigint) as string, so `typeof r.recall_count === 'number'` was false → `recallCount` defaulted to 0 → prune-scorer never saw recall data. Fixed by using `Number()` cast instead of `typeof` check for both `recall_count` and `graph_links` in `loadPruneRows`. Full suite now 622/622 green.
+- **Phase 3I (SQLite MVP Release Notes)**: README updated with SQLite quickstart, config table, 8 known limitations. CHANGELOG updated with Phase 1-3 highlights. Key decision: PG default, SQLite alternative. Committed `686a2c3`.
+- **Phase 3 Complete**: All 9 sub-phases (3A-3I). 10 CSM memories, 14 work journal entries logged.
+- **Phase L1+L2 (Lint Cleanup 249→154)**: no-console 15→0 (7 migrated, 8 eslint-disable+rationale). no-unused-vars 86→7 (73 fixed: unused imports removed, unused args prefixed). 37 files changed. `max-warnings` ratcheted to 154. Committed `d90570f`.
+- **Phase L3.1 (Type Tool Execute Hook Payloads)**: Defined 5 DTOs (`ToolExecuteBeforeInput`, `ToolExecuteBeforeOutput`, `ToolExecuteAfterInput`, `ToolExecuteAfterOutput`, `ToolExecuteMetadata`). Replaced all 14 `any` in `src/hooks/tool-execute.ts` → 0. Fixed 6 logger context type errors. Warnings: 154→140. `max-warnings` locked at 140. Committed `4fae542`.
+- **Phase L3.2 (Type Checkpoint Tool Rows)**: Replaced 8 `any` in `src/checkpoint-tool.ts` → 0. Defined `SdkMessage` + `SessionMessagesClient` interfaces. Changed `toSessionMessages` param from `SessionMessage[]` to `SdkMessage[]`. Added `SessionPart` import. Warnings: 140→132. `max-warnings` ratcheted to 132.
 
 ### In Progress
-- None
+- **Phase L3.3 (Type Memory Graph Row DTOs)**: Planned — reduce `no-explicit-any` in `src/memory-graph.ts`.
+- **Phase L3.4 (Type Tools Payloads)**: Planned — reduce `no-explicit-any` in `src/tools.ts`.
+- **Phase L3.5 (Type Context Compiler Rows)**: Planned — reduce `no-explicit-any` in `src/context-compiler.ts`.
 
 ### Blocked
-- **`no-explicit-any` cleanup (~140 warnings)**: Blocked by cascading type errors. Requires Phase 2X (Type Debt Reduction) — per-module typed DTOs and generic row mappers, not blanket replacement.
+- **`no-explicit-any` cleanup (~132 warnings)**: Blocked by cascading type errors. Requires per-module typed DTOs and generic row mappers, not blanket replacement.
 
 ### Pre-existing Test Debt
 - ~~**1 failing test**: `test/backfill-recall-telemetry.test.ts` line 209 — "protects old recalled memories while still surfacing old unrecalled ones" fails because prune-protection by recall count is not working for PG. Present since Phase 3B (`ae5e309`). Not caused by Phase 3D changes. Root cause: `pruneMemories`/`loadPruneRows` recall_count LATERAL join returns 0 even when `memory_recall_events` rows exist. Needs investigation in prune-scorer logic.~~
@@ -62,7 +69,7 @@
 - Embedding similarity not useful for dedup at current scale — exact content detection catches all real duplication
 - Merge is exact-match-only — no embedding-based merging; no deletion; mark superseded; preserve originals
 - `any`→`unknown` substitution is NOT safe at scale — requires per-file analysis and typed DTOs/generic mappers
-- Lint baseline locked at 249 — new warnings fail CI; existing debt is classified and documented
+- Lint baseline locked at 140 — new warnings fail CI; existing debt is classified and documented
 - `caughtErrorsIgnorePattern: '^_'` allows `catch (_err)` without warning
 - SQLite RETURNING and ON CONFLICT DO UPDATE work (SQLite 3.24+/3.35+ bundled with better-sqlite3)
 - SQLite JSON ops: `json_type(col, '$.key')` replaces `col ? 'key'`; `json_extract(col, '$.key')` replaces `col->>'key'`; `json_each(col)` replaces `col && $N`
@@ -70,19 +77,23 @@
 - SQLite vector search: degraded to text search (no `<=>`/pgvector equivalent)
 
 ## Next Steps
-1. Phase 2X (Type Debt Reduction): reduce `no-explicit-any` warnings module by module
-2. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
+1. Phase L3.3: type `src/memory-graph.ts` — replace `any` row mappers with typed DTOs
+2. Phase L3.4: type `src/tools.ts` — replace `any` tool payload params
+3. Phase L3.5: type `src/context-compiler.ts` — replace `any` in compression pipeline (highest risk)
+4. Fix 7 fixable `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
 
 ## Critical Context
 - Windows/PowerShell environment: `grep`→`rg`, `wc`→manual count, `&&`/`||`→PowerShell syntax
-- All checks green: typecheck, build, lint:src (0 errors, 249 warnings)
+- All checks green: typecheck, build, lint:src (0 errors, 132 warnings)
 - Full test suite: **622/622 pass**
 - `git restore src/` + `git restore eslint.config.mjs` restores clean working tree
 - Live DB: 45,178 total memories; 37,799 active; 7,573 with embeddings
 - Schema additions: `memory_merges` table, `memories.superseded_by`/`superseded_at`, `memory_recall_events`
 - SQLite schema: 7 tables, all indexed — `src/schema/sqlite/index.ts`
-- `src/context-compiler.ts`: 19 `any` usages — highest-risk file for `any` cleanup (compression pipeline)
-- `src/checkpoint-store.ts`: `rowToCheckpoint()` uses `row: any` — needs typed DTO
+- `src/checkpoint-store.ts`: `rowToCheckpoint()` uses `row: any` — needs typed DTO (Phase L4 target)
+- `src/memory-graph.ts`: ~8 `any` usages — next cleanup target (Phase L3.3)
+- `src/tools.ts`: ~12 `any` usages — Phase L3.4 target
+- `src/context-compiler.ts`: 19 `any` usages — highest-risk file (Phase L3.5)
 
 ## Relevant Files
 - `src/db/query-dialect.ts`: `QueryDialect` type + 11 dialect helpers — Phase 3D
@@ -97,7 +108,7 @@
 - `src/types.ts`: `DatabaseProvider`, `DatabasePool`, `DatabaseClient`, `PluginConfig`
 - `src/config.ts`: `CSM_DATABASE_PROVIDER`, `CSM_SQLITE_PATH` parsing
 - `eslint.config.mjs`: ESLint v9 flat config, `caughtErrorsIgnorePattern: '^_'`, src strict, tests relaxed
-- `package.json`: `max-warnings=140` on `lint:src`
+- `package.json`: `max-warnings=132` on `lint:src`
 
 ## Remaining Test Lint Debt
 - 774+ errors, 261+ warnings across test files (`**/*.{test,spec}.ts`)
@@ -107,10 +118,10 @@
 - ✅ hooks-registration.ts split: 423 LOC → 134 LOC (under 200)
 - ✅ hooks/event-hooks.ts: 125 LOC, hooks/tool-hooks.ts: 49 LOC, hooks/dispose-hooks.ts: 82 LOC
 - ✅ Replaced getter-based state with plain sessionState object
-- ✅ Removed ~20 unused imports (warnings 271 → 251 → 249)
+- ✅ Removed ~20 unused imports (warnings 271 → 251)
 
 ## Current Lint Status
-- `npm run lint:src`: 0 errors, **154 warnings** → exits 0
+- `npm run lint:src`: 0 errors, **132 warnings** → exits 0
 - `npm run lint:all`: ~774 errors + ~261 warnings across test files (excluded from lint:src)
 
 ## Phase 2X: Type Debt Reduction (Future)
