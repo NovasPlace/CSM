@@ -23,6 +23,12 @@ import { TokenBudgetLedger } from './token-budget-ledger.js';
 import { CheckpointStore } from './checkpoint-store.js';
 import { AgentWorkJournal } from './agent-work-journal.js';
 import { LessonTriggerCache } from './lesson-trigger-cache.js';
+import { ExperiencePacketCreator } from './experience-packet.js';
+import { SelfModelUpdater } from './self-model-updater.js';
+import { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import { LivingStateRuntime } from './living-state-runtime.js';
+import { LivingStateAdvisor } from './living-state-advisor.js';
+import { BeliefPromotionScanner } from './belief-promotion-scanner.js';
 import { StatsWriter } from './stats-writer.js';
 import type { PluginContext } from './plugin-context.js';
 import type { CheckpointToolDeps } from './checkpoint-tool.js';
@@ -111,6 +117,19 @@ export async function registerHooks(
   const _autoCheckpointCtx = { checkpointStore, config: config.checkpoint };
 
   const workJournal = new AgentWorkJournal(database.getPool(), config.workJournal, redactor);
+  const experiencePackets = new ExperiencePacketCreator(database.getPool());
+  const selfModel = new SelfModelUpdater(database.getPool(), config.selfModel);
+  const beliefKnowledge = new BeliefKnowledgeConsolidator(database.getPool(), config.beliefKnowledge);
+  const beliefScanner = new BeliefPromotionScanner(database.getPool());
+  const livingState = new LivingStateRuntime(
+    database.getPool(),
+    config.livingState,
+    beliefScanner,
+    experiencePackets,
+    selfModel,
+    beliefKnowledge,
+  );
+  const livingStateAdvisor = new LivingStateAdvisor(livingState, config.livingState);
   const lessonTriggers = new LessonTriggerCache(database.getPool());
 
   contextRecall.start();
@@ -132,7 +151,7 @@ export async function registerHooks(
       createAutoCheckpoint({ checkpointStore, config: config.checkpoint }, sessionId, trigger, details),
     refreshActiveContext, syncActiveSession,
     lastCompileResult: null,
-    workJournal, lessonTriggers,
+    workJournal, experiencePackets, lessonTriggers, selfModel, beliefKnowledge, livingState, livingStateAdvisor,
     state: sessionState,
   };
 

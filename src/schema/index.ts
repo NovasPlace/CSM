@@ -1,4 +1,8 @@
 import { initializeCheckpointSchema } from '../checkpoint-schema.js';
+import { initializeCandidateSchema } from '../candidate-schema.js';
+import { initializeExperiencePacketSchema } from '../experience-packet-schema.js';
+import { initializeSelfModelSchema } from '../self-model-schema.js';
+import { initializeBeliefKnowledgeSchema } from '../belief-knowledge-schema.js';
 import { initializeContextCompilationSchema } from '../context-compilation-schema.js';
 import { initializeContextCacheSchema } from '../context-cache-schema.js';
 import { initializeRolloverSchema } from '../context-rollover-schema.js';
@@ -47,6 +51,10 @@ export async function initializeAllSchemas(database: Database): Promise<void> {
     ['trace-vault', () => initializeTraceVaultSchema(pool)],
     ['graph', () => initializeGraphSchema(database)],
     ['work-journal', () => initializeWorkJournalSchema(pool)],
+    ['candidate-queue', () => initializeCandidateSchema(pool)],
+    ['experience-packet', () => initializeExperiencePacketSchema(pool)],
+    ['self-model', () => initializeSelfModelSchema(pool)],
+    ['belief-knowledge', () => initializeBeliefKnowledgeSchema(pool)],
   ];
 
   for (const [name, step] of steps) {

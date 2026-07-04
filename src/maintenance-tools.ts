@@ -2,6 +2,12 @@ import { tool } from '@opencode-ai/plugin/tool';
 import { EmbeddingBackfill, type EmbeddingBackfillConfig } from './embedding-backfill.js';
 import { DedupCandidateDetector, type DedupDetectorConfig } from './dedup-detector.js';
 import { MemoryMerger, type MergeConfig } from './merge-tool.js';
+import {
+  CandidateGenerator,
+  type CandidateGeneratorConfig,
+  type CandidateType,
+  ALL_CANDIDATE_TYPES,
+} from './candidate-generator.js';
 
 export function memoryDedupDetectTool(detector: DedupCandidateDetector) {
   return tool({
@@ -139,6 +145,95 @@ export function memoryBackfillEmbeddingsTool(backfill: EmbeddingBackfill) {
           `Skipped: ${result.skipped}\n` +
           `Complete: ${result.isComplete}`,
         metadata: result,
+      };
+    },
+  });
+}
+
+export function memoryCandidateGenerateTool(generator: CandidateGenerator) {
+  return tool({
+    description:
+      'Generate advisory maintenance candidates (prune, promote_to_lesson, merge, stale_preference, refresh_summary) ' +
+      'from existing tables. ADVISORY ONLY: writes candidate rows and reasons, never prunes/merges/promotes/mutates memories. ' +
+      'Dry-run by default. Dedupes repeat candidates via partial unique index.',
+    args: {
+      dryRun: tool.schema.boolean().optional().describe('Report without writing candidates (default true)'),
+      types: tool.schema.array(tool.schema.enum(['prune', 'promote_to_lesson', 'merge', 'stale_preference', 'refresh_summary'])).optional().describe('Candidate types to generate (default: all)'),
+      maxPerType: tool.schema.number().optional().describe('Max candidates per type (default 100)'),
+      maxQualityScorePrune: tool.schema.number().optional().describe('Prune threshold: quality score below this (default 0.5)'),
+      minAgeDaysPrune: tool.schema.number().optional().describe('Prune: min age in days (default 30)'),
+      minRecallPromote: tool.schema.number().optional().describe('Promote: min recall count (default 5)'),
+      minAgeDaysStalePreference: tool.schema.number().optional().describe('Stale preference: min age in days (default 60)'),
+      minChunksRefresh: tool.schema.number().optional().describe('Refresh summary: min chunk count (default 3)'),
+      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
+    },
+    async execute(args) {
+      const config: CandidateGeneratorConfig = {
+        dryRun: args.dryRun ?? true,
+        types: args.types as CandidateType[] | undefined,
+        maxPerType: args.maxPerType ?? 100,
+        maxQualityScorePrune: args.maxQualityScorePrune,
+        minAgeDaysPrune: args.minAgeDaysPrune,
+        minRecallPromote: args.minRecallPromote,
+        minAgeDaysStalePreference: args.minAgeDaysStalePreference,
+        minChunksRefresh: args.minChunksRefresh,
+        projectId: args.projectId,
+      };
+
+      const report = await generator.generate(config);
+
+      const lines = [
+        `Mode: ${report.dryRun ? 'DRY RUN (no writes)' : 'APPLY'}`,
+        `Total candidates: ${report.candidates.length}`,
+        report.dryRun ? '' : `Inserted: ${report.inserted} | Skipped duplicates: ${report.skippedDuplicates}`,
+        'By type:',
+        ...ALL_CANDIDATE_TYPES.map(t => `  ${t}: ${report.byType[t] ?? 0}`),
+        '',
+      ];
+
+      const shown = report.candidates.slice(0, 30);
+      for (const c of shown) {
+        const preview = c.reason;
+        lines.push(
+          `[${c.candidateType}] #${c.memoryId} (conf: ${c.confidence.toFixed(2)}) ${preview}`,
+        );
+      }
+      if (report.candidates.length > 30) {
+        lines.push(`... and ${report.candidates.length - 30} more candidates`);
+      }
+
+      return {
+        title: 'Candidate Generation',
+        output: lines.join('\n'),
+        metadata: report,
+      };
+    },
+  });
+}
+
+export function memoryCandidateReportTool(generator: CandidateGenerator) {
+  return tool({
+    description:
+      'Show stored candidate counts by type and status from the advisory candidate queue.',
+    args: {},
+    async execute() {
+      const report = await generator.report();
+
+      const lines = [
+        '=== CANDIDATE QUEUE REPORT ===',
+        `Total: ${report.total}`,
+        '',
+        'By type:',
+        ...Object.entries(report.byType).map(([t, n]) => `  ${t}: ${n}`),
+        '',
+        'By status:',
+        ...Object.entries(report.byStatus).map(([s, n]) => `  ${s}: ${n}`),
+      ];
+
+      return {
+        title: 'Candidate Queue Report',
+        output: lines.join('\n'),
+        metadata: report,
       };
     },
   });

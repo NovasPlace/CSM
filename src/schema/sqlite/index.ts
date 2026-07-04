@@ -131,4 +131,109 @@ export async function initializeMinimalSqliteSchema(pool: DatabasePool): Promise
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_memory_recall_events_memory ON memory_recall_events(memory_id, recalled_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_memory_recall_events_session ON memory_recall_events(session_id, recalled_at DESC)');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS experience_packets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      project_id TEXT,
+      entry_type TEXT NOT NULL CHECK (entry_type IN (
+        'tool_execution', 'error', 'milestone', 'decision',
+        'session_start', 'session_end', 'distill_group', 'loop_signal'
+      )),
+      entry_id TEXT,
+      internal_state TEXT NOT NULL DEFAULT '{}',
+      signals TEXT NOT NULL DEFAULT '{}',
+      confidence REAL NOT NULL DEFAULT 0.5 CHECK (confidence BETWEEN 0 AND 1),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_experience_packets_session ON experience_packets(session_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_experience_packets_created ON experience_packets(created_at DESC)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_experience_packets_type ON experience_packets(entry_type)');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS memory_candidate_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_type TEXT NOT NULL CHECK (candidate_type IN (
+        'prune', 'promote_to_lesson', 'merge', 'stale_preference', 'refresh_summary',
+        'candidate_belief', 'candidate_preference', 'candidate_worldview', 'candidate_drift_warning',
+        'candidate_opinion'
+      )),
+      memory_id INTEGER REFERENCES memories(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      confidence REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+      source_signals TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN (
+        'pending', 'reviewed', 'dismissed', 'applied'
+      )),
+      dedup_key TEXT,
+      event_count INTEGER NOT NULL DEFAULT 1,
+      reinforcement_count INTEGER NOT NULL DEFAULT 0,
+      contradicted_count INTEGER NOT NULL DEFAULT 0,
+      last_reinforced_at TEXT,
+      source_packet_ids TEXT NOT NULL DEFAULT '[]',
+      promotion_ready INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT
+    )
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_memory_candidate_queue_status ON memory_candidate_queue(status, candidate_type)',
+  );
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_memory_candidate_queue_memory ON memory_candidate_queue(memory_id)',
+  );
+  await pool.query(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_candidate_queue_pending_unique ON memory_candidate_queue(candidate_type, memory_id) WHERE status = \'pending\'',
+  );
+  await pool.query(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_candidate_queue_dedup ON memory_candidate_queue(candidate_type, dedup_key) WHERE dedup_key IS NOT NULL AND status = \'pending\'',
+  );
+
+  try { await pool.query('ALTER TABLE memory_candidate_queue ADD COLUMN dedup_key TEXT'); } catch { /* exists */ }
+  try { await pool.query('ALTER TABLE memory_candidate_queue ADD COLUMN event_count INTEGER NOT NULL DEFAULT 1'); } catch { /* exists */ }
+  try { await pool.query('ALTER TABLE memory_candidate_queue ADD COLUMN reinforcement_count INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
+  try { await pool.query('ALTER TABLE memory_candidate_queue ADD COLUMN contradicted_count INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
+  try { await pool.query('ALTER TABLE memory_candidate_queue ADD COLUMN last_reinforced_at TEXT'); } catch { /* exists */ }
+  try { await pool.query('ALTER TABLE memory_candidate_queue ADD COLUMN source_packet_ids TEXT NOT NULL DEFAULT \'[]\''); } catch { /* exists */ }
+  try { await pool.query('ALTER TABLE memory_candidate_queue ADD COLUMN promotion_ready INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
+  try { await pool.query('ALTER TABLE memory_candidate_queue ADD COLUMN updated_at TEXT'); } catch { /* exists */ }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS self_model_capabilities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      capability TEXT NOT NULL UNIQUE,
+      confidence REAL NOT NULL DEFAULT 0.3 CHECK (confidence BETWEEN 0 AND 1),
+      uncertainty REAL NOT NULL DEFAULT 0.5 CHECK (uncertainty BETWEEN 0 AND 1),
+      evidence_refs TEXT NOT NULL DEFAULT '[]',
+      success_count INTEGER NOT NULL DEFAULT 0,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      drift_warning INTEGER NOT NULL DEFAULT 0,
+      last_verified TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_self_model_capability ON self_model_capabilities(capability)');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS belief_knowledge_store (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      belief_kind TEXT NOT NULL CHECK (belief_kind IN ('preference', 'opinion', 'worldview')),
+      subject TEXT NOT NULL,
+      claim TEXT NOT NULL,
+      stance TEXT NOT NULL DEFAULT 'neutral' CHECK (stance IN ('supports', 'opposes', 'neutral')),
+      confidence REAL NOT NULL DEFAULT 0.3 CHECK (confidence BETWEEN 0 AND 1),
+      uncertainty REAL NOT NULL DEFAULT 0.5 CHECK (uncertainty BETWEEN 0 AND 1),
+      evidence_refs TEXT NOT NULL DEFAULT '[]',
+      contradicted_count INTEGER NOT NULL DEFAULT 0,
+      last_reinforced_at TEXT,
+      status TEXT NOT NULL DEFAULT 'candidate' CHECK (status IN ('candidate', 'promoted', 'rejected', 'stale')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (belief_kind, subject, claim)
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_belief_knowledge_kind ON belief_knowledge_store(belief_kind)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_belief_knowledge_status ON belief_knowledge_store(status, belief_kind)');
 }

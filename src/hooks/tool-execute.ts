@@ -62,6 +62,7 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
       const toolOutput = summarizeToolOutput(output.output);
       const tokenSnapshot = output.metadata?.tokenCount ?? 0;
       recordWorkJournal(ctx, input, output, sid, toolOutput, tokenSnapshot);
+      recordExperiencePacket(ctx, input, output, sid);
       await recordDistilledToolCall(ctx, input, output, sid, toolOutput);
       await recordContinuitySignals(ctx, input, output, sid, toolOutput);
 
@@ -178,6 +179,25 @@ async function recordDistilledToolCall(
 
   ctx.toolDistiller.record(record);
   if (ctx.toolDistiller.bufferLength >= 10) await autoDistill(ctx, sid);
+}
+
+function recordExperiencePacket(
+  ctx: PluginContext,
+  input: ToolExecuteAfterInput,
+  output: ToolExecuteAfterOutput,
+  sid: string | null,
+): void {
+  if (!sid) return;
+  ctx.experiencePackets.recordToolPacket({
+    sessionId: sid,
+    projectId: ctx.directory,
+    toolName: input.tool,
+    exitCode: output.metadata?.exitCode,
+    error: output.metadata?.error,
+    args: input.args ?? {},
+  }).catch((_err: unknown) => {
+    /* experience packet recording non-critical */
+  });
 }
 
 async function recordContinuitySignals(

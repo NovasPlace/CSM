@@ -39,10 +39,12 @@ export async function initializeCoreSchema(pool: DatabasePool): Promise<void> {
       semantic_signal_count_preserved INT NOT NULL DEFAULT 0,
       context_brief_chars INT NOT NULL DEFAULT 0,
       discard_marker_present BOOLEAN NOT NULL DEFAULT FALSE,
+      status TEXT NOT NULL DEFAULT 'compressed' CHECK (status IN ('compressed', 'skipped_under_budget', 'failed')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
 
+  await pool.query(`ALTER TABLE compaction_metrics ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'compressed' CHECK (status IN ('compressed', 'skipped_under_budget', 'failed'))`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_compaction_metrics_session ON compaction_metrics(session_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_compaction_metrics_created ON compaction_metrics(created_at DESC)`);
 

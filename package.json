@@ -59,10 +59,11 @@
     "lint": "npm run lint:src",
     "lint:src": "eslint src --max-warnings=102",
     "lint:all": "eslint .",
-    "lint:fix": "eslint src --fix"
+    "lint:fix": "eslint src --fix",
+    "csm": "npx tsx scripts/csm-query.ts"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.0",
+    "@opencode-ai/plugin": "1.17.13",
     "better-sqlite3": "^12.11.1",
     "pg": "^8.13.0",
     "pgvector": "^0.3.0"
@@ -88,8 +89,5 @@
     "eslint-config-prettier": "^10.1.8",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.62.1"
-  },
-  "overrides": {
-    "@opencode-ai/plugin": "1.17.0"
   }
 }

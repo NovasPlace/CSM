@@ -4,9 +4,17 @@ import {
   memoryDistillTool, memoryDistilledViewTool, memoryCompactTool,
   runtimeStatusTool, compactionAuditTool,
 } from '../tools.js';
-import { memoryBackfillEmbeddingsTool, memoryDedupDetectTool, memoryMergeDuplicatesTool } from '../maintenance-tools.js';
+import { memoryBackfillEmbeddingsTool, memoryDedupDetectTool, memoryMergeDuplicatesTool, memoryCandidateGenerateTool, memoryCandidateReportTool } from '../maintenance-tools.js';
 import { archiveCandidateReportTool } from '../archive-candidate-report-tool.js';
 import { memoryGovernanceReportTool } from '../memory-governance-report-tool.js';
+import { memoryPacketsTool } from '../experience-packet-tool.js';
+import { beliefScanTool, beliefScanReportTool } from '../belief-scan-tool.js';
+import { BeliefPromotionScanner } from '../belief-promotion-scanner.js';
+import { BeliefPromotionEngine } from '../belief-promotion.js';
+import { beliefPromotionTool } from '../belief-promotion-tool.js';
+import { selfModelTool } from '../self-model-tool.js';
+import { beliefKnowledgeTool } from '../belief-knowledge-tool.js';
+import { livingStatePreviewTool, livingStateDebugTool } from '../living-state-tool.js';
 import { goalSetTool, goalUpdateTool, goalListTool } from '../goal-tools.js';
 import { createCheckpointTool, expandCheckpointRefTool, listCheckpointsTool } from '../checkpoint-tool.js';
 import { contextReviewTool } from '../context-review-tool.js';
@@ -18,6 +26,7 @@ import type { PluginContext } from '../plugin-context.js';
 import { EmbeddingBackfill } from '../embedding-backfill.js';
 import { DedupCandidateDetector } from '../dedup-detector.js';
 import { MemoryMerger } from '../merge-tool.js';
+import { CandidateGenerator } from '../candidate-generator.js';
 import { ArchiveCandidateReportBuilder } from '../archive-candidate-report.js';
 import { MemoryGovernanceReportBuilder } from '../memory-governance-report.js';
 
@@ -27,10 +36,15 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     toolDistiller, memoryExtractor, redactor, contextCompactor,
     checkpointStore: _checkpointStore, checkpointToolDeps, config, embeddings,
   } = pluginCtx;
+  const experiencePackets = pluginCtx.experiencePackets;
+
+  const beliefScanner = new BeliefPromotionScanner(database.getPool());
+  const beliefPromotion = new BeliefPromotionEngine(database.getPool());
 
   const backfill = new EmbeddingBackfill(database, embeddings);
   const dedupDetector = new DedupCandidateDetector(database);
   const memoryMerger = new MemoryMerger(database);
+  const candidateGenerator = new CandidateGenerator(database);
   const archiveCandidateReportBuilder = new ArchiveCandidateReportBuilder(database);
   const governanceReportBuilder = new MemoryGovernanceReportBuilder(database);
 
@@ -48,8 +62,18 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     csm_memory_backfill_embeddings: memoryBackfillEmbeddingsTool(backfill),
     csm_memory_dedup_detect: memoryDedupDetectTool(dedupDetector),
     csm_memory_merge: memoryMergeDuplicatesTool(memoryMerger),
+    csm_memory_candidate_generate: memoryCandidateGenerateTool(candidateGenerator),
+    csm_memory_candidate_report: memoryCandidateReportTool(candidateGenerator),
     csm_memory_archive_candidate_report: archiveCandidateReportTool(archiveCandidateReportBuilder),
     csm_memory_governance_report: memoryGovernanceReportTool(governanceReportBuilder),
+    csm_memory_packets: memoryPacketsTool(experiencePackets),
+    csm_belief_scan: beliefScanTool(beliefScanner),
+    csm_belief_scan_report: beliefScanReportTool(beliefScanner),
+    csm_belief_promote: beliefPromotionTool(beliefPromotion),
+    csm_self_model: selfModelTool(pluginCtx.selfModel),
+    csm_belief_knowledge: beliefKnowledgeTool(pluginCtx.beliefKnowledge),
+    csm_living_state_preview: livingStatePreviewTool(pluginCtx.livingState),
+    csm_living_state_debug: livingStateDebugTool(pluginCtx.livingStateAdvisor),
     csm_runtime_status: runtimeStatusTool(database, memoryManager, config, pluginCtx.state.currentSessionId),
     csm_compaction_audit: compactionAuditTool(database),
     create_checkpoint: createCheckpointTool(checkpointToolDeps),

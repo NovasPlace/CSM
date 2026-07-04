@@ -6,6 +6,38 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `test/belief-promotion.test.ts` | none | test | Test suite |
+| `src/belief-promotion.ts` | PromotionConfig, PromotionCandidate, PromotionDecision, PromotionReport, BeliefPromotionEngine | src | Module |
+| `src/belief-promotion-tool.ts` | beliefPromotionTool | src | Tool registration |
+| `test/living-state-advisor.test.ts` | none | test | Test suite |
+| `src/living-state-advisor.ts` | LivingStateDiagnostic, LivingStateAdvisor | src | Module |
+| `test/living-state-runtime.test.ts` | none | test | Test suite |
+| `src/living-state-tool.ts` | livingStatePreviewTool, livingStateDebugTool | src | Tool registration |
+| `src/living-state-runtime.ts` | SelfModelSnapshot, LivingStatePreview, LivingStateRuntime | src | Module |
+| `test/belief-knowledge-store.test.ts` | none | test | Test suite |
+| `src/belief-knowledge-tool.ts` | beliefKnowledgeTool | src | Tool registration |
+| `src/belief-knowledge-store.ts` | BeliefKnowledgeConsolidator | src | Module |
+| `src/belief-knowledge-schema.ts` | initializeBeliefKnowledgeSchema | src | SQL schema |
+| `test/self-model-updater.test.ts` | none | test | Test suite |
+| `src/self-model-updater.ts` | SelfModelUpdater | src | Module |
+| `src/self-model-tool.ts` | selfModelTool | src | Tool registration |
+| `src/self-model-schema.ts` | initializeSelfModelSchema | src | SQL schema |
+| `test/belief-promotion-scanner.test.ts` | none | test | Test suite |
+| `src/belief-scan-tool.ts` | beliefScanTool, beliefScanReportTool | src | Tool registration |
+| `src/belief-promotion-scanner.ts` | BeliefScanConfig, BeliefCandidateRow, BeliefScanReport, BeliefPromotionScanner | src | Module |
+| `test/experience-packet.test.ts` | none | test | Test suite |
+| `src/internal-state-deriver.ts` | InternalState, DeriveInput, deriveInternalState, deriveNeutralState | src | Module |
+| `src/experience-packet.ts` | PacketEntryType, ExperiencePacket, ExperiencePacketCreator | src | Module |
+| `src/experience-packet-tool.ts` | memoryPacketsTool | src | Tool registration |
+| `src/experience-packet-schema.ts` | initializeExperiencePacketSchema | src | SQL schema |
+| `test/candidate-generator.test.ts` | none | test | Test suite |
+| `src/candidate-schema.ts` | ALL_CANDIDATE_TYPES, CandidateType, BELIEF_CANDIDATE_TYPES, BeliefCandidateType, initializeCandidateSchema | src | SQL schema |
+| `src/candidate-generator.ts` | CandidateType, CandidateStatus, ALL_CANDIDATE_TYPES, CandidateRow, CandidateGeneratorConfig, CandidateReport, CandidateGenerator | src | Module |
+| `scripts/test-load.ts` | none | test | Test suite |
+| `scripts/test-conn.ts` | none | test | Test suite |
+| `scripts/csm-live.ts` | none | scripts | Module |
+| `scripts/csm-audit.ts` | none | scripts | Module |
+| `scripts/csm-query.ts` | none | scripts | Module |
 | `test/work-journal-inject.test.ts` | none | test | Test suite |
 | `test/value-source-guard.test.ts` | none | test | Test suite |
 | `test/tui-adapter.test.ts` | none | test | Test suite |
@@ -91,7 +123,7 @@
 | `src/work-journal-last-steps.ts` | buildLastSteps | src | Module |
 | `src/work-journal-inject.ts` | WorkJournalInjectDeps, buildResumeInjection | src | Module |
 | `src/value-source-guard.ts` | ValueSource, TaggedValue, ValueClaimProvenance, ValueSourceGuardResult, detectUnlabeledInferences, classifyValueClaim, guardValueSources | src | Module |
-| `src/types.ts` | MemoryType, MemoryCandidateStatus, MemoryCandidate, MemoryApproval, TTLConfig, ProjectScope, ExtractorConfig, MemoryEmotion, MemorySource, SortBy, MemorySearchMode, Session, Memory, MemoryChunk, MemoryEvent, SessionContext, BudgetMode, ContextCompilerConfig, ContextCacheConfig, CompressedPartDetail, ContextCompilationEntry, ProviderPricing, CompactionReport, ToolDominanceTrendPoint, SessionAnalytics, AutoDocsConfig, DatabaseProvider, PluginConfig, CompactorConfig, AssistantCompactorConfig, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics, CompactionQualityConfig, DEFAULT_COMPACTION_QUALITY_CONFIG, DistillerConfig, ToolCallRecord, ToolCallGroup, ToolCallSummary, ContextBrief, LoopDetectionResult, ContextPressureResult, RecallResult, MemorySaveOptions, MemorySearchOptions, MemoryListOptions, BackfillEmbeddingsOptions, BackfillEmbeddingsResult, DatabasePool, DatabaseClient, PruneRiskLevel, PruneSignal, PruneCandidate, PruneReport, PruneConfig, AlchemistLessonType, AlchemistSource, AlchemistIngest, ExtractedCapability, LessonTelemetry, AlchemistLesson, Blueprint, GapReport, AlchemistConfig, SelfContinuityConfidenceWeights, SelfContinuityConfig, DEFAULT_PRUNE_CONFIG | src | Context compaction engine |
+| `src/types.ts` | MemoryType, MemoryCandidateStatus, MemoryCandidate, MemoryApproval, TTLConfig, ProjectScope, ExtractorConfig, MemoryEmotion, MemorySource, SortBy, MemorySearchMode, Session, Memory, MemoryChunk, MemoryEvent, SessionContext, BudgetMode, ContextCompilerConfig, ContextCacheConfig, CompressedPartDetail, ContextCompilationEntry, ProviderPricing, CompactionReport, ToolDominanceTrendPoint, SessionAnalytics, AutoDocsConfig, DatabaseProvider, PluginConfig, CompactorConfig, AssistantCompactorConfig, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics, CompactionQualityConfig, DEFAULT_COMPACTION_QUALITY_CONFIG, DistillerConfig, ToolCallRecord, ToolCallGroup, ToolCallSummary, ContextBrief, LoopDetectionResult, ContextPressureResult, RecallResult, MemorySaveOptions, MemorySearchOptions, MemoryListOptions, BackfillEmbeddingsOptions, BackfillEmbeddingsResult, DatabasePool, DatabaseClient, PruneRiskLevel, PruneSignal, PruneCandidate, PruneReport, PruneConfig, AlchemistLessonType, AlchemistSource, AlchemistIngest, ExtractedCapability, LessonTelemetry, AlchemistLesson, Blueprint, GapReport, AlchemistConfig, SelfContinuityConfidenceWeights, SelfContinuityConfig, CapabilityName, ALL_CAPABILITIES, EvidenceRef, SelfModelCapability, SelfModelConfig, BeliefKind, BeliefStance, BeliefStatus, BeliefEntry, BeliefKnowledgeConfig, BeliefPromotionConfig, LivingStateConfig, DEFAULT_PRUNE_CONFIG | src | Context compaction engine |
 | `src/types/opentui.d.ts` | createSignal, createEffect, onCleanup, createMemo, onMount, h, jsx, jsxs, Fragment, RGBA, Renderable, KeyEvent, SlotMode, CliRenderer, JSX, SolidPlugin, Binding, Keymap, KeyLike, KeySequencePart, KeyStringifyInput, StringifyOptions, stringifyKeySequence, stringifyKeyStroke, BindingConfig, BindingLookup, BindingValue, createBindingLookup, formatCommandBindings, formatKeySequence | src | Module |
 | `src/tui.ts` | none | src | Module |
 | `src/trace-vault.ts` | none | src | Module |
@@ -152,7 +184,7 @@
 | `src/memory-governance-report.ts` | GovernanceReportConfig, GovernanceCandidate, GovernanceBucket, GovernanceReport, MemoryGovernanceReportBuilder | src | Memory & recall subsystem |
 | `src/memory-governance-report-tool.ts` | memoryGovernanceReportTool | src | Tool registration |
 | `src/memory-extractor.ts` | MemoryExtractor | src | Memory & recall subsystem |
-| `src/maintenance-tools.ts` | memoryDedupDetectTool, memoryMergeDuplicatesTool, memoryBackfillEmbeddingsTool | src | Tool registration |
+| `src/maintenance-tools.ts` | memoryDedupDetectTool, memoryMergeDuplicatesTool, memoryBackfillEmbeddingsTool, memoryCandidateGenerateTool, memoryCandidateReportTool | src | Tool registration |
 | `src/loop-detector.ts` | ToolCall, LoopDetector | src | Module |
 | `src/logger.ts` | LogLevel, LoggerContext, LoggerOptions, Logger, getLogger, createLoggerWithContext | src | Module |
 | `src/lesson-trigger-cache.ts` | LessonTrigger, LessonTriggerCache | src | Module |
@@ -175,7 +207,7 @@
 | `src/hooks/architecture-doc.ts` | reconcileArchitectureDoc | src | Hook handler |
 | `src/hooks/architecture-doc-render.ts` | renderArchitectureDoc | src | Hook handler |
 | `src/hooks/architecture-doc-graph.ts` | GraphNode, buildGraph | src | Hook handler |
-| `src/helpers/compaction-metrics.ts` | recordCompactionMetric, hasToolDiscardMarker | src | Context compaction engine |
+| `src/helpers/compaction-metrics.ts` | CompactionMetricStatus, recordCompactionMetric, hasToolDiscardMarker | src | Context compaction engine |
 | `src/helpers/auto-checkpoint.ts` | AutoCheckpointTrigger, AutoCheckpointContext, createAutoCheckpoint | src | Module |
 | `src/goal-tools.ts` | GoalToolDeps, goalSetTool, goalUpdateTool, goalListTool | src | Tool registration |
 | `src/goal-schema.ts` | Goal, initializeGoalSchema, setActiveGoal, updateGoal, getActiveGoal, listGoals | src | SQL schema |

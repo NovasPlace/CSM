@@ -25,8 +25,18 @@ const CSM_TOOL_NAMES = [
   'csm_memory_distilled_view',
   'csm_memory_compact',
   'csm_memory_backfill_embeddings',
+  'csm_memory_candidate_generate',
+  'csm_memory_candidate_report',
   'csm_runtime_status',
   'csm_compaction_audit',
+  'csm_memory_packets',
+  'csm_belief_scan',
+  'csm_belief_scan_report',
+  'csm_belief_promote',
+  'csm_self_model',
+  'csm_belief_knowledge',
+  'csm_living_state_preview',
+  'csm_living_state_debug',
 ] as const;
 
 /**

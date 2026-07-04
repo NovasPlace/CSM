@@ -209,6 +209,16 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         output.system.push(contextBrief.compressed);
       }
 
+      // --- Phase 4F: Advisory Living State block ---
+      if (ctx.livingStateAdvisor) {
+        try {
+          const block = await ctx.livingStateAdvisor.assembleBlock();
+          if (block) {
+            output.system.push(block);
+          }
+        } catch { /* advisory block non-critical */ }
+      }
+
       // ... rest of the existing hooks continue below ...
 
       // --- Token pressure info ---
