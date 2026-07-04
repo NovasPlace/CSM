@@ -306,9 +306,9 @@ ClaudeX already runs against CSM's Postgres backend with 39K+ memories. The lens
 - [docs/PHASE4EB_BELIEF_KNOWLEDGE_CONTRACT.md](docs/PHASE4EB_BELIEF_KNOWLEDGE_CONTRACT.md) — Belief knowledge contract
 - [docs/PHASE4B5_PACKET_CONTRACT.md](docs/PHASE4B5_PACKET_CONTRACT.md) — Experience packet vocabulary
 
----
+## Roadmap
 
-## Philosophy
+### ClaudeX — Database UI (Next Phase)
 
 CSM is built around a simple idea:
 
