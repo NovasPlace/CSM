@@ -1,14 +1,62 @@
-# Cross-Session Memory (CSM)
+Cross-Session Memory (CSM)
 
 A continuity runtime for AI coding assistants. Not just memory — a full pipeline that turns raw events into durable beliefs, with safety gates at every stage.
 
 Backed by PostgreSQL + pgvector (default) or SQLite (lightweight alternative). 25 tables. 27 runtime tools. 728 tests.
 
-## What CSM Is
+---
+
+## Why CSM?
+
+Large language models are exceptionally capable, but every session begins with the same limitation: their working memory is temporary.
+
+As projects grow, conversations become longer, tools generate thousands of lines of output, and important decisions disappear behind an ever-expanding context window.
+
+CSM addresses this by separating **long-term continuity** from the model's limited working context.
+
+Instead of treating every conversation as isolated, the engine continuously builds a structured knowledge base of your project, allowing AI systems to maintain continuity across sessions, conversations, and development cycles.
+
+---
+
+## What CSM Does
 
 CSM gives an AI assistant long-term continuity. Without it, every session starts from zero. With it, the assistant remembers decisions, learns from mistakes, tracks its own capabilities, and maintains a living model of what it knows and doesn't know.
 
-The key insight: memory alone isn't continuity. CSM is a **pipeline** — raw events flow through compaction, experience packets, candidate scanning, belief promotion, and advisory injection. Each stage has safety gates. Nothing gets promoted to durable memory without passing confidence thresholds, dedup checks, and contradiction detection.
+The key insight: **memory alone isn't continuity.** CSM is a pipeline — raw events flow through compaction, experience packets, candidate scanning, belief promotion, and advisory injection. Each stage has safety gates. Nothing gets promoted to durable memory without passing confidence thresholds, dedup checks, and contradiction detection.
+
+### Persistent Memory
+
+Important information survives beyond a single conversation. The engine stores meaningful knowledge instead of forcing the model to relearn the same information every session.
+
+### Intelligent Context Retrieval
+
+Only relevant memories are brought back into context. Rather than injecting an entire history, CSM performs semantic retrieval to provide only the information needed for the current task.
+
+### Context Compaction
+
+Long conversations become efficient. Instead of keeping every tool call and every message forever, the engine intelligently compresses historical context into concise summaries while preserving the important information.
+
+### Agent Journaling
+
+Every significant action can be recorded as structured knowledge. The system maintains an evolving record of work completed, architectural decisions, discoveries, failures, and successes.
+
+### Lessons Learned
+
+Mistakes become permanent improvements. When an issue is solved once, the lesson can be preserved so future sessions avoid repeating the same problem.
+
+### Project Knowledge
+
+The engine builds an understanding of your project over time. Architecture decisions, repository knowledge, workflows, documentation, and development history become searchable knowledge instead of disappearing into old conversations.
+
+### Checkpoints
+
+Major milestones can be saved and restored. Instead of relying on enormous conversation histories, AI systems can return to meaningful checkpoints with the necessary context already assembled.
+
+### Context Pressure Management
+
+The engine monitors context usage before it becomes a problem. As conversations grow, CSM manages information intelligently to help keep working context focused and efficient.
+
+---
 
 ## The Pipeline
 
@@ -43,6 +91,8 @@ Conservative promotion engine. Only high-confidence, well-evidenced candidates b
 ### Stage 6: Advisory Living State
 The living state advisor assembles an advisory block for the context brief. Shows recent experience, candidate deltas, self-model state, and belief knowledge. Labeled "preview, not durable truth" — never imperative, never absolutist.
 
+---
+
 ## Safety Model
 
 Every stage has guards:
@@ -54,6 +104,8 @@ Every stage has guards:
 - **Dedup before insert** — Exact content dedup prevents duplicate memories. Partial unique index on candidate queue.
 - **Contradiction detection** — Candidates with contradicted_count > 0 are flagged `needs_review`, not auto-promoted.
 - **Budget trimming** — Advisory block respects token budget. Preserves warnings longest: beliefs → capabilities → signals dropped first.
+
+---
 
 ## Tool Groups
 
@@ -112,6 +164,8 @@ Every stage has guards:
 | `csm_runtime_status` | Plugin status, DB connectivity, tool registry |
 | `csm_compaction_audit` | Audit compaction telemetry for correctness |
 
+---
+
 ## Database Architecture
 
 25 tables across 7 schema subsystems:
@@ -157,6 +211,8 @@ Every stage has guards:
 ### Indexes
 Key performance indexes: HNSW on memory_chunks (vector similarity), GIN on memories (tags, search_vector), partial unique on candidate queue (dedup), partial unique on distilled_summaries (dedup), active checkpoint lookup.
 
+---
+
 ## Metrics
 
 | Metric | Value |
@@ -171,6 +227,8 @@ Key performance indexes: HNSW on memory_chunks (vector similarity), GIN on memor
 | Live memories | 46,000+ |
 | Embeddings | 7,500+ |
 | Lint baseline | 102 warnings (max-warnings=102) |
+
+---
 
 ## Quick Start
 
@@ -201,18 +259,28 @@ npm run verify
 
 Degraded: no vector ANN, no embedding index, text search fallback. All CRUD works. 26 contract tests pass on both backends.
 
+---
+
 ## Codex Bridge
 
 Import `./codex-bridge` to expose the memory harness to Codex-facing code. 49 bridge tools including memory CRUD, context compilation, checkpoints, governance, and goal tracking.
 
-## Architecture Docs
+---
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Module flow and dependency map
-- [docs/PHASE3G_SQLITE_MVP.md](docs/PHASE3G_SQLITE_MVP.md) — SQLite adapter documentation
-- [docs/PHASE4FA_LIVING_STATE_PREVIEW.md](docs/PHASE4FA_LIVING_STATE_PREVIEW.md) — Living state pipeline
-- [docs/PHASE4FC_STAGED_ENABLEMENT.md](docs/PHASE4FC_STAGED_ENABLEMENT.md) — Advisory block staging
-- [docs/PHASE4EB_BELIEF_KNOWLEDGE_CONTRACT.md](docs/PHASE4EB_BELIEF_KNOWLEDGE_CONTRACT.md) — Belief knowledge contract
-- [docs/PHASE4B5_PACKET_CONTRACT.md](docs/PHASE4B5_PACKET_CONTRACT.md) — Experience packet vocabulary
+## Benefits
+
+Using CSM allows AI systems to:
+
+- Remember important information across sessions
+- Dramatically reduce unnecessary token usage
+- Maintain long-running software projects
+- Preserve architectural decisions
+- Reduce repeated explanations
+- Improve consistency between sessions
+- Retrieve relevant knowledge in seconds
+- Scale to projects that would otherwise exceed model context limits
+
+---
 
 ## Roadmap
 
@@ -227,6 +295,37 @@ ClaudeX is the planned conversational interface for CSM's database layer. Instea
 
 ClaudeX already runs against CSM's Postgres backend with 39K+ memories. The lens blend system biases context toward the active domain. The next phase is building the database management layer — schema exploration, query assistance, migration planning — all through conversation.
 
+---
+
+## Architecture Docs
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Module flow and dependency map
+- [docs/PHASE3G_SQLITE_MVP.md](docs/PHASE3G_SQLITE_MVP.md) — SQLite adapter documentation
+- [docs/PHASE4FA_LIVING_STATE_PREVIEW.md](docs/PHASE4FA_LIVING_STATE_PREVIEW.md) — Living state pipeline
+- [docs/PHASE4FC_STAGED_ENABLEMENT.md](docs/PHASE4FC_STAGED_ENABLEMENT.md) — Advisory block staging
+- [docs/PHASE4EB_BELIEF_KNOWLEDGE_CONTRACT.md](docs/PHASE4EB_BELIEF_KNOWLEDGE_CONTRACT.md) — Belief knowledge contract
+- [docs/PHASE4B5_PACKET_CONTRACT.md](docs/PHASE4B5_PACKET_CONTRACT.md) — Experience packet vocabulary
+
+## Roadmap
+
+### ClaudeX — Database UI (Next Phase)
+
+CSM is built around a simple idea:
+
+> Intelligence is amplified by continuity.
+
+Models are already excellent at reasoning. What they lack is persistent experience.
+
+CSM provides the missing layer between temporary reasoning and long-term knowledge, allowing AI systems to build on previous work instead of constantly starting over.
+
+---
+
+**CSM isn't another chatbot memory feature.**
+
+It is a persistence and continuity platform designed to give AI systems a durable understanding of the work they've already done, enabling longer-lived, more capable, and more efficient assistants.
+
+---
+
 ## Key Design Decisions
 
 - **Pipeline over storage** — CSM is a processing system, not a database wrapper. Every stage adds value.
@@ -234,3 +333,5 @@ ClaudeX already runs against CSM's Postgres backend with 39K+ memories. The lens
 - **Provenance required** — Every memory traces back to source events. No orphaned knowledge.
 - **Graceful degradation** — SQLite works. Vector search falls back to text. Advisory blocks are opt-in.
 - **No raw telemetry** — Recall events store hashed queries only. No user text in audit trails.
+
+
