@@ -181,7 +181,7 @@ async function executeRollover(
   messages: MessageLike[],
   config: RolloverConfig,
   record: { rollover_count: number },
-  redactor?: Redactor,
+  _redactor?: Redactor,
 ): Promise<RolloverResult> {
   const cutoff = findTurnsCutoff(messages, config.recentTurnsToKeep);
   const oldMessages = messages.slice(0, cutoff);

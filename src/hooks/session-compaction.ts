@@ -17,6 +17,7 @@ export function createSessionCompactingHook(ctx: PluginContext) {
       const sid = ctx.state.currentSessionId;
       if (!ctx.config.checkpoint.auto?.enabled || !sid) return;
 
+      // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
       console.log('[CrossSessionMemory] Pre-compaction auto-checkpoint triggered');
       await ctx.autoCheckpoint(sid, 'pre_compaction', {
         reason: 'opencode_builtin_compaction_starting',
@@ -29,6 +30,7 @@ export function createSessionCompactingHook(ctx: PluginContext) {
         output.context.push(
           `[Checkpoint Context — preserve this in the summary]\n${latest.summaryMarkdown}`
         );
+        // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
         console.log('[CrossSessionMemory] Injected checkpoint context into compaction prompt');
       } catch (e) {
         console.error('[CrossSessionMemory] Failed to inject checkpoint context:', e);
@@ -48,6 +50,7 @@ export function createAutocontinueHook(ctx: PluginContext) {
 
       // Standard post-compaction checkpoint
       if (ctx.config.checkpoint.auto?.enabled) {
+        // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
         console.log('[CrossSessionMemory] Post-compaction auto-checkpoint triggered', {
           overflow: input.overflow,
         });
@@ -62,6 +65,7 @@ export function createAutocontinueHook(ctx: PluginContext) {
         const pool = ctx.database.getPool();
         const record = await getRolloverRecord(pool, sid);
         if (record.needs_hard_rollover && record.last_brief_text) {
+          // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
           console.log('[CrossSessionMemory] Hard rollover triggered — creating continuation brief checkpoint');
           const briefText = record.last_brief_text;
           const briefTokens = estimateTokens(briefText);
@@ -79,6 +83,7 @@ export function createAutocontinueHook(ctx: PluginContext) {
             rawCaptures: [],
           });
           await clearHardRolloverFlag(pool, sid);
+          // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
           console.log(`[CrossSessionMemory] Hard rollover checkpoint created (${briefTokens} tokens), flag cleared`);
         }
       }

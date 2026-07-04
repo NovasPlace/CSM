@@ -7,6 +7,7 @@
  */
 import { DatabasePool } from './types.js';
 import { Redactor } from './redactor.js';
+import { ilikeExpr, dialectFromPool, jsonExtractText, colInParamArray, jsonParam } from './db/query-dialect.js';
 
 export type CacheKind = 'turn' | 'tool_output' | 'file_read' | 'error' | 'decision';
 
@@ -65,10 +66,11 @@ export async function fetchItem(
 export async function searchItems(
   pool: DatabasePool, sessionId: string, query: string, limit: number,
 ): Promise<CacheItem[]> {
+  const d = dialectFromPool(pool);
   const pattern = `%${query.replace(/[%_]/g, '\\$&')}%`;
   const res = await pool.query(
     `SELECT * FROM context_cache
-     WHERE session_id = $1 AND (summary ILIKE $2 OR content ILIKE $2)
+     WHERE session_id = $1 AND (${ilikeExpr(d, 'summary', 2)} OR ${ilikeExpr(d, 'content', 2)})
      ORDER BY created_at DESC LIMIT $3`,
     [sessionId, pattern, limit],
   );
@@ -78,10 +80,11 @@ export async function searchItems(
 export async function fetchFileReads(
   pool: DatabasePool, sessionId: string, filePath: string,
 ): Promise<CacheItem[]> {
+  const d = dialectFromPool(pool);
   const res = await pool.query(
     `SELECT * FROM context_cache
      WHERE session_id = $1 AND kind = 'file_read'
-       AND metadata->>'filePath' = $2
+       AND ${jsonExtractText(d, 'metadata', 'filePath')} = $2
      ORDER BY created_at DESC LIMIT 5`,
     [sessionId, filePath],
   );
@@ -116,9 +119,10 @@ export async function fetchDecisions(
 export async function fetchLatestDecisionBySource(
   pool: DatabasePool, sessionId: string, source: string,
 ): Promise<CacheItem | null> {
+  const d = dialectFromPool(pool);
   const res = await pool.query(
     `SELECT * FROM context_cache
-     WHERE session_id = $1 AND kind = 'decision' AND metadata->>'source' = $2
+     WHERE session_id = $1 AND kind = 'decision' AND ${jsonExtractText(d, 'metadata', 'source')} = $2
      ORDER BY created_at DESC LIMIT 1`,
     [sessionId, source],
   );
@@ -129,17 +133,18 @@ export async function fetchLatestDecisionBySource(
 export async function searchLatestDecisionBySources(
   pool: DatabasePool, sessionId: string, query: string, sources: string[],
 ): Promise<CacheItem | null> {
+  const d = dialectFromPool(pool);
   const words = query.replace(/[%_]/g, ' ').split(/\s+/).filter(w => w.length > 2);
   if (words.length === 0) return null;
-  const params: unknown[] = [sessionId, sources];
+  const params: unknown[] = [sessionId, jsonParam(d, sources)];
   const conditions = words.map((w) => {
     const idx = params.length + 1;
     params.push(`%${w}%`);
-    return `(summary ILIKE $${idx} OR content ILIKE $${idx} OR metadata->>'task' ILIKE $${idx})`;
+    return `(${ilikeExpr(d, 'summary', idx)} OR ${ilikeExpr(d, 'content', idx)} OR ${ilikeExpr(d, jsonExtractText(d, 'metadata', 'task'), idx)})`;
   });
   const res = await pool.query(
     `SELECT * FROM context_cache
-     WHERE session_id = $1 AND kind = 'decision' AND metadata->>'source' = ANY($2)
+     WHERE session_id = $1 AND kind = 'decision' AND ${colInParamArray(d, jsonExtractText(d, 'metadata', 'source'), 2)}
        AND (${conditions.join(' OR ')})
      ORDER BY created_at DESC LIMIT 1`,
     params,

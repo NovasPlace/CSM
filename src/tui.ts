@@ -1,4 +1,6 @@
-import type { TuiPluginModule } from "@opencode-ai/plugin/tui";
+import type { TuiPluginModule, TuiPluginApi } from "@opencode-ai/plugin/tui";
+import pg from "pg";
+import { getLogger } from "./logger.js";
 
 type MemoryStats = {
   totalMemories: number;
@@ -16,9 +18,15 @@ const defaultStats: MemoryStats = {
   compactions: 0,
 };
 
+const STATS_KEY = "__csm_stats";
+const POLL_INTERVAL_MS = 5000;
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory";
+
 function readStats(kv: { get: (key: string, fallback: null) => unknown }): MemoryStats {
   try {
-    const stored = kv.get("__csm_stats", null);
+    const stored = kv.get(STATS_KEY, null);
     if (stored && typeof stored === "object") {
       const s = stored as Record<string, unknown>;
       return {
@@ -29,7 +37,9 @@ function readStats(kv: { get: (key: string, fallback: null) => unknown }): Memor
         compactions: typeof s.compactions === "number" ? s.compactions : 0,
       };
     }
-  } catch {}
+     } catch (_e) {
+       // Error reading stats, return defaults
+     }
   return defaultStats;
 }
 
@@ -47,23 +57,65 @@ function pressureColor(p: number): string {
   return "green";
 }
 
+async function pollStats(api: TuiPluginApi): Promise<void> {
+  const { Pool } = pg;
+  const pool = new Pool({
+    connectionString: DATABASE_URL,
+    max: 2,
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 3000,
+  });
+  try {
+    const [memResult, sessResult, ckptResult, compResult] = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS n FROM memories"),
+      pool.query(
+        "SELECT COUNT(*)::int AS n FROM sessions WHERE updated_at > now() - interval '24 hours'",
+      ),
+      pool.query(
+        "SELECT created_at FROM checkpoints ORDER BY created_at DESC LIMIT 1",
+      ),
+      pool.query(
+        "SELECT COUNT(*)::int AS n FROM compaction_metrics WHERE created_at > now() - interval '24 hours'",
+      ),
+    ]);
+    const stats: MemoryStats = {
+      totalMemories: memResult.rows[0]?.n ?? 0,
+      recentSessions: sessResult.rows[0]?.n ?? 0,
+      lastCheckpoint: ckptResult.rows[0]?.created_at
+        ? new Date(ckptResult.rows[0].created_at).toISOString()
+        : null,
+      contextPressure: 0,
+      compactions: compResult.rows[0]?.n ?? 0,
+    };
+    api.kv.set(STATS_KEY, stats);
+  } catch {
+    // DB unreachable — leave stale stats in KV (if any)
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
 const mod: TuiPluginModule = {
   id: "opencode-cross-session-memory",
 
-  tui: async (api) => {
+  tui: async (api): Promise<void> => {
     let h: HFn | null = null;
     try {
       const solidH = await import("solid-js/h");
-      h = solidH.h as unknown as HFn;
+      h = (solidH.h ?? solidH.default) as unknown as HFn;
     } catch {
-      console.warn("[CrossSessionMemory] solid-js not available, TUI visual panel disabled (core tools unaffected)");
+      getLogger().warn('solid-js not available, TUI visual panel disabled (core tools unaffected)');
     }
 
     const disposes: (() => void)[] = [];
 
+    // Populate stats immediately, then on an interval
+    pollStats(api).catch(() => {});
+    const pollTimer = setInterval(() => pollStats(api).catch(() => {}), POLL_INTERVAL_MS);
+
     try {
       api.slots.register({
-        sidebar_content: (props: { session_id: string }) => {
+        sidebar_content: (_props: { session_id: string }) => {
           try {
             const s = readStats(api.kv);
             if (s.totalMemories === 0 || !h) return null;
@@ -78,28 +130,29 @@ const mod: TuiPluginModule = {
               s.lastCheckpoint
                 ? h("text", { dim: true }, `  Last: ${new Date(s.lastCheckpoint).toLocaleString()}`)
                 : null,
-            );
-          } catch (err) {
-            console.warn("[CrossSessionMemory] sidebar_content render failed:", err);
+             );
+           } catch (_err) {
+            getLogger().warn('sidebar_content render failed');
             return null;
           }
         },
-        sidebar_footer: (props: { session_id: string }) => {
+        sidebar_footer: (_props: { session_id: string }) => {
           try {
             const s = readStats(api.kv);
             if (s.totalMemories === 0 || !h) return null;
 
             return h("text", { dim: true },
               `  ${s.totalMemories} mem | ${s.contextPressure}% ${formatPressure(s.contextPressure)}`);
-          } catch (err) {
-            console.warn("[CrossSessionMemory] sidebar_footer render failed:", err);
+           } catch (_err) {
+            getLogger().warn('sidebar_footer render failed');
             return null;
           }
         },
-      });
-    } catch (err) {
-      console.warn("[CrossSessionMemory] Slot registration failed:", err);
-    }
+           });
+           } catch (_err) {
+             getLogger().warn('route render failed');
+             return;
+           }
 
     try {
       const routeDispose = api.route.register([{
@@ -119,16 +172,16 @@ const mod: TuiPluginModule = {
               h("text", {}, `  Compactions:       ${s.compactions}`),
               h("text", {}, `  Last Checkpoint:   ${s.lastCheckpoint ? new Date(s.lastCheckpoint).toLocaleString() : "none"}`),
             );
-          } catch (err) {
-            console.warn("[CrossSessionMemory] route render failed:", err);
-            return h ? h("text", {}, "  Error loading memory stats") : null;
-          }
+           } catch (_err) {
+             getLogger().warn('route render failed');
+             return;
+           }
         },
       }]);
 
-      disposes.push(routeDispose);
-    } catch (err) {
-      console.warn("[CrossSessionMemory] Route registration failed:", err);
+       disposes.push(routeDispose);
+     } catch (_err) {
+      getLogger().warn('Route registration failed');
     }
 
     try {
@@ -140,7 +193,9 @@ const mod: TuiPluginModule = {
             description: "Show cross-session memory statistics",
             category: "Memory",
             onSelect: () => {
-              try { api.route.navigate("memory"); } catch {}
+              try { api.route.navigate("memory"); } catch (_e) {
+               // Navigation failed
+             }
             },
           },
         ]);
@@ -152,14 +207,19 @@ const mod: TuiPluginModule = {
 
     try {
       api.lifecycle.onDispose(() => {
+        clearInterval(pollTimer);
         for (const fn of disposes) {
-          try { fn(); } catch {}
+           try { fn(); } catch (_e) {
+             // Disposal failed
+           }
         }
         disposes.length = 0;
-      });
-    } catch {}
+       });
+        } catch (_e) {
+          // Lifecycle hook registration failed
+        }
 
-    console.log("[CrossSessionMemory] TUI initialized");
+    getLogger().info('TUI initialized');
   },
 };
 

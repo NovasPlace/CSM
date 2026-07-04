@@ -1,9 +1,9 @@
 // Phase 4A — checkpoint persistence layer
 // Pure parameterized SQL. PostgreSQL only. No ORM. No SQLite.
-import { DatabasePool, DatabaseClient } from './types.js';
+import { DatabasePool } from './types.js';
 import {
-  CheckpointRecord, CreateCheckpointInput, StoreRawInput,
-  RawCaptureRecord, ExpandedRef, CompactedRef,
+  CheckpointRecord, CreateCheckpointInput,
+  RawCaptureRecord, ExpandedRef,
 } from './checkpoint-types.js';
 import type { Redactor } from './redactor.js';
 

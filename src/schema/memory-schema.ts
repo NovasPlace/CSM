@@ -1,5 +1,6 @@
 import type { DatabasePool } from '../types.js';
 import { EMBEDDING_DIMENSIONS } from '../embeddings.js';
+import { getLogger } from '../logger.js';
 
 export async function ensureEmbeddingColumnContract(pool: DatabasePool): Promise<void> {
   const result = await pool.query(
@@ -27,13 +28,11 @@ export async function ensureEmbeddingColumnContract(pool: DatabasePool): Promise
 
   const legacyColumn = `embedding_legacy_${Date.now()}`;
   await pool.query(`ALTER TABLE memories RENAME COLUMN embedding TO ${legacyColumn}`);
-  await pool.query(
-    `ALTER TABLE memories ADD COLUMN embedding VECTOR(${EMBEDDING_DIMENSIONS})`,
-  );
-  console.warn(
-    `[Database] Renamed mismatched embedding column to ${legacyColumn}; regenerate embeddings to backfill ${expectedType}.`,
-  );
-}
+   await pool.query(
+     `ALTER TABLE memories ADD COLUMN embedding VECTOR(${EMBEDDING_DIMENSIONS})`,
+   );
+   getLogger().warn(`Renamed mismatched embedding column to ${legacyColumn}; regenerate embeddings to backfill ${expectedType}.`);
+ }
 
 export async function initializeMemorySchema(pool: DatabasePool): Promise<void> {
   await pool.query(`
@@ -62,7 +61,11 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
       accessed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       access_count INT DEFAULT 0,
       last_accessed_at TIMESTAMPTZ,
-      archived_at TIMESTAMPTZ
+      archived_at TIMESTAMPTZ,
+      archive_reason TEXT,
+      archive_batch_id TEXT,
+      archive_source TEXT,
+      archive_note TEXT
     )
   `);
 
@@ -92,6 +95,15 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS access_count INT DEFAULT 0`);
   await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archive_reason TEXT`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archive_batch_id TEXT`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archive_source TEXT`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS archive_note TEXT`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_by BIGINT REFERENCES memories(id)`);
+  await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_superseded ON memories(superseded_by) WHERE superseded_by IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_archive_batch ON memories(archive_batch_id) WHERE archive_batch_id IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_archive_reason ON memories(archive_reason) WHERE archive_reason IS NOT NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS memory_chunks (
@@ -121,11 +133,11 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_source ON memories(source)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_tags ON memories USING GIN(tags)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id)`);
-  try {
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived_at)`);
-  } catch (_error) {
-    console.warn('[Database] Archived-memory index skipped on legacy schema');
-  }
+   try {
+     await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived_at)`);
+   } catch (_error) {
+     getLogger().warn('Archived-memory index skipped on legacy schema');
+   }
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_memories_created_ttl ON memories(created_at)`);
 
   // Partial unique index to prevent duplicate transcript captures (defense against
@@ -151,4 +163,19 @@ export async function initializeMemorySchema(pool: DatabasePool): Promise<void> 
   } catch (_error) {
     console.warn('[Database] FTS column/index skipped (may already exist or unsupported)');
   }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS memory_merges (
+      id BIGSERIAL PRIMARY KEY,
+      canonical_id BIGINT NOT NULL REFERENCES memories(id),
+      duplicate_ids JSONB NOT NULL,
+      reason TEXT NOT NULL,
+      normalized_hash TEXT NOT NULL,
+      duplicate_count INT NOT NULL,
+      merged_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      merged_by TEXT NOT NULL DEFAULT 'merge-tool',
+      dry_run BOOLEAN NOT NULL DEFAULT false
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_memory_merges_canonical ON memory_merges(canonical_id)`);
 }

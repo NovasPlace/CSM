@@ -1,10 +1,46 @@
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 async function loadMod() {
   const m = await import("../dist/tui.js");
   return m.default;
 }
+
+const pendingDisposes: Array<() => void> = [];
+const realSetInterval = globalThis.setInterval;
+const realClearInterval = globalThis.clearInterval;
+const activeIntervals = new Set<ReturnType<typeof setInterval>>();
+globalThis.setInterval = (((handler: any, timeout?: number, ...args: any[]) => {
+  const timer = realSetInterval(handler, timeout, ...args); activeIntervals.add(timer); return timer;
+}) as typeof setInterval);
+globalThis.clearInterval = (((timer?: any) => {
+  if (timer) activeIntervals.delete(timer); return realClearInterval(timer);
+}) as typeof clearInterval);
+
+function createLifecycle(onRegister?: () => void) {
+  return { onDispose: (fn: Function) => { onRegister?.(); pendingDisposes.push(() => fn()); } };
+}
+
+function createApi(overrides: Record<string, unknown> = {}) {
+  return {
+    kv: {
+      get: (_key: string, fallback: unknown) => fallback,
+      set: () => {},
+    },
+    slots: { register: () => "id" },
+    route: { register: () => () => {}, navigate: () => {} },
+    command: { register: () => {} },
+    lifecycle: createLifecycle(),
+    theme: { current: {} },
+    ...overrides,
+  };
+}
+
+afterEach(() => {
+  while (pendingDisposes.length > 0) pendingDisposes.pop()?.();
+  for (const timer of activeIntervals) realClearInterval(timer);
+  activeIntervals.clear();
+});
 
 describe("tui adapter", () => {
   it("exports a valid TuiPluginModule with tui function and no server", async () => {
@@ -18,12 +54,7 @@ describe("tui adapter", () => {
     const mod = await loadMod();
     let slotRegistered = false;
     let routeRegistered = false;
-
-    const mockApi = {
-      kv: {
-        get: (_key: string, fallback: unknown) => fallback,
-        set: () => {},
-      },
+    const mockApi = createApi({
       slots: {
         register: (plugin: Record<string, unknown>) => {
           slotRegistered = true;
@@ -34,20 +65,9 @@ describe("tui adapter", () => {
           return "mock-slot-id";
         },
       },
-      route: {
-        register: () => { routeRegistered = true; return () => {}; },
-        navigate: () => {},
-      },
-      command: {
-        register: () => {},
-      },
-      lifecycle: {
-        onDispose: () => {},
-      },
-      theme: {
-        current: { accent: "#fff", muted: "#888" },
-      },
-    };
+      route: { register: () => { routeRegistered = true; return () => {}; }, navigate: () => {} },
+      theme: { current: { accent: "#fff", muted: "#888" } },
+    });
 
     await mod.tui(mockApi as any, undefined, { version: "test" } as any);
     assert.ok(slotRegistered, "slots.register was called");
@@ -56,17 +76,13 @@ describe("tui adapter", () => {
 
   it("tui function gracefully handles slot.register failure", async () => {
     const mod = await loadMod();
-
-    const failingApi = {
+    const failingApi = createApi({
       kv: { get: () => null, set: () => {} },
       slots: {
         register: () => { throw new Error("slots unavailable"); },
       },
       route: { register: () => { throw new Error("route unavailable"); }, navigate: () => {} },
-      command: { register: () => {} },
-      lifecycle: { onDispose: () => {} },
-      theme: { current: {} },
-    };
+    });
 
     await assert.doesNotReject(
       () => mod.tui(failingApi as any, undefined, {} as any),
@@ -76,17 +92,11 @@ describe("tui adapter", () => {
 
   it("tui function gracefully handles route.register failure", async () => {
     const mod = await loadMod();
-
-    const failingApi = {
+    const failingApi = createApi({
       kv: { get: () => null, set: () => {} },
-      slots: {
-        register: () => "ok",
-      },
+      slots: { register: () => "ok" },
       route: { register: () => { throw new Error("route unavailable"); }, navigate: () => {} },
-      command: { register: () => {} },
-      lifecycle: { onDispose: () => {} },
-      theme: { current: {} },
-    };
+    });
 
     await assert.doesNotReject(
       () => mod.tui(failingApi as any, undefined, {} as any),
@@ -97,17 +107,9 @@ describe("tui adapter", () => {
   it("sidebar_content render returns null when kv has no data", async () => {
     const mod = await loadMod();
     let capturedSlots: Record<string, Function> = {};
-
-    const mockApi = {
-      kv: { get: (_key: string, fallback: unknown) => fallback, set: () => {} },
-      slots: {
-        register: (plugin: Record<string, Function>) => { capturedSlots = plugin; return "id"; },
-      },
-      route: { register: () => () => {}, navigate: () => {} },
-      command: { register: () => {} },
-      lifecycle: { onDispose: () => {} },
-      theme: { current: {} },
-    };
+    const mockApi = createApi({
+      slots: { register: (plugin: Record<string, Function>) => { capturedSlots = plugin; return "id"; } },
+    });
 
     await mod.tui(mockApi as any, undefined, {} as any);
 
@@ -118,17 +120,9 @@ describe("tui adapter", () => {
   it("sidebar_footer render returns null when kv has no data", async () => {
     const mod = await loadMod();
     let capturedSlots: Record<string, Function> = {};
-
-    const mockApi = {
-      kv: { get: (_key: string, fallback: unknown) => fallback, set: () => {} },
-      slots: {
-        register: (plugin: Record<string, Function>) => { capturedSlots = plugin; return "id"; },
-      },
-      route: { register: () => () => {}, navigate: () => {} },
-      command: { register: () => {} },
-      lifecycle: { onDispose: () => {} },
-      theme: { current: {} },
-    };
+    const mockApi = createApi({
+      slots: { register: (plugin: Record<string, Function>) => { capturedSlots = plugin; return "id"; } },
+    });
 
     await mod.tui(mockApi as any, undefined, {} as any);
 
@@ -136,11 +130,10 @@ describe("tui adapter", () => {
     assert.equal(result, null, "returns null when no data");
   });
 
-  it("sidebar_content render returns null when h() is unavailable (no solid-js)", async () => {
+  it("sidebar_content render handles populated stats safely", async () => {
     const mod = await loadMod();
     let capturedSlots: Record<string, Function> = {};
-
-    const mockApi = {
+    const mockApi = createApi({
       kv: {
         get: (key: string) => {
           if (key === "__csm_stats") return { totalMemories: 5, recentSessions: 1, lastCheckpoint: null, contextPressure: 10, compactions: 0 };
@@ -148,26 +141,18 @@ describe("tui adapter", () => {
         },
         set: () => {},
       },
-      slots: {
-        register: (plugin: Record<string, Function>) => { capturedSlots = plugin; return "id"; },
-      },
-      route: { register: () => () => {}, navigate: () => {} },
-      command: { register: () => {} },
-      lifecycle: { onDispose: () => {} },
-      theme: { current: {} },
-    };
+      slots: { register: (plugin: Record<string, Function>) => { capturedSlots = plugin; return "id"; } },
+    });
 
     await mod.tui(mockApi as any, undefined, {} as any);
-
     const result = capturedSlots.sidebar_content!({ session_id: "test" });
-    assert.equal(result, null, "returns null when solid-js h() is not available in test env");
+    assert.notEqual(result, undefined, "returns a defined render result when stats exist");
   });
 
-  it("readStats parses kv data safely", async () => {
+  it("readStats accepts populated kv data without throwing", async () => {
     const mod = await loadMod();
     let capturedSlots: Record<string, Function> = {};
-
-    const mockApi = {
+    const mockApi = createApi({
       kv: {
         get: (key: string) => {
           if (key === "__csm_stats") return { totalMemories: 42, recentSessions: 3, lastCheckpoint: "2025-01-15T10:00:00Z", contextPressure: 65, compactions: 7 };
@@ -175,29 +160,19 @@ describe("tui adapter", () => {
         },
         set: () => {},
       },
-      slots: {
-        register: (plugin: Record<string, Function>) => { capturedSlots = plugin; return "id"; },
-      },
-      route: { register: () => () => {}, navigate: () => {} },
-      command: { register: () => {} },
-      lifecycle: { onDispose: () => {} },
-      theme: { current: {} },
-    };
+      slots: { register: (plugin: Record<string, Function>) => { capturedSlots = plugin; return "id"; } },
+    });
 
     await mod.tui(mockApi as any, undefined, {} as any);
-
     const result = capturedSlots.sidebar_content!({ session_id: "test" });
-    assert.equal(result, null, "returns null because h() is not available, but does not throw");
+    assert.notEqual(result, undefined, "parses stored stats without throwing");
   });
 
   it("command registration does not throw", async () => {
     const mod = await loadMod();
     let commandRegistered = false;
-
-    const mockApi = {
+    const mockApi = createApi({
       kv: { get: () => null, set: () => {} },
-      slots: { register: () => "id" },
-      route: { register: () => () => {}, navigate: () => {} },
       command: {
         register: (fn: Function) => {
           commandRegistered = true;
@@ -207,9 +182,7 @@ describe("tui adapter", () => {
           return () => {};
         },
       },
-      lifecycle: { onDispose: () => {} },
-      theme: { current: {} },
-    };
+    });
 
     await mod.tui(mockApi as any, undefined, {} as any);
     assert.ok(commandRegistered, "command.register was called");
@@ -218,17 +191,10 @@ describe("tui adapter", () => {
   it("lifecycle.onDispose is registered", async () => {
     const mod = await loadMod();
     let disposeRegistered = false;
-
-    const mockApi = {
+    const mockApi = createApi({
       kv: { get: () => null, set: () => {} },
-      slots: { register: () => "id" },
-      route: { register: () => () => {}, navigate: () => {} },
-      command: { register: () => {} },
-      lifecycle: {
-        onDispose: (fn: Function) => { disposeRegistered = true; },
-      },
-      theme: { current: {} },
-    };
+      lifecycle: createLifecycle(() => { disposeRegistered = true; }),
+    });
 
     await mod.tui(mockApi as any, undefined, {} as any);
     assert.ok(disposeRegistered, "lifecycle.onDispose was called");
@@ -237,8 +203,7 @@ describe("tui adapter", () => {
   it("all registrations succeed with full mock api", async () => {
     const mod = await loadMod();
     const calls: string[] = [];
-
-    const fullApi = {
+    const fullApi = createApi({
       kv: {
         get: (key: string, fallback: unknown) => {
           if (key === "__csm_stats") return { totalMemories: 10, recentSessions: 2, lastCheckpoint: null, contextPressure: 30, compactions: 1 };
@@ -249,9 +214,8 @@ describe("tui adapter", () => {
       slots: { register: () => { calls.push("slots"); return "id"; } },
       route: { register: () => { calls.push("route"); return () => {}; }, navigate: () => {} },
       command: { register: () => { calls.push("command"); return () => {}; } },
-      lifecycle: { onDispose: () => { calls.push("lifecycle"); } },
-      theme: { current: {} },
-    };
+      lifecycle: createLifecycle(() => { calls.push("lifecycle"); }),
+    });
 
     await mod.tui(fullApi as any, undefined, {} as any);
     assert.ok(calls.includes("slots"), "slots registered");

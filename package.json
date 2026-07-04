@@ -55,26 +55,39 @@
     "typecheck": "tsc --noEmit",
     "test": "npx tsx --test test/*.test.ts",
     "verify": "npm run build && npm run typecheck && npx tsx --test test/*.test.ts",
-    "benchmark:long-session": "npx tsx src/benchmark.ts"
+    "benchmark:long-session": "npx tsx src/benchmark.ts",
+    "lint": "npm run lint:src",
+    "lint:src": "eslint src --max-warnings=102",
+    "lint:all": "eslint .",
+    "lint:fix": "eslint src --fix",
+    "csm": "npx tsx scripts/csm-query.ts"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.0",
+    "@opencode-ai/plugin": "1.17.13",
+    "better-sqlite3": "^12.11.1",
     "pg": "^8.13.0",
     "pgvector": "^0.3.0"
   },
   "peerDependencies": {
-    "solid-js": ">=1.0.0",
+    "@opentui/core": ">=0.1.0",
     "@opentui/solid": ">=0.1.0",
-    "@opentui/core": ">=0.1.0"
+    "solid-js": "^1.9.13"
   },
   "peerDependenciesMeta": {
-    "@opentui/solid": { "optional": true },
-    "@opentui/core": { "optional": true }
+    "@opentui/solid": {
+      "optional": true
+    },
+    "@opentui/core": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "typescript": "^5.7.0"
-  },
-  "overrides": {
-    "@opencode-ai/plugin": "1.17.0"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^26.0.1",
+    "@types/pg": "^8.20.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.62.1"
   }
 }

@@ -5,7 +5,7 @@ import { tool } from '@opencode-ai/plugin/tool';
 import { MemoryManager } from './memory-manager.js';
 import { ContextRecallDaemon } from './context-recall.js';
 import { PrimingEngine } from './priming-engine.js';
-import { Memory, MemoryType, MemoryCandidate, MemoryApproval } from './types.js';
+import { MemoryType, MemoryApproval } from './types.js';
 import { MemoryExtractor } from './memory-extractor.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
@@ -25,8 +25,18 @@ const CSM_TOOL_NAMES = [
   'csm_memory_distilled_view',
   'csm_memory_compact',
   'csm_memory_backfill_embeddings',
+  'csm_memory_candidate_generate',
+  'csm_memory_candidate_report',
   'csm_runtime_status',
   'csm_compaction_audit',
+  'csm_memory_packets',
+  'csm_belief_scan',
+  'csm_belief_scan_report',
+  'csm_belief_promote',
+  'csm_self_model',
+  'csm_belief_knowledge',
+  'csm_living_state_preview',
+  'csm_living_state_debug',
 ] as const;
 
 /**
@@ -140,7 +150,7 @@ export function memoryDeleteTool(memoryManager: MemoryManager) {
     args: {
       id: tool.schema.number().describe('Memory ID to delete'),
     },
-    async execute(args, context) {
+    async execute(args, _context) {
       const deleted = await memoryManager.deleteMemory(args.id);
 
       if (deleted) {
@@ -167,7 +177,7 @@ export function memoryContextTool(contextRecall: ContextRecallDaemon) {
   return tool({
     description: 'Get the current context brief for this session when the user explicitly asks about memory or prior context. Do not use for simple greetings or small talk.',
     args: {},
-    async execute(args, context) {
+    async execute(_args, _context) {
       const contextBrief = await contextRecall.getContextBrief();
 
       if (!contextBrief) {
@@ -328,7 +338,7 @@ export function memoryListTool(memoryManager: MemoryManager) {
       }, {
         sessionId: args.sessionId,
         projectId: args.projectId,
-        type: args.type as any,
+        type: args.type as MemoryType | undefined,
         tags: args.tags,
         entityType: args.entityType,
         entityValue: args.entityValue,
@@ -352,8 +362,8 @@ export function memoryListTool(memoryManager: MemoryManager) {
       for (const m of memories) {
         const date = new Date(m.createdAt).toLocaleString();
         const tags = m.tags.length ? ` [${m.tags.join(', ')}]` : '';
-        const concepts = (m.metadata as any)?.extracted_concepts ?? [];
-        const conceptStr = concepts.length ? ` | ${concepts.map((c: any) => `${c.type}:${c.value}`).join(', ')}` : '';
+        const concepts = (m.metadata as { extracted_concepts?: { type: string; value: string }[] })?.extracted_concepts ?? [];
+        const conceptStr = concepts.length ? ` | ${concepts.map(c => `${c.type}:${c.value}`).join(', ')}` : '';
         output += `#${m.id} ${m.memoryType} (${m.importance.toFixed(2)})${tags}${conceptStr}\n  ${date} — ${m.content.substring(0, 120)}${m.content.length > 120 ? '...' : ''}\n\n`;
       }
 
@@ -445,7 +455,7 @@ export function memoryCandidateListTool(memoryExtractor: MemoryExtractor) {
       sessionId: tool.schema.string().optional().describe('Filter by session ID'),
       limit: tool.schema.number().optional().describe('Max results (default 50)'),
     },
-    async execute(args, context) {
+    async execute(args, _context) {
       const candidates = await memoryExtractor.getPendingCandidates(args.sessionId, args.limit ?? 50);
 
       let output = `Found ${candidates.length} pending candidates:\n\n`;
@@ -482,12 +492,12 @@ export function memoryCandidateApproveTool(memoryExtractor: MemoryExtractor) {
       editedImportance: tool.schema.number().optional().describe('Edited importance 0-1 (optional)'),
       editedTags: tool.schema.array(tool.schema.string()).optional().describe('Edited tags (optional)'),
     },
-    async execute(args, context) {
+    async execute(args, _context) {
       const approval: MemoryApproval = {
         candidateId: args.id,
         action: 'approve',
         editedContent: args.editedContent,
-        editedType: args.editedType as any,
+        editedType: args.editedType as MemoryType | undefined,
         editedImportance: args.editedImportance,
         editedTags: args.editedTags,
         reviewedBy: 'user',
@@ -514,7 +524,7 @@ export function memoryCandidateRejectTool(memoryExtractor: MemoryExtractor) {
     args: {
       id: tool.schema.string().describe('Candidate ID to reject'),
     },
-    async execute(args, context) {
+    async execute(args, _context) {
       const approval: MemoryApproval = {
         candidateId: args.id,
         action: 'reject',
@@ -540,7 +550,7 @@ export function memoryProjectListTool(memoryManager: MemoryManager) {
   return tool({
     description: 'List all project scopes with memory counts.',
     args: {},
-    async execute(args, context) {
+    async execute(_args, _context) {
       const projects = await memoryManager.getAllProjectScopes();
 
       let output = `Found ${projects.length} projects:\n\n`;
@@ -567,7 +577,7 @@ export function memoryCleanupTool(memoryManager: MemoryManager) {
   return tool({
     description: 'Run cleanup of expired memories and candidates based on TTL config.',
     args: {},
-    async execute(args, context) {
+    async execute(_args, _context) {
       const result = await memoryManager.cleanupExpiredMemories();
 
       return {
@@ -731,7 +741,7 @@ export function memoryCompactTool(contextCompactor: ContextCompactor) {
     description:
       'Report on context compaction: last compaction result plus cumulative session savings. Shows how many tool-call outputs were replaced with distilled references and how many tokens were saved.',
     args: {},
-    async execute(args, context) {
+    async execute(_args, _context) {
       const result = contextCompactor.getLastResult();
       const cumulative = contextCompactor.getCumulativeStats();
 

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DatabasePool } from './types.js';
+import { colInParamArray, dialectFromPool, jsonParam } from './db/query-dialect.js';
 
 export type RecallTelemetrySource =
   | 'search'
@@ -78,12 +79,13 @@ export async function getRecallCounts(
 ): Promise<Map<number, number>> {
   if (memoryIds.length === 0) return new Map();
 
+  const d = dialectFromPool(pool);
   const result = await pool.query(
     `SELECT memory_id, COUNT(*)::int AS recall_count
      FROM memory_recall_events
-     WHERE memory_id = ANY($1)
+     WHERE ${colInParamArray(d, 'memory_id', 1)}
      GROUP BY memory_id`,
-    [memoryIds],
+    [jsonParam(d, memoryIds)],
   );
 
   return new Map(

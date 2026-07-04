@@ -1,6 +1,8 @@
 import { Database } from "./database.js";
 import type { ExtractedConcept } from "./concept-extractor.js";
 import type { Memory } from "./types.js";
+import { getLogger } from "./logger.js";
+import { jsonExtractValue } from "./db/query-dialect.js";
 
 export type MemoryLink = {
   id: number;
@@ -16,6 +18,54 @@ export type RelatedMemory = {
   memory: Memory;
   link: MemoryLink;
 };
+
+interface CandidateRow {
+  id: number;
+  content: string;
+  created_at: Date;
+  concepts: unknown[];
+}
+
+interface SourceRow {
+  content: string;
+  created_at: Date;
+}
+
+interface LinkRow {
+  id: number;
+  source_id: number;
+  target_id: number;
+  link_type: "shared_entity" | "causal" | "temporal" | "reference";
+  shared_entities: unknown;
+  strength: number;
+  created_at: Date;
+}
+
+interface RelatedRow {
+  id: number;
+  source_id: number;
+  target_id: number;
+  link_type: string;
+  shared_entities: unknown;
+  strength: number;
+  created_at: Date;
+  mem_id: number;
+  session_id: string | null;
+  project_id: string | null;
+  memory_type: string;
+  content: string;
+  importance: number;
+  emotion: string | null;
+  confidence: number;
+  source: string;
+  tags: unknown;
+  linked_memory_ids: unknown;
+  metadata: unknown;
+  mem_created: Date;
+  mem_updated: Date;
+  accessed_at: Date;
+  access_count: number;
+}
 
 export async function initializeGraphSchema(db: Database): Promise<void> {
   const pool = db.getPool();
@@ -66,13 +116,14 @@ export async function buildLinksForMemory(
   if (concepts.length === 0) return [];
 
   const pool = db.getPool();
+  const d = db.dialect;
   const entityValues = concepts.map(c => c.value);
 
   const memoryRows = await pool.query(
-    `SELECT m.id, m.content, m.created_at, m.metadata->'extracted_concepts' AS concepts
+    `SELECT m.id, m.content, m.created_at, ${jsonExtractValue(d, 'm.metadata', 'extracted_concepts')} AS concepts
      FROM memories m
      WHERE m.id != $1
-       AND m.metadata->'extracted_concepts' IS NOT NULL
+       AND ${jsonExtractValue(d, 'm.metadata', 'extracted_concepts')} IS NOT NULL
      ORDER BY m.created_at DESC
      LIMIT 50`,
     [memoryId]
@@ -80,10 +131,10 @@ export async function buildLinksForMemory(
 
   const links: MemoryLink[] = [];
 
-  for (const candidate of memoryRows.rows as any[]) {
-    const candidateConcepts: any[] = candidate.concepts ?? [];
+  for (const candidate of memoryRows.rows as CandidateRow[]) {
+    const candidateConcepts = (candidate.concepts ?? []) as { value: string }[];
     const shared = entityValues.filter(v =>
-      candidateConcepts.some((c: any) => c.value === v)
+      candidateConcepts.some(c => c.value === v)
     );
 
     if (shared.length === 0) continue;
@@ -92,8 +143,8 @@ export async function buildLinksForMemory(
       `SELECT content, created_at FROM memories WHERE id = $1`,
       [memoryId]
     );
-    const sourceContent = (sourceRow.rows as any[])[0]?.content ?? "";
-    const sourceDate = (sourceRow.rows as any[])[0]?.created_at ?? new Date();
+    const sourceContent = (sourceRow.rows as SourceRow[])[0]?.content ?? "";
+    const sourceDate = (sourceRow.rows as SourceRow[])[0]?.created_at ?? new Date();
 
     const linkType = inferLinkType(
       sourceContent,
@@ -115,21 +166,21 @@ export async function buildLinksForMemory(
          RETURNING *`,
         [memoryId, candidate.id, linkType, JSON.stringify(shared), strength]
       );
-      const row = (result.rows as any[])[0];
+      const row = (result.rows as LinkRow[])[0];
       if (row) {
         links.push({
           id: row.id,
           source_id: row.source_id,
           target_id: row.target_id,
           link_type: row.link_type,
-          shared_entities: row.shared_entities,
+          shared_entities: row.shared_entities as string[],
           strength: row.strength,
           created_at: row.created_at,
         });
       }
-    } catch (err) {
-      console.warn("[MemoryGraph] Failed to create link:", err);
-    }
+     } catch (_err) {
+       getLogger().warn('Failed to create link');
+     }
   }
 
   return links;
@@ -156,7 +207,7 @@ export async function getRelatedMemories(
     [memoryId, limit]
   );
 
-  return (linkRows.rows as any[]).map(row => ({
+  return (linkRows.rows as RelatedRow[]).map(row => ({
     memory: {
       id: row.mem_id,
       sessionId: row.session_id,
@@ -167,9 +218,9 @@ export async function getRelatedMemories(
       emotion: row.emotion,
       confidence: row.confidence,
       source: row.source,
-      tags: row.tags ?? [],
-      linkedMemoryIds: row.linked_memory_ids ?? [],
-      metadata: row.metadata ?? {},
+      tags: (row.tags ?? []) as string[],
+      linkedMemoryIds: (row.linked_memory_ids ?? []) as number[],
+      metadata: (row.metadata ?? {}) as Record<string, unknown>,
       createdAt: row.mem_created,
       updatedAt: row.mem_updated,
       accessedAt: row.accessed_at,
@@ -179,8 +230,8 @@ export async function getRelatedMemories(
       id: row.id,
       source_id: row.source_id,
       target_id: row.target_id,
-      link_type: row.link_type,
-      shared_entities: row.shared_entities,
+      link_type: row.link_type as MemoryLink['link_type'],
+      shared_entities: (row.shared_entities ?? []) as string[],
       strength: row.strength,
       created_at: row.created_at,
     } as MemoryLink,
@@ -199,7 +250,7 @@ export async function findSharedEntities(
     [memoryId]
   );
 
-  return (result.rows as any[]).map(row => ({
+  return (result.rows as { entity: string }[]).map(row => ({
     type: "concept" as const,
     value: row.entity,
     confidence: 1.0,

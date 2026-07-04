@@ -1,10 +1,4 @@
-import type { MemoryType, MemorySearchMode, SortBy } from './types.js';
-
 type ToolArgs = Record<string, unknown>;
-
-const MEMORY_TYPES: MemoryType[] = ['conversation', 'workspace', 'repo', 'preference', 'lesson', 'episodic', 'procedural', 'self_continuity'];
-const SEARCH_MODES: MemorySearchMode[] = ['project', 'legacy', 'global'];
-const SORT_OPTIONS: SortBy[] = ['recent', 'important', 'accessed'];
 const TOOL_OUTPUT_SCHEMA = {
   type: 'object',
   additionalProperties: true,

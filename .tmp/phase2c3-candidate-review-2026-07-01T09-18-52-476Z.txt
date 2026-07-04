@@ -1,0 +1,52 @@
+Phase 2C.3 Candidate Review
+Generated from read-only DB sampling on 2026-07-01T09:18:52.476Z
+
+Summary
+- tiny_type_specific_junk reviewed: 139 of 139
+- conversation candidates inside tiny_type_specific_junk: 1
+- already_superseded_duplicate sampled: 25
+- low_access remained excluded from archive design
+
+tiny_type_specific_junk findings
+- Dominant shape: tiny episodic file-edit crumbs
+- Top repeated snippet: "[modified] index.html" (40 rows)
+- Other repeated snippets are short symbol summaries for files like cli.py, code-engine.js, main.js, test_gateway.py, verify.py
+- No active substantive memories appeared in the reviewed set
+
+Explicit conversation candidate
+- id=127
+- type=conversation
+- snippet="[user] Test message - does this work?"
+- score=0.3
+- band=low
+- age_days=18
+- access_count=0
+- recall_count=0
+- classification=definitely safe archive candidate
+- false_positive=no
+
+tiny_type_specific_junk classification
+- definitely safe archive candidate: 139
+- maybe useful: 0
+- should keep active: 0
+- heuristic false positive: 0
+
+already_superseded_duplicate sample findings
+- Sampled rows were mostly procedural completion crumbs already marked superseded
+- Conversation examples were short turns like "[user] rebuild exe", "[assistant] Now rebuild:", "[assistant] Now checkpoint-inject.ts:"
+- Some sampled superseded rows had nonzero recall counts, but the archived target would still be the already-superseded copy, not the canonical survivor
+
+already_superseded_duplicate sample classification
+- definitely safe archive candidate: 25
+- maybe useful: 0
+- should keep active: 0
+- heuristic false positive: 0 observed in sample
+
+False-positive notes
+- No false positives were found in the full tiny junk review
+- No false positives were found in the 25-row superseded sample
+- Remaining caution: do not archive tiny junk automatically yet; keep first write scope limited to already_superseded_duplicate
+
+Archive design recommendation
+- First reversible apply scope should archive only already_superseded_duplicate
+- tiny_type_specific_junk should remain report-only until a later explicit approval phase

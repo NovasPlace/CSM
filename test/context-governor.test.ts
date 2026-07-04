@@ -36,8 +36,27 @@ function longToolMessages(count: number, size: number) {
     msg('assistant', [tool(`tool ${index}: ${'x'.repeat(size)}`)]));
 }
 
-function actionFor(count: number, size: number) {
-  const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, DEFAULT_GOVERNOR_CONFIG);
+const ACTION_LADDER_CONFIG = {
+  ...DEFAULT_GOVERNOR_CONFIG,
+  profiles: {
+    ...DEFAULT_GOVERNOR_CONFIG.profiles,
+    balanced: {
+      ...DEFAULT_GOVERNOR_CONFIG.profiles.balanced,
+      targetBudget: 60_000,
+      maxBudget: 100_000,
+    },
+  },
+  thresholds: {
+    lightBrief: 30_000,
+    compactToolCalls: 39_000,
+    checkpointRefsOnly: 45_000,
+    distilledStateOnly: 54_000,
+    emergencyRebuild: 72_000,
+  },
+} satisfies typeof DEFAULT_GOVERNOR_CONFIG;
+
+function actionFor(count: number, size: number, config = DEFAULT_GOVERNOR_CONFIG) {
+  const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, config);
   const messages = [msg('user', [text('continue')]), ...longToolMessages(count, size)];
   return { messages, result: governor.govern(messages, 'balanced') };
 }
@@ -51,24 +70,22 @@ describe('AdaptiveContextGovernor', () => {
     assert.equal(result.metricsAfter.totalTokens <= result.decision.budget, true);
   });
 
-  it('compacts old tool calls when projected size crosses the 65k threshold', () => {
-    const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, DEFAULT_GOVERNOR_CONFIG);
-    const messages = [msg('user', [text('continue')]), ...longToolMessages(48, 5000)];
-    const result = governor.govern(messages, 'balanced');
+  it('compacts old tool calls when projected size crosses the compact threshold', () => {
+    const { result } = actionFor(25, 5000, ACTION_LADDER_CONFIG);
     assert.equal(result.decision.action, 'compact_old_tool_calls');
     assert.equal(result.metricsAfter.totalTokens < result.metricsBefore.totalTokens, true);
   });
 
   it('adds a light memory brief before higher thresholds', () => {
-    const { messages, result } = actionFor(36, 5000);
+    const { messages, result } = actionFor(20, 5000, ACTION_LADDER_CONFIG);
     const firstText = String(messages[0].parts?.[0]?.text ?? '');
     assert.equal(result.decision.action, 'light_memory_brief');
     assert.match(firstText, /\[MEMORY_BRIEF\]/);
   });
 
-  it('replaces older history with checkpoint refs at the 75k threshold', () => {
-    const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, DEFAULT_GOVERNOR_CONFIG);
-    const messages = [msg('user', [text('resume')]), ...longToolMessages(56, 5000)];
+  it('replaces older history with checkpoint refs at the checkpoint threshold', () => {
+    const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, ACTION_LADDER_CONFIG);
+    const messages = [msg('user', [text('resume')]), ...longToolMessages(30, 5000)];
     const result = governor.govern(messages, 'balanced');
     const firstText = String(messages[0].parts?.[0]?.text ?? '');
     assert.equal(result.decision.action, 'checkpoint_refs_only');
@@ -77,7 +94,7 @@ describe('AdaptiveContextGovernor', () => {
   });
 
   it('falls back to distilled project state before emergency rebuild', () => {
-    const { messages, result } = actionFor(68, 5000);
+    const { messages, result } = actionFor(40, 5000, ACTION_LADDER_CONFIG);
     const firstText = String(messages[0].parts?.[0]?.text ?? '');
     assert.equal(result.decision.action, 'distilled_project_state');
     assert.match(firstText, /\[DISTILLED_STATE\]/);
@@ -111,7 +128,8 @@ describe('AdaptiveContextGovernor', () => {
       msg('assistant', [tool('tool output')]),
     ], DEFAULT_GOVERNOR_CONFIG.profiles.balanced.projectedGrowth);
     assert.equal(DEFAULT_GOVERNOR_CONFIG.profiles.cheap.targetBudget, 35_000);
-    assert.equal(DEFAULT_GOVERNOR_CONFIG.profiles.balanced.targetBudget, 60_000);
+    assert.equal(DEFAULT_GOVERNOR_CONFIG.profiles.balanced.targetBudget, 30_000);
+    assert.equal(DEFAULT_GOVERNOR_CONFIG.profiles.balanced.maxBudget, 40_000);
     assert.equal(DEFAULT_GOVERNOR_CONFIG.profiles.deep_work.targetBudget, 100_000);
     assert.equal(DEFAULT_GOVERNOR_CONFIG.profiles.emergency.targetBudget, 12_000);
     assert.equal(metrics.memoryBriefTokens > 0, true);

@@ -4,12 +4,25 @@
 import { tool } from '@opencode-ai/plugin/tool';
 import { CheckpointStore } from './checkpoint-store.js';
 import { buildCheckpoint, BuildResult } from './checkpoint-builder.js';
-import { CheckpointConfig } from './checkpoint-types.js';
+import { CheckpointConfig, CheckpointRecord, ExpandedRef, SessionMessage } from './checkpoint-types.js';
 import { logCheckpointCreated, logCheckpointError } from './checkpoint-telemetry.js';
+
+/** Minimal client interface — only the session.messages endpoint is used. */
+interface SessionMessagesClient {
+  session: {
+    messages(input: { path: { id: string } }): Promise<{ data?: SdkMessage[] }>;
+  };
+}
+
+/** Raw SDK message shape (camelCase from the OpenCode client API). */
+interface SdkMessage {
+  info?: { id?: string; role?: string; createdAt?: string };
+  parts?: unknown[];
+}
 
 /** Dependencies injected from plugin init. */
 export interface CheckpointToolDeps {
-  client: any;              // OpenCode SDK client (ctx.client)
+  client: SessionMessagesClient;
   store: CheckpointStore;
   config: CheckpointConfig;
   projectId: string | null;
@@ -18,15 +31,15 @@ export interface CheckpointToolDeps {
 type ToolResult = { title: string; output: string; metadata?: Record<string, unknown> };
 
 /** Convert SDK message format to SessionMessage[]. */
-function toSessionMessages(raw: any[]): any[] {
-  return (raw ?? []).map((m: any) => ({
+function toSessionMessages(raw: SdkMessage[]): SessionMessage[] {
+  return (raw ?? []).map((m: SdkMessage) => ({
     info: { id: m.info?.id, role: m.info?.role, created_at: m.info?.createdAt },
-    parts: m.parts ?? [],
+    parts: (m.parts ?? []) as SessionMessage['parts'],
   }));
 }
 
 /** Fetch session messages and validate minimum count. Returns null if too short. */
-async function fetchMessages(deps: CheckpointToolDeps, sid: string): Promise<any[] | ToolResult> {
+async function fetchMessages(deps: CheckpointToolDeps, sid: string): Promise<SessionMessage[] | ToolResult> {
   const resp = await deps.client.session.messages({ path: { id: sid } });
   const messages = toSessionMessages(resp.data ?? []);
   if (messages.length < deps.config.minMessagesBeforeInject) {
@@ -40,7 +53,7 @@ async function fetchMessages(deps: CheckpointToolDeps, sid: string): Promise<any
 }
 
 /** Build + store checkpoint, return record + built result. */
-async function buildAndStore(deps: CheckpointToolDeps, sid: string, messages: any[]) {
+async function buildAndStore(deps: CheckpointToolDeps, sid: string, messages: SessionMessage[]) {
   const t0 = Date.now();
   const built = buildCheckpoint({ sessionId: sid, projectId: deps.projectId, messages, config: deps.config });
   const rec = await deps.store.createCheckpoint(built.checkpoint);
@@ -55,7 +68,7 @@ async function buildAndStore(deps: CheckpointToolDeps, sid: string, messages: an
 }
 
 /** Format the create_checkpoint success result. */
-function formatCreateResult(rec: any, built: BuildResult): ToolResult {
+function formatCreateResult(rec: CheckpointRecord, built: BuildResult): ToolResult {
   return {
     title: `Checkpoint created: ${rec.checkpointId.substring(0, 8)}`,
     output: rec.summaryMarkdown,
@@ -90,7 +103,7 @@ export function createCheckpointTool(deps: CheckpointToolDeps) {
 }
 
 /** Format the expand_checkpoint_ref result. */
-function formatExpandResult(result: any, refId: string): ToolResult {
+function formatExpandResult(result: ExpandedRef, refId: string): ToolResult {
   const lines: string[] = [];
   if (result.rawCapture) {
     lines.push(`Kind: ${result.rawCapture.kind}`);

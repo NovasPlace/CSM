@@ -1,4 +1,8 @@
 import { initializeCheckpointSchema } from '../checkpoint-schema.js';
+import { initializeCandidateSchema } from '../candidate-schema.js';
+import { initializeExperiencePacketSchema } from '../experience-packet-schema.js';
+import { initializeSelfModelSchema } from '../self-model-schema.js';
+import { initializeBeliefKnowledgeSchema } from '../belief-knowledge-schema.js';
 import { initializeContextCompilationSchema } from '../context-compilation-schema.js';
 import { initializeContextCacheSchema } from '../context-cache-schema.js';
 import { initializeRolloverSchema } from '../context-rollover-schema.js';
@@ -15,13 +19,23 @@ import { initializeMemorySchema } from './memory-schema.js';
 import { migrateProjectIsolation } from './project-isolation-schema.js';
 import { isOwnershipLimitedSchemaError } from './schema-errors.js';
 import { initializeSessionSchema } from './session-schema.js';
+import { initializeMinimalSqliteSchema } from './sqlite/index.js';
+import { getLogger } from '../logger.js';
 
 export async function initializeAllSchemas(database: Database): Promise<void> {
   const pool = database.getPool();
+  const provider = database.getProvider();
+
+  if (provider === 'sqlite') {
+    await initializeMinimalSqliteSchema(pool);
+    getLogger().info('SQLite minimal schema initialized');
+    return;
+  }
+
   const ownershipLimitedSteps: string[] = [];
 
   const steps: Array<[string, () => Promise<void>]> = [
-    ['extension.vector', () => pool.query('CREATE EXTENSION IF NOT EXISTS vector').then(() => undefined)],
+    ['extension.vector', () => provider === 'sqlite' ? Promise.resolve() : pool.query('CREATE EXTENSION IF NOT EXISTS vector').then(() => undefined)],
     ['session', () => initializeSessionSchema(pool)],
     ['memory', () => initializeMemorySchema(pool)],
     ['core', () => initializeCoreSchema(pool)],
@@ -37,23 +51,25 @@ export async function initializeAllSchemas(database: Database): Promise<void> {
     ['trace-vault', () => initializeTraceVaultSchema(pool)],
     ['graph', () => initializeGraphSchema(database)],
     ['work-journal', () => initializeWorkJournalSchema(pool)],
+    ['candidate-queue', () => initializeCandidateSchema(pool)],
+    ['experience-packet', () => initializeExperiencePacketSchema(pool)],
+    ['self-model', () => initializeSelfModelSchema(pool)],
+    ['belief-knowledge', () => initializeBeliefKnowledgeSchema(pool)],
   ];
 
   for (const [name, step] of steps) {
     try {
       await step();
     } catch (error) {
-      if (isOwnershipLimitedSchemaError(error)) {
-        ownershipLimitedSteps.push(name);
-        continue;
-      }
-      console.error(`[Database] Schema step failed (${name}); continuing:`, error);
-    }
-  }
-
-  if (ownershipLimitedSteps.length > 0) {
-    console.log(
-      `[Database] Schema steps skipped due to ownership limits: ${ownershipLimitedSteps.join(', ')}`,
-    );
-  }
-}
+       if (isOwnershipLimitedSchemaError(error)) {
+         ownershipLimitedSteps.push(name);
+         continue;
+       }
+       getLogger().error(`Schema step failed (${name}); continuing`, error instanceof Error ? error : undefined);
+     }
+   }
+ 
+   if (ownershipLimitedSteps.length > 0) {
+     getLogger().info(`Schema steps skipped due to ownership limits: ${ownershipLimitedSteps.join(', ')}`);
+   }
+ }

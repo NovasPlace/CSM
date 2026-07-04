@@ -10,6 +10,8 @@ const DB_URL = process.env.DATABASE_URL
 
 const config: PluginConfig = {
   databaseUrl: DB_URL,
+  databaseProvider: 'postgres',
+  sqlitePath: '.data/csm-memory.db',
   embeddingModel: 'nomic-embed-text',
   embeddingApiUrl: process.env.OLLAMA_URL ?? 'http://localhost:11434',
 };

@@ -5,7 +5,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { MemoryManager } from './memory-manager.js';
-import { MemorySaveOptions } from './types.js';
+import { getLogger } from './logger.js';
 
 const execAsync = promisify(exec);
 
@@ -42,15 +42,15 @@ export class GitWatcher {
    */
   start(): void {
     if (this.timer) {
-      console.log('[GitWatcher] Already running');
+      getLogger().debug('GitWatcher already running');
       return;
     }
 
-    console.log(`[GitWatcher] Starting (interval: ${this.interval / 1000}s)`);
+    getLogger().info(`GitWatcher starting (interval: ${this.interval / 1000}s)`);
     
     this.timer = setInterval(() => {
       this.pollRepos().catch(error => {
-        console.error('[GitWatcher] Poll failed:', error);
+        getLogger().error('GitWatcher poll failed', error instanceof Error ? error : undefined);
       });
     }, this.interval);
   }
@@ -62,7 +62,7 @@ export class GitWatcher {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      console.log('[GitWatcher] Stopped');
+      getLogger().info('GitWatcher stopped');
     }
   }
 
@@ -79,7 +79,7 @@ export class GitWatcher {
       lastCheckedAt: new Date(),
     });
     
-    console.log(`[GitWatcher] Watching repo: ${repoPath} (sha: ${currentSha?.substring(0, 7) ?? 'unknown'})`);
+    getLogger().info(`GitWatcher watching repo: ${repoPath} (sha: ${currentSha?.substring(0, 7) ?? 'unknown'})`);
   }
 
   /**
@@ -107,10 +107,10 @@ export class GitWatcher {
           ...state,
           lastCheckedSha: currentSha,
           lastCheckedAt: new Date(),
-        });
-      } catch (error) {
-        console.error(`[GitWatcher] Failed to poll ${repoPath}:`, error);
-      }
+         });
+       } catch (error) {
+         getLogger().error(`GitWatcher failed to poll ${repoPath}`, error instanceof Error ? error : undefined);
+       }
     }
   }
 
@@ -186,12 +186,12 @@ export class GitWatcher {
       // Add last commit
       if (currentCommit?.sha) {
         commits.push(currentCommit as GitCommit);
-      }
-    } catch (error) {
-      console.error(`[GitWatcher] Failed to get commits:`, error);
-    }
-    
-    return commits;
+       }
+     } catch (error) {
+       getLogger().error(`GitWatcher failed to get commits`, error instanceof Error ? error : undefined);
+     }
+     
+     return commits;
   }
 
   /**
@@ -319,11 +319,11 @@ export class GitWatcher {
       if (currentCommit?.sha) {
         commits.push(currentCommit as GitCommit);
       }
-      
-      return commits;
-    } catch (error) {
-      console.error(`[GitWatcher] Failed to get recent commits:`, error);
-      return [];
-    }
-  }
-}
+       
+       return commits;
+     } catch (error) {
+       getLogger().error(`GitWatcher failed to get recent commits`, error instanceof Error ? error : undefined);
+       return [];
+     }
+   }
+ }

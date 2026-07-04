@@ -1,5 +1,4 @@
 import { getContextBriefOp } from './bridge-ops.js';
-import { fetchItem } from './context-cache-store.js';
 import type { CodexBridgeExtraDeps } from './codex-bridge-extra-ops.js';
 import type { Database } from './database.js';
 import { ToolCallDistiller } from './tool-distiller.js';

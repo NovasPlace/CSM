@@ -79,5 +79,17 @@ function context(
       bufferLength: 0,
       record() {},
     },
+    experiencePackets: {
+      recordToolPacket() {
+        return Promise.resolve({
+          id: 999,
+          sessionId: 'session-1',
+          entryType: 'tool_execution',
+          internalState: { cognitiveLoad: 0.1, frustration: 0, energy: 0.8, dominantEmotion: 'neutral', stance: 'exploratory', urgency: 0 },
+          signals: {},
+          confidence: 0.5,
+        });
+      },
+    },
   } as PluginContext;
 }

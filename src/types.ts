@@ -273,8 +273,12 @@ export interface AutoDocsConfig {
   groupMultipleEdits: boolean;
 }
 
+export type DatabaseProvider = 'postgres' | 'sqlite';
+
 export interface PluginConfig {
   databaseUrl: string;
+  databaseProvider: DatabaseProvider;
+  sqlitePath: string;
   embeddingModel: string;
   embeddingApiKey?: string;
   embeddingApiUrl?: string;
@@ -319,7 +323,17 @@ export interface PluginConfig {
   selfContinuity: SelfContinuityConfig;
   // Agent work journal — live incremental capture of agent's work state
   workJournal: WorkJournalConfig;
+  // Phase 4D — Self model capability tracking
+  selfModel: SelfModelConfig;
+  // Phase 4E — Belief knowledge
+  beliefKnowledge: BeliefKnowledgeConfig;
+  // Phase 4G — Belief promotion pipeline
+  beliefPromotion: BeliefPromotionConfig;
+  // Phase 4F — Living state runtime loop
+  livingState: LivingStateConfig;
 }
+
+export type { BucketBreakdown } from './token-bucket-analyzer.js';
 
 export interface CompactorConfig {
   enabled: boolean;
@@ -526,6 +540,8 @@ export interface DatabasePool {
   query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number | null }>;
   connect: () => Promise<DatabaseClient>;
   end: () => Promise<void>;
+  /** Returns the SQL dialect. Defaults to 'pg' when not implemented (e.g. raw pg.Pool). */
+  getDialect?: () => 'pg' | 'sqlite';
 }
 
 /** Transactional client acquired via pool.connect(); release() returns it to the pool. */
@@ -694,6 +710,107 @@ export interface SelfContinuityConfig {
     triggerKeywords: string[];
     injectionMode: 'deep' | 'deep-silent';
   };
+}
+
+export type CapabilityName =
+  | 'tool_use'
+  | 'code_editing'
+  | 'test_repair'
+  | 'schema_migration'
+  | 'memory_recall'
+  | 'loop_recovery'
+  | 'prompt_injection_detection'
+  | 'context_budgeting';
+
+export const ALL_CAPABILITIES: CapabilityName[] = [
+  'tool_use',
+  'code_editing',
+  'test_repair',
+  'schema_migration',
+  'memory_recall',
+  'loop_recovery',
+  'prompt_injection_detection',
+  'context_budgeting',
+];
+
+export interface EvidenceRef {
+  packetId: number;
+  entryType: string;
+  outcome: 'success' | 'failure' | 'mixed';
+  toolName?: string;
+  timestamp: string;
+}
+
+export interface SelfModelCapability {
+  id?: number;
+  capability: CapabilityName;
+  confidence: number;
+  uncertainty: number;
+  evidenceRefs: EvidenceRef[];
+  successCount: number;
+  failureCount: number;
+  driftWarning: boolean;
+  lastVerified: string | null;
+  updatedAt: string;
+}
+
+export interface SelfModelConfig {
+  enabled: boolean;
+  updateIntervalMs: number;
+  confidenceIncrementRate: number;
+  uncertaintyIncrementRate: number;
+  contradictionPenalty: number;
+  driftWarningThreshold: number;
+}
+
+export type BeliefKind = 'preference' | 'opinion' | 'worldview';
+
+export type BeliefStance = 'supports' | 'opposes' | 'neutral';
+
+export type BeliefStatus = 'candidate' | 'promoted' | 'rejected' | 'stale';
+
+export interface BeliefEntry {
+  id?: number;
+  beliefKind: BeliefKind;
+  subject: string;
+  claim: string;
+  stance: BeliefStance;
+  confidence: number;
+  uncertainty: number;
+  evidenceRefs: EvidenceRef[];
+  contradictedCount: number;
+  lastReinforcedAt: string | null;
+  status: BeliefStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BeliefKnowledgeConfig {
+  enabled: boolean;
+  consolidationIntervalMs: number;
+  confidenceThreshold: number;
+  uncertaintyThreshold: number;
+}
+
+export interface BeliefPromotionConfig {
+  enabled: boolean;
+  dryRunByDefault: boolean;
+  minConfidence: number;
+  minReinforcement: number;
+  minEvidenceRefs: number;
+  minSessions: number;
+  maxPromotePerRun: number;
+  relaxed: boolean;
+}
+
+export interface LivingStateConfig {
+  enabled: boolean;
+  previewOnly: boolean;
+  injectAdvisoryBlock: boolean;
+  maxAdvisoryBlockChars: number;
+  scanLookbackMinutes: number;
+  maxScanPerType: number;
+  updateIntervalMs: number;
 }
 
 export const DEFAULT_PRUNE_CONFIG: PruneConfig = {

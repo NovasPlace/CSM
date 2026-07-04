@@ -1,4 +1,5 @@
 import type { DatabasePool } from './types.js';
+import { getLogger } from './logger.js';
 
 export async function initializeSelfContinuitySchema(pool: DatabasePool): Promise<void> {
   await pool.query(`
@@ -49,8 +50,8 @@ export async function initializeSelfContinuitySchema(pool: DatabasePool): Promis
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_self_continuity_confidence
-    ON self_continuity_records(continuity_confidence DESC)
-  `);
+     ON self_continuity_records(continuity_confidence DESC)
+   `);
 
-  console.log('[SelfContinuity] Schema initialized');
-}
+   getLogger().info('SelfContinuity schema initialized');
+ }

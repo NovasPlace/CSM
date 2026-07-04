@@ -1,5 +1,5 @@
 ﻿import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics } from './types.js';
-import { measureCompactionQuality, extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeQualityScore } from './compaction-quality.js';
+import { extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeQualityScore } from './compaction-quality.js';
 
 const DEFAULT_QUALITY_CONFIG = {
   entityRetentionWeight: 0.35,
@@ -269,7 +269,7 @@ export class ContextCompactor {
   }
 
   private formatCompactRef(tc: ToolCallRecord): string {
-    const refId = `tool_${tc.sessionId}_${tc.timestamp}`;
+    const _refId = `tool_${tc.sessionId}_${tc.timestamp}`;
     const output = tc.output ? tc.output.slice(0, this.config.maxOutputChars ?? 120) : '';
     const error = tc.error ? `ERROR: ${tc.error.slice(0, 100)}` : '';
 

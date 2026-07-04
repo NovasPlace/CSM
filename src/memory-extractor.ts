@@ -4,11 +4,11 @@
 import { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { MemoryManager } from './memory-manager.js';
+import { getLogger } from './logger.js';
+import { nowFn } from './db/query-dialect.js';
 import {
-  Memory,
   MemoryType,
   MemoryEmotion,
-  MemorySource,
   MemoryCandidate,
   MemoryCandidateStatus,
   MemoryApproval,
@@ -408,10 +408,10 @@ export class MemoryExtractor {
           autoApproved: candidate.status === 'auto-approved',
         },
         sessionId: candidate.sessionId,
-      });
-    } catch (error) {
-      console.error('[MemoryExtractor] Failed to save candidate:', error);
-    }
+       });
+     } catch (error) {
+       getLogger().error('Failed to save candidate', error instanceof Error ? error : undefined);
+     }
   }
 
   /**
@@ -525,13 +525,13 @@ export class MemoryExtractor {
     
     // Delete rejected candidates older than 7 days
     await pool.query(
-      'DELETE FROM memory_candidates WHERE status = $1 AND created_at < now() - interval \'7 days\'',
+      `DELETE FROM memory_candidates WHERE status = $1 AND created_at < ${nowFn(this.database.dialect)} - interval '7 days'`,
       ['rejected']
     );
-    
+
     // Archive approved candidates older than 30 days
     await pool.query(
-      'UPDATE memory_candidates SET status = $1 WHERE status = $2 AND created_at < now() - interval \'30 days\'',
+      `UPDATE memory_candidates SET status = $1 WHERE status = $2 AND created_at < ${nowFn(this.database.dialect)} - interval '30 days'`,
       ['archived', 'approved']
     );
   }

@@ -3,9 +3,9 @@ import type {
   SelfContinuityRecord,
   SelfContinuityConfig,
 } from './self-continuity-types.js';
-import { DEFAULT_SELF_CONTINUITY_CONFIG } from './self-continuity-types.js';
 import { SelfContinuityGenerator } from './self-continuity-generator.js';
 import { redact } from './redactor.js';
+import { jsonExtractText, dialectFromPool } from './db/query-dialect.js';
 
 export interface HydratedSelfContinuityRecord {
   recordId: number;
@@ -64,10 +64,11 @@ export class SelfContinuityHydrator {
 
   async getRecordById(recordId: number): Promise<HydratedSelfContinuityRecord | null> {
     try {
+      const d = dialectFromPool(this.pool);
       const result = await this.pool.query(
         `SELECT * FROM self_continuity_records
          WHERE id = $1
-         AND (metadata->>'synthetic_test' IS NULL OR metadata->>'synthetic_test' != 'true')`,
+         AND (${jsonExtractText(d, 'metadata', 'synthetic_test')} IS NULL OR ${jsonExtractText(d, 'metadata', 'synthetic_test')} != 'true')`,
         [recordId],
       );
 

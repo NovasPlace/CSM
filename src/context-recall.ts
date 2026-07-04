@@ -8,6 +8,7 @@
 import { Database } from './database.js';
 import { Memory, ContextBrief, ToolCallGroup } from './types.js';
 import { recordRecallBatch } from './recall-telemetry.js';
+import { getLogger } from './logger.js';
 
 export class ContextRecallDaemon {
   private database: Database;
@@ -26,21 +27,21 @@ export class ContextRecallDaemon {
    */
   start(): void {
     if (this.timer) {
-      console.log('[ContextRecallDaemon] Already running');
+      getLogger().debug('ContextRecallDaemon already running');
       return;
     }
 
-    console.log(`[ContextRecallDaemon] Starting (interval: ${this.interval / 1000}s)`);
+    getLogger().info(`ContextRecallDaemon starting (interval: ${this.interval / 1000}s)`);
     
     // Build initial context
     this.buildContext().catch(error => {
-      console.error('[ContextRecallDaemon] Initial build failed:', error);
+      getLogger().error('ContextRecallDaemon initial build failed', error instanceof Error ? error : undefined);
     });
 
     // Start periodic rebuild
     this.timer = setInterval(() => {
       this.buildContext().catch(error => {
-        console.error('[ContextRecallDaemon] Periodic build failed:', error);
+        getLogger().error('ContextRecallDaemon periodic build failed', error instanceof Error ? error : undefined);
       });
     }, this.interval);
   }
@@ -52,7 +53,7 @@ export class ContextRecallDaemon {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      console.log('[ContextRecallDaemon] Stopped');
+      getLogger().info('ContextRecallDaemon stopped');
     }
   }
 
@@ -382,7 +383,7 @@ export class ContextRecallDaemon {
         })),
       );
     } catch (error) {
-      console.error('[ContextRecallDaemon] Recall telemetry write failed:', error);
+      getLogger().error('Recall telemetry write failed', error instanceof Error ? error : undefined);
     }
   }
 }

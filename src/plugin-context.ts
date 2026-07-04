@@ -15,13 +15,21 @@ import type { SubconsciousWatcher } from './subconscious.js';
 import type { GitWatcher } from './git-watcher.js';
 import type { MemoryExtractor } from './memory-extractor.js';
 import type { PrimingEngine } from './priming-engine.js';
+import type { EmbeddingGenerator } from './embeddings.js';
 import type { CheckpointStore } from './checkpoint-store.js';
 import type { CheckpointToolDeps } from './checkpoint-tool.js';
 import type { CheckpointInjectDeps } from './checkpoint-inject.js';
 import type { AgentWorkJournal } from './agent-work-journal.js';
+import type { ExperiencePacketCreator } from './experience-packet.js';
 import type { LessonTriggerCache } from './lesson-trigger-cache.js';
+import type { SelfModelUpdater } from './self-model-updater.js';
+import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import type { LivingStateRuntime } from './living-state-runtime.js';
+import type { LivingStateAdvisor } from './living-state-advisor.js';
 import type { AutoCheckpointTrigger } from './helpers/auto-checkpoint.js';
 import type { CompileResult } from './context-compiler.js';
+import type { Redactor } from './redactor.js';
+import type { StatsWriter } from './stats-writer.js';
 
 export type AutoCheckpointFn = (
   sessionId: string,
@@ -54,14 +62,22 @@ export interface PluginContext {
   gitWatcher: GitWatcher;
   memoryExtractor: MemoryExtractor;
   primingEngine: PrimingEngine;
+  embeddings: EmbeddingGenerator;
   checkpointStore: CheckpointStore;
   checkpointToolDeps: CheckpointToolDeps;
   checkpointInjectDeps: CheckpointInjectDeps;
-  autoCheckpoint: AutoCheckpointFn;
+  autoCheckpoint: (sessionId: string, trigger: AutoCheckpointTrigger, details?: Record<string, unknown>) => Promise<void>;
   refreshActiveContext: (sessionId: string) => Promise<void>;
   syncActiveSession: (sessionId: string) => void;
   lastCompileResult: CompileResult | null;
   workJournal: AgentWorkJournal;
+  experiencePackets: ExperiencePacketCreator;
   lessonTriggers: LessonTriggerCache;
+  selfModel: SelfModelUpdater;
+  beliefKnowledge: BeliefKnowledgeConsolidator;
+  livingState: LivingStateRuntime;
+  livingStateAdvisor: LivingStateAdvisor;
+  redactor: Redactor;
+  statsWriter: StatsWriter;
   state: PluginState;
 }

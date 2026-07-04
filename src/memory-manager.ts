@@ -4,13 +4,15 @@
 import { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { extractConcepts } from './concept-extractor.js';
-import { buildLinksForMemory, findSharedEntities } from './memory-graph.js';
-import { hybridSearch, DEFAULT_WEIGHTS, type HybridWeights } from './hybrid-search.js';
+import { buildLinksForMemory } from './memory-graph.js';
+import { hybridSearch } from './hybrid-search.js';
 import { pruneMemories } from './prune-scorer.js';
 import { Redactor } from './redactor.js';
 import { DEFAULT_PRUNE_CONFIG } from './types.js';
 import { recordRecallBatch, type RecallTelemetrySource } from './recall-telemetry.js';
 import { applyTypeQuota } from './memory-type-quota.js';
+import { getLogger } from './logger.js';
+import { nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField } from './db/query-dialect.js';
 import {
   Memory,
   MemoryType,
@@ -46,21 +48,24 @@ export class MemoryManager {
   async createSession(sessionId: string, projectPath: string): Promise<Session> {
     const pool = this.database.getPool();
     
+    const now = nowFn(this.database.dialect);
     const result = await pool.query(
       `INSERT INTO sessions (id, directory, title, project_id)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (id) DO UPDATE
        SET directory = EXCLUDED.directory,
            project_id = EXCLUDED.project_id,
-           updated_at = now()
+           updated_at = ${now}
        RETURNING *`,
       [sessionId, projectPath, `Session ${new Date().toISOString()}`, projectPath]
     );
 
     const row = result.rows[0] as Record<string, unknown>;
     
-    if ((row.created_at as Date).getTime() === (row.updated_at as Date).getTime()) {
-      await this.emitEvent('session.created', { sessionId: row.id });
+    const createdAt = toDate(this.database.dialect, row.created_at);
+    const updatedAt = toDate(this.database.dialect, row.updated_at);
+    if (createdAt.getTime() === updatedAt.getTime()) {
+      await this.emitEvent('session.created', { sessionId: row.id as string });
     }
 
     return this.mapSession(row);
@@ -74,8 +79,8 @@ export class MemoryManager {
     
     await pool.query(
       `UPDATE sessions 
-       SET updated_at = now(),
-           ended_at = now(),
+       SET updated_at = ${nowFn(this.database.dialect)},
+           ended_at = ${nowFn(this.database.dialect)},
            summary = COALESCE($1, summary)
        WHERE id = $2`,
       [summary, sessionId]
@@ -107,11 +112,12 @@ export class MemoryManager {
    */
   async getRecentProjectSessions(projectPath: string, limit: number = 10): Promise<Session[]> {
     const pool = this.database.getPool();
+    const now = nowFn(this.database.dialect);
     
     const result = await pool.query(
-      `SELECT * FROM sessions 
+      `SELECT * FROM sessions
        WHERE directory = $1 OR project_id = $1
-       ORDER BY updated_at DESC
+       ORDER BY ${now} DESC
        LIMIT $2`,
       [projectPath, limit]
     );
@@ -154,12 +160,14 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         && transcriptMsgId != null
         && options.sessionId != null;
       if (isTranscript) {
+        const jsonExists = jsonKeyExists(this.database.dialect, 'metadata', 'fullTranscript');
+        const jsonExtract = jsonExtractText(this.database.dialect, 'metadata', 'messageId');
         const existing = await pool.query(
           `SELECT * FROM memories
            WHERE session_id = $1
              AND memory_type = 'conversation'
-             AND metadata ? 'fullTranscript'
-             AND metadata->>'messageId' = $2
+             AND ${jsonExists}
+             AND ${jsonExtract} = $2
            LIMIT 1`,
           [options.sessionId, String(transcriptMsgId)],
         );
@@ -211,44 +219,46 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       try {
         embedding = await this.embeddings.generate(contentToProcess);
       } catch (error) {
-        console.error('[MemoryManager] Failed to generate embedding:', error);
+        getLogger().error('Failed to generate embedding', error instanceof Error ? error : undefined);
       }
   
-      // Insert memory with embedding
-      let result;
-      try {
-        result = await pool.query(
-          `INSERT INTO memories (
-            session_id, project_id, memory_type, content, importance, emotion,
-            confidence, source, tags, linked_memory_ids, metadata, embedding
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-           RETURNING *`,
-          [
-            options.sessionId,
-            projectId,
-            options.type,
-            contentToProcess,
-            options.importance ?? 0.5,
-            options.emotion ?? 'neutral',
-            options.confidence ?? 1.0,
-            options.source ?? 'manual',
-            mergedTags,
-            options.linkedMemoryIds ?? [],
-            mergedMetadata,
-            embedding ? `[${embedding.join(',')}]` : null,
-          ]
-        );
-      } catch (error: unknown) {
+       // Insert memory with embedding
+       let result;
+       try {
+         result = await pool.query(
+           `INSERT INTO memories (
+             session_id, project_id, memory_type, content, importance, emotion,
+             confidence, source, tags, linked_memory_ids, metadata, embedding
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING *`,
+           [
+             options.sessionId,
+             projectId,
+             options.type,
+             contentToProcess,
+             options.importance ?? 0.5,
+             options.emotion ?? 'neutral',
+             options.confidence ?? 1.0,
+             options.source ?? 'manual',
+             jsonParam(this.database.dialect, mergedTags),
+             jsonParam(this.database.dialect, options.linkedMemoryIds ?? []),
+             jsonParam(this.database.dialect, mergedMetadata),
+             embedding ? `[${embedding.join(',')}]` : null,
+           ]
+         );
+       } catch (error: unknown) {
         // Backstop: race condition between two plugin instances can trigger a
         // unique violation on idx_memories_transcript_msg. Fetch and return the
         // already-stored memory instead of failing the capture.
-        if (isTranscript && (error as { code?: string }).code === '23505') {
+        if (isTranscript && isUniqueViolation(this.database.dialect, error)) {
+          const jsonExists = jsonKeyExists(this.database.dialect, 'metadata', 'fullTranscript');
+          const jsonExtract = jsonExtractText(this.database.dialect, 'metadata', 'messageId');
           const existing = await pool.query(
             `SELECT * FROM memories
              WHERE session_id = $1
                AND memory_type = 'conversation'
-               AND metadata ? 'fullTranscript'
-               AND metadata->>'messageId' = $2
+               AND ${jsonExists}
+               AND ${jsonExtract} = $2
              LIMIT 1`,
             [options.sessionId, String(transcriptMsgId)],
           );
@@ -276,7 +286,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
             ]
           );
         } catch (error) {
-          console.error('[MemoryManager] Failed to store embedding chunk:', error);
+          getLogger().error('Failed to store embedding chunk', error instanceof Error ? error : undefined);
         }
       }
   
@@ -288,7 +298,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         const extracted = extractConcepts(contentToProcess);
         await buildLinksForMemory(this.database, memory.id, extracted.concepts);
       } catch (error) {
-        console.error('[MemoryManager] Failed to build graph links:', error);
+        getLogger().error('Failed to build graph links', error instanceof Error ? error : undefined);
       }
   
       return memory;
@@ -320,7 +330,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     
     await pool.query(
       `UPDATE memories 
-       SET accessed_at = now(), access_count = access_count + 1
+       SET accessed_at = ${nowFn(this.database.dialect)}, access_count = access_count + 1
        WHERE id = $1`,
       [id]
     );
@@ -349,7 +359,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         await this.storeEmbedding(row.id, row.content, embedding);
         counts.updated++;
       } catch (error) {
-        console.error('[MemoryManager] Embedding backfill failed:', error);
+        getLogger().error('Embedding backfill failed', error instanceof Error ? error : undefined);
         counts.failed++;
       }
     }
@@ -384,6 +394,13 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     telemetry?: { sessionId?: string; source?: RecallTelemetrySource },
   ): Promise<{ memory: Memory; score: number }[]> {
     const pool = this.database.getPool();
+
+    // SQLite: skip vector search entirely, go to text fallback
+    if (this.database.dialect === 'sqlite') {
+      getLogger().debug('SQLite: skipping vector search, using text fallback');
+      return this.textSearchFallback(options);
+    }
+
     const queryEmbedding = await this.embeddings.generate(options.query);
 
     try {
@@ -392,7 +409,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         options.query,
         queryEmbedding,
         options.limit ?? 10,
-        { projectId: options.projectId, type: options.type, weights: (options as any).weights },
+        { projectId: options.projectId, type: options.type, tags: options.tags, minImportance: options.minImportance, searchMode: options.searchMode, weights: (options as any).weights },
       );
 
       const memories: { memory: Memory; score: number }[] = [];
@@ -409,14 +426,14 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       }
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
-    } catch (err) {
-      console.warn('[MemoryManager] Hybrid search failed, falling back to vector-only:', err);
+    } catch (_err) {
+      getLogger().warn('Hybrid search failed, falling back to vector-only');
     }
 
     // Fallback: vector-only search
     const embeddingString = `[${queryEmbedding.join(',')}]`;
     let sql = `
-      SELECT m.*, 
+      SELECT m.*,
         1 - (mc.embedding <=> $1::vector) AS similarity
       FROM memories m
       JOIN memory_chunks mc ON m.id = mc.memory_id
@@ -465,8 +482,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       }
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
-    } catch (err) {
-      console.warn('[MemoryManager] Vector search failed, falling back to text search:', err);
+    } catch (_err) {
+      getLogger().warn('Vector search failed, falling back to text search');
       const memories = await this.textSearchFallback(options);
       await this.recordRecalls(memories, options.query, options.projectId, telemetry);
       return memories;
@@ -504,8 +521,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     }
 
     if (options.tags && options.tags.length > 0) {
-      query += ` AND tags && $${paramIndex}`;
-      params.push(options.tags);
+      query += ` AND ${jsonArrayContains(this.database.dialect, 'tags', paramIndex)}`;
+      params.push(jsonParam(this.database.dialect, options.tags));
       paramIndex++;
     }
 
@@ -528,7 +545,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     }
 
     if (options.entityType && options.entityValue) {
-      query += ` AND metadata->'extracted_concepts' @> $${paramIndex}`;
+      query += ` AND ${jsonContainsPath(this.database.dialect, 'metadata', 'extracted_concepts', paramIndex)}`;
       params.push(JSON.stringify([{ type: options.entityType, value: options.entityValue }]));
       paramIndex++;
     }
@@ -568,13 +585,12 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     options: MemorySearchOptions,
   ): Promise<{ memory: Memory; score: number }[]> {
     const pool = this.database.getPool();
-    const like = `%${options.query}%`;
     let sql = `
       SELECT *
       FROM memories
-      WHERE content ILIKE $1
+      WHERE ${ilikeExpr(this.database.dialect, 'content', 1)}
     `;
-    const params: unknown[] = [like];
+    const params: unknown[] = [`${options.query}%`];
     let paramIndex = 2;
     const searchMode = options.searchMode ?? 'project';
 
@@ -602,8 +618,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       paramIndex++;
     }
     if (options.tags && options.tags.length > 0) {
-      sql += ` AND tags && $${paramIndex}`;
-      params.push(options.tags);
+      sql += ` AND ${jsonArrayContains(this.database.dialect, 'tags', paramIndex)}`;
+      params.push(jsonParam(this.database.dialect, options.tags));
       paramIndex++;
     }
 
@@ -639,11 +655,12 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
    */
   async getRecentProjectMemories(projectId: string, limit: number = 20): Promise<Memory[]> {
     const pool = this.database.getPool();
+    const now = nowFn(this.database.dialect);
     
     const result = await pool.query(
-      `SELECT * FROM memories 
+      `SELECT * FROM memories
        WHERE project_id = $1
-       ORDER BY created_at DESC
+       ORDER BY ${now} DESC
        LIMIT $2`,
       [projectId, limit]
     );
@@ -656,10 +673,11 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
    */
   async upsertProjectScope(projectId: string, name: string, directory: string): Promise<void> {
     const pool = this.database.getPool();
+    const now = nowFn(this.database.dialect);
     
     await pool.query(
       `INSERT INTO project_scopes (project_id, name, directory, last_active_at)
-       VALUES ($1, $2, $3, now())
+       VALUES ($1, $2, $3, ${now})
        ON CONFLICT (project_id) DO UPDATE SET
        name = EXCLUDED.name,
        directory = EXCLUDED.directory,
@@ -688,9 +706,10 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
    */
   async updateProjectScopeLastActive(projectId: string): Promise<void> {
     const pool = this.database.getPool();
+    const now = nowFn(this.database.dialect);
     
     await pool.query(
-      'UPDATE project_scopes SET last_active_at = now() WHERE project_id = $1',
+      `UPDATE project_scopes SET last_active_at = ${now} WHERE project_id = $1`,
       [projectId]
     );
   }
@@ -711,24 +730,25 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
    */
   async cleanupExpiredMemories(): Promise<{ deleted: number; archived: number }> {
     const pool = this.database.getPool();
+    const now = nowFn(this.database.dialect);
     
     // Delete memories older than 90 days
     const deleteResult = await pool.query(
-      'DELETE FROM memories WHERE created_at < now() - interval \'90 days\''
+      `DELETE FROM memories WHERE created_at < ${now} - interval '90 days'`
     );
     
     // Archive memories older than 30 days but newer than 90 days
     const archiveResult = await pool.query(
-      `UPDATE memories 
-       SET metadata = jsonb_set(metadata, '{archived}', 'true')
-       WHERE created_at < now() - interval \'30 days\'
-       AND created_at >= now() - interval \'90 days\'
-       AND (metadata->>'archived') IS DISTINCT FROM 'true'`
+      `UPDATE memories
+        SET metadata = jsonb_set(metadata, '{archived}', 'true')
+        WHERE created_at < ${now} - interval '30 days'
+        AND created_at >= ${now} - interval '90 days'
+        AND (${jsonExtractText(this.database.dialect, 'metadata', 'archived')}) IS DISTINCT FROM 'true'`
     );
     
     // Clean up old candidates
     await pool.query(
-      'DELETE FROM memory_candidates WHERE status = $1 AND created_at < now() - interval \'7 days\'',
+      `DELETE FROM memory_candidates WHERE status = $1 AND created_at < ${now} - interval '7 days'`,
       ['rejected']
     );
     
@@ -753,7 +773,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         [channel, JSON.stringify(payload), sessionId]
       );
     } catch (error) {
-      console.error('[MemoryManager] Failed to emit event:', error);
+      getLogger().error('Failed to emit event', error instanceof Error ? error : undefined);
     }
   }
 
@@ -764,10 +784,10 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     const pool = this.database.getPool();
     
     const result = await pool.query(
-      `SELECT channel, payload, created_at 
-       FROM memory_events 
-       WHERE id > $1 
-       ORDER BY id ASC 
+      `SELECT channel, payload, created_at
+       FROM memory_events
+       WHERE id > $1
+       ORDER BY id ASC
        LIMIT $2`,
       [sinceId, limit]
     );
@@ -776,8 +796,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       const r = row as Record<string, unknown>;
       return {
         channel: r.channel as string,
-        payload: r.payload as Record<string, unknown>,
-        createdAt: r.created_at as Date,
+        payload: parseJsonField(this.database.dialect, r.payload),
+        createdAt: toDate(this.database.dialect, r.created_at),
       };
     });
   }
@@ -786,7 +806,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
 
   async cleanup(): Promise<void> {
     // No persistent resources to clean up
-    console.log('[MemoryManager] Cleanup complete');
+    getLogger().debug('Cleanup complete');
   }
 
   // ==================== Mapping Helpers ====================
@@ -800,12 +820,14 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       title: row.title as string,
       summary: row.summary as string | undefined,
       turnCount: (row.turn_count as number | undefined) ?? 0,
-      createdAt: row.created_at as Date,
-      updatedAt: (row.updated_at as Date | undefined) ?? (row.created_at as Date),
+      createdAt: toDate(this.database.dialect, row.created_at),
+      updatedAt: toDate(this.database.dialect, row.updated_at),
     };
   }
 
   private mapMemory(row: Record<string, unknown>): Memory {
+    const tags = parseArrayField(this.database.dialect, row.tags);
+    const linkedMemoryIds = parseArrayField(this.database.dialect, row.linked_memory_ids);
     return {
       id: row.id as number,
       sessionId: row.session_id as string | undefined,
@@ -816,12 +838,12 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       emotion: row.emotion as MemoryEmotion,
       confidence: row.confidence as number,
       source: row.source as MemorySource,
-      tags: row.tags as string[],
-      linkedMemoryIds: row.linked_memory_ids as number[],
-      metadata: row.metadata as Record<string, unknown>,
-      createdAt: row.created_at as Date,
-      updatedAt: row.updated_at as Date,
-      accessedAt: row.accessed_at as Date,
+      tags: tags as string[],
+      linkedMemoryIds: linkedMemoryIds as number[],
+      metadata: parseJsonField(this.database.dialect, row.metadata),
+      createdAt: toDate(this.database.dialect, row.created_at),
+      updatedAt: toDate(this.database.dialect, row.updated_at),
+      accessedAt: toDate(this.database.dialect, row.accessed_at),
       accessCount: row.access_count as number,
     };
   }
@@ -832,10 +854,13 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
 
     const memories: Memory[] = result.rows.map((row: unknown) => {
       const r = row as Record<string, unknown>;
+      const memory = this.mapMemory(r);
+      const graphLinks = r.graph_links == null ? 0 : Number(r.graph_links);
+      const recallCount = r.recall_count == null ? 0 : Number(r.recall_count);
       return {
-        ...this.mapMemory(r),
-        graphLinks: r.graph_links as number,
-        recallCount: r.recall_count as number,
+        ...memory,
+        graphLinks,
+        recallCount,
       };
     });
 
@@ -867,8 +892,9 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   ): Promise<void> {
     const pool = this.database.getPool();
     const vector = `[${embedding.join(',')}]`;
+    const now = nowFn(this.database.dialect);
     await pool.query(
-      `UPDATE memories SET embedding = $1, updated_at = now() WHERE id = $2`,
+      `UPDATE memories SET embedding = $1, updated_at = ${now} WHERE id = $2`,
       [vector, memoryId],
     );
     await pool.query(
@@ -907,7 +933,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         })),
       );
     } catch (error) {
-      console.error('[MemoryManager] Recall telemetry write failed:', error);
+      getLogger().error('Recall telemetry write failed', error instanceof Error ? error : undefined);
     }
   }
 

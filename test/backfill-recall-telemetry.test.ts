@@ -33,6 +33,8 @@ describe('Phase 19b — backfill and recall telemetry', () => {
   const adminPool = new Pool({ connectionString: buildAdminUrl(BASE_DB_URL) });
   const config: PluginConfig = {
     databaseUrl: buildTempDbUrl(BASE_DB_URL, tempDbName),
+    databaseProvider: 'postgres',
+    sqlitePath: '.data/csm-memory.db',
     embeddingModel: 'nomic-embed-text',
     embeddingApiUrl: process.env.OLLAMA_URL ?? 'http://localhost:11434',
   } as PluginConfig;

@@ -1,4 +1,5 @@
 import type { DatabasePool } from './types.js';
+import { getLogger } from './logger.js';
 
 export interface LessonTrigger {
   memoryId: number;
@@ -86,12 +87,12 @@ export class LessonTriggerCache {
           argPatterns: rule.argPatterns,
           importance: 0.75,
         });
-      }
+       }
 
-      this.lastRefresh = now;
-    } catch (error) {
-      console.error('[LessonTriggers] Refresh failed:', error);
-    }
+       this.lastRefresh = now;
+     } catch (error) {
+       getLogger().error('LessonTriggers refresh failed', error instanceof Error ? error : undefined);
+     }
   }
 
   matchTriggers(toolName: string, args: Record<string, unknown>): LessonTrigger[] {

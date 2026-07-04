@@ -1,6 +1,7 @@
 import type { PluginContext } from '../plugin-context.js';
 import type { ResumePayload } from '../work-journal-types.js';
 import { buildResumeInjection, type WorkJournalInjectDeps } from '../work-journal-inject.js';
+import { getLogger } from '../logger.js';
 
 export function createWorkJournalInjectHook(ctx: PluginContext) {
   return async (input: any, output: any): Promise<typeof output> => {
@@ -28,7 +29,7 @@ export function createWorkJournalInjectHook(ctx: PluginContext) {
       output.system = output.system || [];
       output.system.push(injection);
 
-      console.log(`[WorkJournal] Injected resume payload for session ${sid.slice(0, 8)} (${payload.totalEntries} entries)`);
+      getLogger().info(`[WorkJournal] Injected resume payload for session ${sid.slice(0, 8)} (${payload.totalEntries} entries)`);
     } catch (error) {
       console.error('[WorkJournal] Inject hook error:', error);
     }

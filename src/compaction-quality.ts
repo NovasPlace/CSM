@@ -4,7 +4,7 @@ import type {
 } from "./types.js";
 import { EmbeddingGenerator } from "./embeddings.js";
 const ENTITY_PATTERNS = [
-  /(?:src\/|lib\/|test\/|dist\/|pkg\/)[\w./\-]+\.\w+/g,
+  /(?:src\/|lib\/|test\/|dist\/|pkg\/)[\w./-]+\.\w+/g,
   /\b[A-Z][a-zA-Z0-9]+(?:Exception|Error|Warning)\b/g,
   /\b[a-z]+(?:[A-Z][a-zA-Z0-9]*)+\b/g,
   /\b[A-Z][a-z]+(?:[A-Z][a-zA-Z0-9]*)+\b/g,

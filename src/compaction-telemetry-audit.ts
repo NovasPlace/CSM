@@ -2,6 +2,11 @@ import type { DatabasePool } from './types.js';
 
 export interface AuditResult {
   totalRows: number;
+  statusBreakdown: {
+    compressed: number;
+    skipped_under_budget: number;
+    failed: number;
+  };
   duplicateIds: number[];
   negativeValues: AuditAnomaly[];
   mathErrors: AuditAnomaly[];
@@ -128,6 +133,16 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
   const countResult = await pool.query('SELECT COUNT(*) as cnt FROM compaction_metrics');
   const totalRows = parseInt((countResult.rows[0] as any).cnt, 10);
 
+  const statusResult = await pool.query(`
+    SELECT status, COUNT(*) as cnt FROM compaction_metrics GROUP BY status
+  `);
+  const statusBreakdown = { compressed: 0, skipped_under_budget: 0, failed: 0 };
+  for (const row of statusResult.rows as Array<{ status: string; cnt: string }>) {
+    if (row.status in statusBreakdown) {
+      statusBreakdown[row.status as keyof typeof statusBreakdown] = parseInt(row.cnt, 10);
+    }
+  }
+
   const storedResult = await pool.query(`
     SELECT
       SUM(before_tokens) as total_before,
@@ -207,6 +222,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
 
   return {
     totalRows,
+    statusBreakdown,
     duplicateIds,
     negativeValues,
     mathErrors,
@@ -228,6 +244,11 @@ export function formatAuditReport(result: AuditResult): string {
   lines.push('');
   lines.push(`Status: ${result.passed ? 'PASSED' : 'ISSUES FOUND'}`);
   lines.push(`Total compaction records: ${result.totalRows}`);
+  lines.push('');
+  lines.push('--- Status Breakdown ---');
+  lines.push(`  Compressed:          ${result.statusBreakdown.compressed}`);
+  lines.push(`  Skipped under budget: ${result.statusBreakdown.skipped_under_budget}`);
+  lines.push(`  Failed:              ${result.statusBreakdown.failed}`);
   lines.push('');
 
   lines.push('--- Recomputed Totals (from raw before/after) ---');

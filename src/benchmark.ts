@@ -233,5 +233,6 @@ import { pathToFileURL } from 'node:url';
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const report = runBenchmarkSuite(877);
+  // eslint-disable-next-line no-console -- benchmark CLI output is intentional
   console.log(formatReport(report));
 }

@@ -5,8 +5,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { MemoryManager } from './memory-manager.js';
-import { MemorySaveOptions } from './types.js';
 import { autoDocumentChange } from './hooks/doc-analyzer.js';
+import { getLogger } from './logger.js';
 
 export interface FileChangeEvent {
   filePath: string;
@@ -52,15 +52,15 @@ export class SubconsciousWatcher {
    */
   start(): void {
     if (this.timer) {
-      console.log('[SubconsciousWatcher] Already running');
+      getLogger().debug('SubconsciousWatcher already running');
       return;
     }
 
-    console.log(`[SubconsciousWatcher] Starting (interval: ${this.interval / 1000}s)`);
+    getLogger().info(`SubconsciousWatcher starting (interval: ${this.interval / 1000}s)`);
     
     this.timer = setInterval(() => {
       this.watchFiles().catch(error => {
-        console.error('[SubconsciousWatcher] Watch failed:', error);
+        getLogger().error('SubconsciousWatcher watch failed', error instanceof Error ? error : undefined);
       });
     }, this.interval);
   }
@@ -72,7 +72,7 @@ export class SubconsciousWatcher {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      console.log('[SubconsciousWatcher] Stopped');
+      getLogger().info('SubconsciousWatcher stopped');
     }
   }
 
@@ -81,7 +81,7 @@ export class SubconsciousWatcher {
    */
   watchPath(dirPath: string): void {
     this.watchedPaths.set(dirPath, new Date());
-    console.log(`[SubconsciousWatcher] Watching: ${dirPath}`);
+    getLogger().info(`SubconsciousWatcher watching: ${dirPath}`);
   }
 
   /**
@@ -114,11 +114,11 @@ export class SubconsciousWatcher {
           symbolCount: symbols.length,
           symbols: symbols.slice(0, 10), // First 10 symbols
         },
-        sessionId: this.currentSessionId ?? undefined,
-      });
-    } catch (error) {
-      console.error('[SubconsciousWatcher] Failed to capture file change:', error);
-    }
+         sessionId: this.currentSessionId ?? undefined,
+       });
+     } catch (error) {
+       getLogger().error('Failed to capture file change', error instanceof Error ? error : undefined);
+     }
   }
 
   /**
@@ -134,12 +134,12 @@ export class SubconsciousWatcher {
         }
         
         // Update last checked time
-        this.watchedPaths.set(dirPath, new Date());
-      } catch (error) {
-        console.error(`[SubconsciousWatcher] Failed to watch ${dirPath}:`, error);
-      }
-    }
-  }
+         this.watchedPaths.set(dirPath, new Date());
+       } catch (error) {
+         getLogger().error(`SubconsciousWatcher failed to watch ${dirPath}`, error instanceof Error ? error : undefined);
+       }
+     }
+   }
 
   /**
    * Detect changes in a directory
@@ -147,13 +147,13 @@ export class SubconsciousWatcher {
   private async detectChanges(dirPath: string, since: Date): Promise<FileChangeEvent[]> {
     const changes: FileChangeEvent[] = [];
     
-    try {
-      await this.walkDirectory(dirPath, since, changes);
-    } catch (error) {
-      console.error(`[SubconsciousWatcher] Failed to walk ${dirPath}:`, error);
-    }
-    
-    return changes;
+     try {
+       await this.walkDirectory(dirPath, since, changes);
+     } catch (error) {
+       getLogger().error(`SubconsciousWatcher failed to walk ${dirPath}`, error instanceof Error ? error : undefined);
+     }
+     
+     return changes;
   }
 
   /**
@@ -265,8 +265,8 @@ This README is maintained by the auto-docs system. When files are added to this 
       
       // Trigger auto-docs to capture this new file
       await autoDocumentChange(readmePath, 'write', undefined, readmeContent);
-      
-      console.log(`[SubconsciousWatcher] Auto-generated README for new directory: ${relativePath}`);
+
+      getLogger().info(`Auto-generated README for new directory: ${relativePath}`);
     } catch (error) {
       console.error(`[SubconsciousWatcher] Failed to auto-document new directory ${dirPath}:`, error);
     }
@@ -341,7 +341,7 @@ This README is maintained by the auto-docs system. When files are added to this 
    */
   private formatFileChange(event: FileChangeEvent, symbols: string[]): string {
     const fileName = path.basename(event.filePath);
-    const ext = this.getFileExtension(event.filePath);
+    const _ext = this.getFileExtension(event.filePath);
     
     let content = `[${event.eventType}] ${fileName}`;
     

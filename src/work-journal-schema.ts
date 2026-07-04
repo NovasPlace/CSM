@@ -1,4 +1,5 @@
 import type { DatabasePool } from './types.js';
+import { getLogger } from './logger.js';
 
 export async function initializeWorkJournalSchema(pool: DatabasePool): Promise<void> {
   await pool.query(`
@@ -21,7 +22,7 @@ export async function initializeWorkJournalSchema(pool: DatabasePool): Promise<v
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_work_journal_session_id ON agent_work_journal(session_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_work_journal_project_id ON agent_work_journal(project_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_work_journal_created_at ON agent_work_journal(created_at DESC)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_work_journal_session_project ON agent_work_journal(session_id, project_id)`);
+   await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_work_journal_session_project ON agent_work_journal(session_id, project_id)`);
 
-  console.log('[Schema] Work journal table initialized');
+  getLogger().info('Work journal table initialized');
 }

@@ -1,0 +1,35 @@
+Candidates only. No archive, prune, delete, or recall change was performed.
+
+Scanned total: 45178
+Active memories: 37937
+Archive candidates: 7380
+Overlap count: 0
+Excluded low-access count: 1540
+Excluded medium-band conversations: 24
+
+Already superseded duplicate: 7241
+  By type: conversation=1037, procedural=6204
+  #54000 already_superseded_duplicate procedural score=n/a age=1d access=0 recall=0
+    Completed: Edit index.ts — 1 file(s) changed
+  #53999 already_superseded_duplicate procedural score=n/a age=1d access=0 recall=0
+    Completed: Edit index.ts — 1 file(s) changed
+  #53998 already_superseded_duplicate procedural score=n/a age=1d access=0 recall=0
+    Completed: Edit config.ts — 4 file(s) changed
+  #53997 already_superseded_duplicate procedural score=n/a age=1d access=0 recall=0
+    Completed: Search codebase — 2 file(s) changed
+  #53995 already_superseded_duplicate procedural score=n/a age=1d access=0 recall=0
+    Completed: Mixed tool sequence — 5 file(s) changed
+
+Tiny type-specific junk: 139
+  By type: conversation=1, episodic=138
+  #8191 tiny_type_specific_junk episodic score=0.28 age=15d access=0 recall=0
+    [modified] pyproject.toml
+  #8172 tiny_type_specific_junk episodic score=0.28 age=15d access=0 recall=0
+    [modified] pyproject.toml
+  #8782 tiny_type_specific_junk episodic score=0.3 age=14d access=0 recall=0
+    [modified] index.html
+  #8780 tiny_type_specific_junk episodic score=0.3 age=14d access=0 recall=0
+    [modified] index.html
+  #8778 tiny_type_specific_junk episodic score=0.3 age=14d access=0 recall=0
+    [modified] index.html
+

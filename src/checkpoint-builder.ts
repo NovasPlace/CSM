@@ -26,7 +26,6 @@ export interface BuildResult {
 
 const FILE_PATH_RE = /(?:[\w./-]+\/[\w./-]+\.[a-z]{2,4})|(?:[A-Za-z]:[\\w\\-]+\\[\w.\\-]+)/g;
 const MAX_GOAL_CHARS = 200;
-const MAX_CAPTURE_CHARS = 8192;
 
 /** Main entry: deterministic checkpoint assembly. */
 export function buildCheckpoint(input: BuildInput): BuildResult {

@@ -6,8 +6,10 @@ import type {
   ResumeEntry,
   ResumePayload,
 } from './work-journal-types.js';
-import { inferNextStep, collectAllFiles, isMilestoneIntent, isErrorResult } from './work-journal-types.js';
+import { inferNextStep, collectAllFiles, isMilestoneIntent } from './work-journal-types.js';
+// isErrorResult imported but unused — Phase 3D
 import type { Redactor } from './redactor.js';
+import { getLogger } from './logger.js';
 
 const FILE_ARG_KEYS = ['filePath', 'path', 'pattern', 'command', 'url', 'query'];
 
@@ -113,10 +115,10 @@ export class AgentWorkJournal {
     }
 
     const entries = this.writeBuffer.splice(0);
-    if (entries.length === 0) return;
+     if (entries.length === 0) return;
 
-    console.log(`[WorkJournal] Flushing ${entries.length} entries`);
-    try {
+     getLogger().info(`WorkJournal flushing ${entries.length} entries`);
+     try {
       for (const entry of entries) {
         const redactedIntent = this.redactor ? this.redactor.redact(entry.intent).text : entry.intent;
         const redactedTarget = entry.target
@@ -129,7 +131,7 @@ export class AgentWorkJournal {
           ? (this.redactor ? this.redactor.redact(entry.errorSummary).text : entry.errorSummary)
           : null;
 
-        const result = await this.pool.query(
+        const _result = await this.pool.query(
           `INSERT INTO agent_work_journal
            (session_id, project_id, entry_type, tool_name, intent, target,
             result_summary, error_summary, files_touched, token_snapshot)
@@ -146,12 +148,12 @@ export class AgentWorkJournal {
             entry.filesTouched,
             entry.tokenSnapshot ?? null,
           ],
-        );
-        console.log(`[WorkJournal] Inserted entry: ${entry.toolName || 'unknown'} (${entry.entryType})`);
-      }
-    } catch (e) {
-      console.error('[WorkJournal] Flush failed:', e);
-    }
+         );
+         getLogger().info(`WorkJournal inserted entry: ${entry.toolName || 'unknown'} (${entry.entryType})`);
+       }
+     } catch (e) {
+       getLogger().error('WorkJournal flush failed', e instanceof Error ? e : undefined);
+     }
   }
 
   async buildResumePayload(
@@ -168,6 +170,7 @@ export class AgentWorkJournal {
         [projectId ?? null, sessionId],
       );
 
+      let fromSessionId: string;
       if (lastSessionResult.rows.length === 0) {
         const fallbackResult = await this.pool.query(
           `SELECT DISTINCT session_id FROM agent_work_journal
@@ -178,9 +181,9 @@ export class AgentWorkJournal {
         );
         if (fallbackResult.rows.length === 0) return null;
 
-        var fromSessionId = (fallbackResult.rows[0] as { session_id: string }).session_id;
+        fromSessionId = (fallbackResult.rows[0] as { session_id: string }).session_id;
       } else {
-        var fromSessionId = (lastSessionResult.rows[0] as { session_id: string }).session_id;
+        fromSessionId = (lastSessionResult.rows[0] as { session_id: string }).session_id;
       }
 
       const entriesResult = await this.pool.query(
@@ -226,12 +229,12 @@ export class AgentWorkJournal {
         activeGoal,
         nextStepInferred,
         allFilesTouched,
-        tokenCount,
-      };
-    } catch (e) {
-      console.error('[WorkJournal] Resume payload build failed:', e);
-      return null;
-    }
+         tokenCount,
+       };
+     } catch (e) {
+       getLogger().error('WorkJournal resume payload build failed', e instanceof Error ? e : undefined);
+       return null;
+     }
   }
 
   async getRecentEntries(sessionId: string, limit: number): Promise<ResumeEntry[]> {
