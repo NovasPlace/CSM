@@ -2,7 +2,7 @@
 
 A continuity runtime for AI coding assistants. Not just memory — a full pipeline that turns raw events into durable beliefs, with safety gates at every stage.
 
-Backed by PostgreSQL + pgvector (default) or SQLite (lightweight alternative). 25 tables. 23 runtime tools. 728 tests.
+Backed by PostgreSQL + pgvector (default) or SQLite (lightweight alternative). 25 tables. 27 runtime tools. 728 tests.
 
 ## What CSM Is
 
@@ -15,7 +15,7 @@ The key insight: memory alone isn't continuity. CSM is a **pipeline** — raw ev
 ```
 raw events
   → work journal (tool calls, decisions, errors)
-    → compaction (token-budgeted compression, 81.9% avg savings)
+    → compaction (token-budgeted compression, 90.8% total reduction)
       → experience packets (structured observations with internal state)
         → candidate scanning (pattern detection, belief extraction)
           → belief promotion (confidence-gated, dedup-checked)
@@ -71,25 +71,29 @@ Every stage has guards:
 | `csm_memory_distilled_view` | View distilled summaries |
 | `csm_memory_compact` | Report on compaction savings |
 
-### Candidates & Governance (3 tools)
+### Governance (6 tools)
 | Tool | Description |
 |------|-------------|
 | `csm_memory_candidate_generate` | Generate maintenance candidates (advisory, dry-run) |
 | `csm_memory_candidate_report` | Show candidate counts by type/status |
 | `csm_memory_backfill_embeddings` | Repair missing embeddings |
+| `csm_memory_dedup_detect` | Find duplicate memory clusters |
+| `csm_memory_merge` | Merge exact content duplicates (dry-run first) |
+| `csm_memory_archive_candidate_report` | Archive-candidate governance report |
 
 ### Experience Packets (1 tool)
 | Tool | Description |
 |------|-------------|
 | `csm_memory_packets` | List recent experience packets with internal state |
 
-### Beliefs (4 tools)
+### Beliefs (5 tools)
 | Tool | Description |
 |------|-------------|
 | `csm_belief_scan` | Scan packets for recurring patterns |
 | `csm_belief_scan_report` | Show belief candidate counts |
 | `csm_belief_promote` | Promote candidates to durable memories |
 | `csm_belief_knowledge` | View consolidated belief knowledge |
+| `csm_memory_governance_report` | Governance status with invariant checks |
 
 ### Self-Model (1 tool)
 | Tool | Description |
@@ -119,7 +123,7 @@ Every stage has guards:
 - `project_scopes` — Project isolation boundaries
 
 ### Memory (3 tables)
-- `memories` — The main memory store. 11 types: conversation, workspace, repo, preference, lesson, episodic, procedural, concept, code, config, error, self_continuity
+- `memories` — The main memory store. 12 types: conversation, workspace, repo, preference, lesson, episodic, procedural, concept, code, config, error, self_continuity
 - `memory_chunks` — Chunked embeddings for long memories
 - `memory_merges` — Audit trail for dedup merges
 
@@ -158,12 +162,12 @@ Key performance indexes: HNSW on memory_chunks (vector similarity), GIN on memor
 | Metric | Value |
 |--------|-------|
 | Test suite | 728/728 passing |
-| Runtime tools | 23 (`csm_` namespace) |
+| Runtime tools | 27 (`csm_` namespace) |
 | Database tables | 25 |
-| Memory types | 11 |
+| Memory types | 12 |
 | Candidate types | 10 (5 maintenance + 5 belief) |
 | Global tokens saved | 2.02B+ |
-| Compaction rate | 81.9% average savings |
+| Compaction reduction | 90.8% total weighted, 81.9% per-compaction average |
 | Live memories | 46,000+ |
 | Embeddings | 7,500+ |
 | Lint baseline | 102 warnings (max-warnings=102) |
@@ -210,9 +214,9 @@ Import `./codex-bridge` to expose the memory harness to Codex-facing code. 49 br
 - [docs/PHASE4EB_BELIEF_KNOWLEDGE_CONTRACT.md](docs/PHASE4EB_BELIEF_KNOWLEDGE_CONTRACT.md) — Belief knowledge contract
 - [docs/PHASE4B5_PACKET_CONTRACT.md](docs/PHASE4B5_PACKET_CONTRACT.md) — Experience packet vocabulary
 
-## Future Direction
+## Roadmap
 
-### ClaudeX — Database UI
+### ClaudeX — Database UI (Next Phase)
 
 ClaudeX is the planned conversational interface for CSM's database layer. Instead of pgAdmin or DBeaver, you chat with your data:
 
