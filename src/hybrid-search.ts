@@ -118,6 +118,7 @@ export async function entityMatchBoost(
   try {
     const params: unknown[] = [like, conceptsJson];
     const whereExtra = buildWhereClause(params, projectId, type, tags, minImportance);
+    params.push(limit);
     const result = await pool.query(
       `SELECT id,
         CASE
@@ -131,7 +132,7 @@ export async function entityMatchBoost(
               OR ${ilikeExpr(d, 'tags::text', 1)}
               OR ${jsonContainsParam(d, jsonExtractValue(d, 'metadata', 'extracted_concepts'), 2)})
          ${whereExtra}
-       LIMIT ${limit}`,
+       LIMIT $${params.length}`,
       params,
     );
     return result.rows.map((r: any) => ({ id: r.id, boost: r.boost }));

@@ -1,7 +1,8 @@
-import type { DatabasePool, MemoryType } from './types.js';
+import type { DatabasePool, MemoryType, BeliefPromotionConfig } from './types.js';
 import { dialectFromPool, type QueryDialect } from './db/query-dialect.js';
 import { getLogger } from './logger.js';
 import { BELIEF_CANDIDATE_TYPES, type BeliefCandidateType } from './candidate-schema.js';
+import type { MemoryManager } from './memory-manager.js';
 
 export interface PromotionConfig {
   dryRun?: boolean;
@@ -78,21 +79,30 @@ function candidateTypeToMemoryType(ct: BeliefCandidateType): MemoryType {
 
 export class BeliefPromotionEngine {
   private readonly pool: DatabasePool;
+  private readonly memoryManager: MemoryManager;
+  private readonly config: BeliefPromotionConfig;
   private readonly log = getLogger();
 
-  constructor(pool: DatabasePool) {
+  constructor(pool: DatabasePool, memoryManager: MemoryManager, config: BeliefPromotionConfig) {
     this.pool = pool;
+    this.memoryManager = memoryManager;
+    this.config = config;
   }
 
   async promote(config: PromotionConfig = {}): Promise<PromotionReport> {
+    if (!this.config.enabled) {
+      this.log.warn('Belief promotion is disabled (CSM_BELIEF_PROMOTION_ENABLED=false). Skipping.');
+      return this.emptyReport(true);
+    }
+
     const d = dialectFromPool(this.pool as { getDialect?: () => QueryDialect });
-    const dryRun = config.dryRun ?? true;
-    const relaxed = config.relaxed ?? false;
-    const minConfidence = config.minConfidence ?? (relaxed ? 0.3 : 0.7);
-    const minReinforcement = config.minReinforcement ?? (relaxed ? 1 : 3);
-    const minEvidenceRefs = config.minEvidenceRefs ?? (relaxed ? 1 : 2);
-    const minSessions = config.minSessions ?? 1;
-    const maxPromote = config.maxPromote ?? 10;
+    const dryRun = config.dryRun ?? this.config.dryRunByDefault;
+    const relaxed = config.relaxed ?? this.config.relaxed;
+    const minConfidence = config.minConfidence ?? (relaxed ? 0.3 : this.config.minConfidence);
+    const minReinforcement = config.minReinforcement ?? (relaxed ? 1 : this.config.minReinforcement);
+    const minEvidenceRefs = config.minEvidenceRefs ?? (relaxed ? 1 : this.config.minEvidenceRefs);
+    const minSessions = config.minSessions ?? this.config.minSessions;
+    const maxPromote = config.maxPromote ?? this.config.maxPromotePerRun;
 
     const candidates = await this.loadPendingCandidates(d);
     const decisions: PromotionDecision[] = [];
@@ -306,7 +316,7 @@ export class BeliefPromotionEngine {
   ): Promise<number | null> {
     const importance = Math.min(1.0, c.confidence * 0.8 + (c.reinforcementCount / 10) * 0.2);
     const content = `[Promoted from candidate ${c.id}] ${c.reason}`;
-    const metadata = JSON.stringify({
+    const metadata = {
       promotion_source: 'belief_promotion_engine',
       candidate_id: c.id,
       candidate_type: c.candidateType,
@@ -317,24 +327,26 @@ export class BeliefPromotionEngine {
       reinforcement_count: c.reinforcementCount,
       event_count: c.eventCount,
       promoted_at: new Date().toISOString(),
-    });
+      source_kind: 'belief_promotion',
+      evidence_strength: 'derived_pattern',
+      source_agent_id: 'csmt',
+    };
 
-    const result = await this.pool.query(
-      `INSERT INTO memories (memory_type, content, importance, confidence, source, tags, metadata, session_id)
-       VALUES ($1, $2, $3, $4, 'belief_promotion', $5::text[], $6, NULL)
-       RETURNING id`,
-      [
-        decision.targetMemoryType,
+    try {
+      const memory = await this.memoryManager.saveMemory({
         content,
+        type: decision.targetMemoryType,
         importance,
-        c.confidence,
-        [c.candidateType, 'auto-promoted'],
-        metadata,
-      ],
-    );
-
-    const row = result.rows[0] as { id: number } | undefined;
-    return row?.id ?? null;
+        confidence: c.confidence,
+        source: 'auto',
+        tags: [c.candidateType, 'auto-promoted'],
+        metadata: metadata as Record<string, unknown>,
+      });
+      return memory.id;
+    } catch (err) {
+      this.log.error(`Failed to save promoted memory for candidate ${c.id}`, err instanceof Error ? err : undefined);
+      return null;
+    }
   }
 
   private async markCandidateApplied(candidateId: number, _d: QueryDialect): Promise<void> {
@@ -344,5 +356,20 @@ export class BeliefPromotionEngine {
        WHERE id = $1`,
       [candidateId],
     );
+  }
+
+  private emptyReport(dryRun: boolean): PromotionReport {
+    return {
+      dryRun,
+      relaxed: false,
+      thresholdProfile: { minConfidence: 0, minReinforcement: 0, minEvidenceRefs: 0, minSessions: 0 },
+      candidatesEvaluated: 0,
+      promoted: 0,
+      skipped: 0,
+      needsReview: 0,
+      decisions: [],
+      promotedMemoryIds: [],
+      byAction: {},
+    };
   }
 }

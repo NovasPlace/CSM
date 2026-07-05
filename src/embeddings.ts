@@ -4,7 +4,7 @@
 import { PluginConfig } from './types.js';
 import { getLogger } from './logger.js';
 
-export const EMBEDDING_DIMENSIONS = 1536;
+export const EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS) || 1536;
 
 export interface EmbeddingChunk {
   content: string;

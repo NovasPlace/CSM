@@ -90,4 +90,18 @@ export async function initializeCoreSchema(pool: DatabasePool): Promise<void> {
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_project_scopes_directory ON project_scopes(directory)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_project_scopes_last_active ON project_scopes(last_active_at DESC)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS memory_quality_scores (
+      id SERIAL PRIMARY KEY,
+      memory_id INTEGER NOT NULL UNIQUE,
+      memory_type TEXT,
+      score REAL NOT NULL CHECK (score >= 0 AND score <= 1),
+      band TEXT,
+      features JSONB DEFAULT '{}',
+      scoring_version TEXT,
+      scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_quality_scores_memory_id ON memory_quality_scores(memory_id)`);
 }

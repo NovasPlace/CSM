@@ -39,7 +39,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
   const experiencePackets = pluginCtx.experiencePackets;
 
   const beliefScanner = new BeliefPromotionScanner(database.getPool());
-  const beliefPromotion = new BeliefPromotionEngine(database.getPool());
+  const beliefPromotion = new BeliefPromotionEngine(database.getPool(), memoryManager, config.beliefPromotion);
 
   const backfill = new EmbeddingBackfill(database, embeddings);
   const dedupDetector = new DedupCandidateDetector(database);
@@ -69,7 +69,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     csm_memory_packets: memoryPacketsTool(experiencePackets),
     csm_belief_scan: beliefScanTool(beliefScanner),
     csm_belief_scan_report: beliefScanReportTool(beliefScanner),
-    csm_belief_promote: beliefPromotionTool(beliefPromotion),
+    csm_belief_promote: beliefPromotionTool(beliefPromotion, config.beliefPromotion),
     csm_self_model: selfModelTool(pluginCtx.selfModel),
     csm_belief_knowledge: beliefKnowledgeTool(pluginCtx.beliefKnowledge),
     csm_living_state_preview: livingStatePreviewTool(pluginCtx.livingState),

@@ -22,7 +22,24 @@ export interface CacheRuntimeResult {
   tokensReplaced: number;
 }
 
-function extractContent(part: any): { text: string; kind: CacheKind; summary: string; metadata: Record<string, unknown> } | null {
+interface CacheToolPart {
+  type: string;
+  text?: string;
+  tool?: string;
+  state?: {
+    status?: string;
+    type?: string;
+    output?: unknown;
+    input?: Record<string, unknown>;
+  };
+}
+
+interface CacheMessage {
+  info?: { role?: string };
+  parts?: CacheToolPart[];
+}
+
+function extractContent(part: CacheToolPart): { text: string; kind: CacheKind; summary: string; metadata: Record<string, unknown> } | null {
   if (part.type === 'text' && typeof part.text === 'string') {
     const text = part.text;
     if (text.length < 100) return null;
@@ -67,7 +84,7 @@ function makeDisplayId(kind: string, msgIndex: number, partIndex: number): strin
 export async function cacheOldContext(
   pool: DatabasePool,
   sessionId: string,
-  messages: { info?: { role?: string }; parts?: any[] }[],
+  messages: CacheMessage[],
   cfg: CacheRuntimeConfig,
   redactor?: Redactor,
 ): Promise<CacheRuntimeResult> {
