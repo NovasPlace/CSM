@@ -187,9 +187,9 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       const quotaResult = applyTypeQuota(contentToProcess, options.type, options.emotion);
       contentToProcess = quotaResult.content;
       
-      // Get project_id from session if available
-      let projectId: string | null = null;
-      if (options.sessionId) {
+      // Get project_id from session if available, or use directly-provided projectId
+      let projectId: string | null = options.projectId ?? null;
+      if (!projectId && options.sessionId) {
         const sessionResult = await pool.query(
           'SELECT project_id FROM sessions WHERE id = $1',
           [options.sessionId]

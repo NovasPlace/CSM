@@ -496,6 +496,7 @@ export interface MemorySaveOptions {
   linkedMemoryIds?: number[];
   metadata?: Record<string, unknown>;
   sessionId?: string;
+  projectId?: string;
 }
 
 export interface MemorySearchOptions {
