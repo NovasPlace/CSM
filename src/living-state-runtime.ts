@@ -1,5 +1,6 @@
 import type { DatabasePool, SelfModelCapability, LivingStateConfig } from './types.js';
 import type { BeliefScanReport } from './belief-promotion-scanner.js';
+import type { BeliefPromotionEngine, PromotionReport } from './belief-promotion.js';
 import { getLogger } from './logger.js';
 
 interface PacketCount {
@@ -31,6 +32,13 @@ export interface LivingStatePreview {
     updated: number;
     total: number;
   };
+  promotion: {
+    candidatesEvaluated: number;
+    promoted: number;
+    skipped: number;
+    needsReview: number;
+    byAction: Record<string, number>;
+  } | null;
   warnings: string[];
   timestamp: string;
   previewOnly: boolean;
@@ -61,6 +69,7 @@ export class LivingStateRuntime {
   private packets: ExperiencePackets;
   private selfModelUpdater: SelfModelUpdater;
   private consolidator: BeliefConsolidator;
+  private promoter: BeliefPromotionEngine;
   private lastRunAt: number = 0;
 
   constructor(
@@ -70,6 +79,7 @@ export class LivingStateRuntime {
     packets: ExperiencePackets,
     selfModelUpdater: SelfModelUpdater,
     consolidator: BeliefConsolidator,
+    promoter: BeliefPromotionEngine,
   ) {
     this.pool = pool;
     this.config = config;
@@ -77,6 +87,7 @@ export class LivingStateRuntime {
     this.packets = packets;
     this.selfModelUpdater = selfModelUpdater;
     this.consolidator = consolidator;
+    this.promoter = promoter;
   }
 
   async runPass(): Promise<LivingStatePreview> {
@@ -98,6 +109,18 @@ export class LivingStateRuntime {
       getLogger().error('Living state scanner failed', err instanceof Error ? err : undefined);
       scanReport = { patternsFound: 0, packetsScanned: 0, inserted: 0, updated: 0, skippedDuplicates: 0, candidates: [], byType: {}, dryRun: false };
       warnings.push('scanner failed');
+    }
+
+    // 1.5. Promote high-confidence candidates → durable memories
+    let promoteReport: PromotionReport | null = null;
+    try {
+      promoteReport = await this.promoter.promote({
+        dryRun: this.config.previewOnly,
+        projectId: undefined,
+      });
+    } catch (err) {
+      getLogger().error('Living state promotion failed', err instanceof Error ? err : undefined);
+      warnings.push('promotion failed');
     }
 
     // 2. Snapshot capabilities → update → diff
@@ -169,11 +192,17 @@ export class LivingStateRuntime {
         updated: consolidateResult.updated,
         total: totalBeliefs,
       },
+      promotion: promoteReport ? {
+        candidatesEvaluated: promoteReport.candidatesEvaluated,
+        promoted: promoteReport.promoted,
+        skipped: promoteReport.skipped,
+        needsReview: promoteReport.needsReview,
+        byAction: promoteReport.byAction,
+      } : null,
       warnings,
       timestamp: new Date().toISOString(),
       previewOnly: this.config.previewOnly,
-    };
-  }
+    };}
 
   async getPreview(): Promise<LivingStatePreview> {
     if (!this.config.enabled) {
@@ -218,6 +247,7 @@ export class LivingStateRuntime {
       candidatesDelta: { scanned: 0, inserted: 0, updated: 0, total: 0, byType: {} },
       selfModel,
       beliefKnowledgeDelta: { created: 0, updated: 0, total: totalBeliefs },
+      promotion: null,
       warnings,
       timestamp: new Date().toISOString(),
       previewOnly: this.config.previewOnly,
@@ -279,6 +309,7 @@ export class LivingStateRuntime {
       candidatesDelta: { scanned: 0, inserted: 0, updated: 0, total: 0, byType: {} },
       selfModel: [],
       beliefKnowledgeDelta: { created: 0, updated: 0, total: 0 },
+      promotion: null,
       warnings: [reason === 'disabled' ? 'living state is disabled' : reason],
       timestamp: new Date().toISOString(),
       previewOnly: true,

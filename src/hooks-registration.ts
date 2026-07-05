@@ -29,6 +29,7 @@ import { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
 import { LivingStateRuntime } from './living-state-runtime.js';
 import { LivingStateAdvisor } from './living-state-advisor.js';
 import { BeliefPromotionScanner } from './belief-promotion-scanner.js';
+import { BeliefPromotionEngine } from './belief-promotion.js';
 import { StatsWriter } from './stats-writer.js';
 import type { PluginContext } from './plugin-context.js';
 import type { CheckpointToolDeps } from './checkpoint-tool.js';
@@ -121,6 +122,7 @@ export async function registerHooks(
   const selfModel = new SelfModelUpdater(database.getPool(), config.selfModel);
   const beliefKnowledge = new BeliefKnowledgeConsolidator(database.getPool(), config.beliefKnowledge);
   const beliefScanner = new BeliefPromotionScanner(database.getPool());
+  const beliefPromotion = new BeliefPromotionEngine(database.getPool(), memoryManager, config.beliefPromotion);
   const livingState = new LivingStateRuntime(
     database.getPool(),
     config.livingState,
@@ -128,6 +130,7 @@ export async function registerHooks(
     experiencePackets,
     selfModel,
     beliefKnowledge,
+    beliefPromotion,
   );
   const livingStateAdvisor = new LivingStateAdvisor(livingState, config.livingState);
   const lessonTriggers = new LessonTriggerCache(database.getPool());

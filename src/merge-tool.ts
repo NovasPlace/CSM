@@ -136,7 +136,12 @@ export class MemoryMerger {
     }
 
     const whereClause = conditions.join(' AND ');
-    const limitClause = maxGroups > 0 ? ` LIMIT ${maxGroups}` : '';
+
+    if (maxGroups > 0) {
+      params.push(maxGroups);
+    }
+
+    const limitClause = maxGroups > 0 ? ` LIMIT $${params.length}` : '';
 
     const sql = `
       SELECT

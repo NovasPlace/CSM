@@ -45,6 +45,10 @@
     "./types": {
       "import": "./dist/types.js",
       "types": "./dist/types.d.ts"
+    },
+    "./belief-promotion": {
+      "import": "./dist/belief-promotion.js",
+      "types": "./dist/belief-promotion.d.ts"
     }
   },
   "tui": "dist/tui.js",
@@ -57,7 +61,7 @@
     "verify": "npm run build && npm run typecheck && npx tsx --test test/*.test.ts",
     "benchmark:long-session": "npx tsx src/benchmark.ts",
     "lint": "npm run lint:src",
-    "lint:src": "eslint src --max-warnings=102",
+    "lint:src": "eslint src --max-warnings=96",
     "lint:all": "eslint .",
     "lint:fix": "eslint src --fix",
     "csm": "npx tsx scripts/csm-query.ts"

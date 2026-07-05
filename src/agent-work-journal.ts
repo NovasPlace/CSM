@@ -11,6 +11,17 @@ import { inferNextStep, collectAllFiles, isMilestoneIntent } from './work-journa
 import type { Redactor } from './redactor.js';
 import { getLogger } from './logger.js';
 
+interface WorkJournalRow {
+  entry_type: string;
+  tool_name: string | null;
+  intent: string | null;
+  target: string | null;
+  result_summary: string | null;
+  error_summary: string | null;
+  files_touched: string[] | string;
+  created_at: Date;
+}
+
 const FILE_ARG_KEYS = ['filePath', 'path', 'pattern', 'command', 'url', 'query'];
 
 export class AgentWorkJournal {
@@ -196,7 +207,7 @@ export class AgentWorkJournal {
 
       if (entriesResult.rows.length === 0) return null;
 
-      const entries: ResumeEntry[] = entriesResult.rows.map((row: any) => ({
+      const entries: ResumeEntry[] = (entriesResult.rows as WorkJournalRow[]).map((row) => ({
         entryType: row.entry_type as WorkJournalEntryType,
         toolName: row.tool_name ?? undefined,
         intent: row.intent ?? '',
@@ -246,7 +257,7 @@ export class AgentWorkJournal {
          LIMIT $2`,
         [sessionId, limit],
       );
-      return result.rows.map((row: any) => ({
+      return (result.rows as WorkJournalRow[]).map((row) => ({
         entryType: row.entry_type as WorkJournalEntryType,
         toolName: row.tool_name ?? undefined,
         intent: row.intent ?? '',

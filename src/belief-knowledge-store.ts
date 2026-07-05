@@ -47,7 +47,7 @@ function parseEvidenceRefs(dialect: string, val: unknown): EvidenceRef[] {
 }
 
 function beliefKindFromCandidateType(candidateType: string): BeliefKind | null {
-  if (candidateType === 'candidate_preference') return 'preference';
+  if (candidateType === 'candidate_preference' || candidateType === 'candidate_belief') return 'preference';
   if (candidateType === 'candidate_opinion') return 'opinion';
   if (candidateType === 'candidate_worldview') return 'worldview';
   return null;
@@ -311,7 +311,7 @@ export class BeliefKnowledgeConsolidator {
         `SELECT id, candidate_type, dedup_key, reason, confidence, event_count,
                 reinforcement_count, contradicted_count, last_reinforced_at, source_packet_ids, status
          FROM memory_candidate_queue
-         WHERE candidate_type IN ('candidate_preference', 'candidate_worldview', 'candidate_opinion')`,
+          WHERE candidate_type IN ('candidate_preference', 'candidate_worldview', 'candidate_opinion', 'candidate_belief')`,
       );
       return result.rows as CandidateRow[];
     } catch {

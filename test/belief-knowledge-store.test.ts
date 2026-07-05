@@ -157,11 +157,11 @@ describe('BeliefKnowledgeConsolidator', () => {
     assert.equal(result.beliefs[0].stance, 'neutral');
   });
 
-  it('skips candidate_belief type (no mapping to belief_kind)', async () => {
+  it('maps candidate_belief type to preference belief_kind', async () => {
     const candidates: CandidateRow[] = [{
       id: 1, candidate_type: 'candidate_belief', dedup_key: 'err:parse:fail',
-      reason: 'parse errors', confidence: 0.3,
-      event_count: 2, reinforcement_count: 0, contradicted_count: 0,
+      reason: 'parse errors', confidence: 0.6,
+      event_count: 2, reinforcement_count: 2, contradicted_count: 0,
       last_reinforced_at: null, source_packet_ids: '[]', status: 'active',
     }];
     const beliefs: BeliefRow[] = [];
@@ -179,9 +179,8 @@ describe('BeliefKnowledgeConsolidator', () => {
     });
 
     const result = await consolidator.consolidate();
-    assert.equal(result.created, 0);
-    assert.equal(result.skipped, 1);
-    assert.equal(result.beliefs.length, 0);
+    assert.equal(result.created, 1);
+    assert.equal(result.beliefs[0].beliefKind, 'preference');
   });
 
   it('duplicate candidate updates existing belief entry (reinforcement)', async () => {

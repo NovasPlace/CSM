@@ -1,8 +1,60 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import type { BeliefPromotionConfig, MemorySaveOptions, Memory } from '../src/types.js';
 
 const TEST_DB_URL = process.env.CSM_DATABASE_URL ?? 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
+
+const testPromotionConfig: BeliefPromotionConfig = {
+  enabled: true,
+  dryRunByDefault: true,
+  minConfidence: 0.7,
+  minReinforcement: 3,
+  minEvidenceRefs: 2,
+  minSessions: 1,
+  maxPromotePerRun: 10,
+  relaxed: false,
+};
+
+function makePromotionMemoryManager(pool: pg.Pool) {
+  return {
+    async saveMemory(options: MemorySaveOptions): Promise<Memory> {
+      const result = await pool.query(
+        `INSERT INTO memories (memory_type, content, importance, confidence, source, tags, metadata, session_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+         RETURNING *`,
+        [
+          options.type,
+          options.content,
+          options.importance ?? 0.5,
+          options.confidence ?? 1.0,
+          options.source ?? 'auto',
+          options.tags ?? [],
+          JSON.stringify(options.metadata ?? {}),
+        ],
+      );
+      const row = result.rows[0] as Record<string, unknown>;
+      return {
+        id: Number(row.id),
+        memoryType: String(row.memory_type),
+        content: String(row.content),
+        importance: Number(row.importance),
+        confidence: Number(row.confidence),
+        createdAt: new Date(String(row.created_at)),
+        updatedAt: row.updated_at ? new Date(String(row.updated_at)) : undefined,
+        source: String(row.source ?? ''),
+        tags: Array.isArray(row.tags) ? row.tags as string[] : [],
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata as string) : (row.metadata as Record<string, unknown> ?? {}),
+        sessionId: row.session_id as string | undefined,
+        projectId: row.project_id as string | undefined,
+        embedding: row.embedding as number[] | undefined,
+        supersededBy: row.superseded_by as number | undefined,
+        supersededAt: row.superseded_at ? new Date(String(row.superseded_at)) : undefined,
+        archivedAt: row.archived_at ? new Date(String(row.archived_at)) : undefined,
+      } as Memory;
+    },
+  };
+}
 
 function makePool() {
   return new pg.Pool({ connectionString: TEST_DB_URL });
@@ -53,7 +105,7 @@ async function cleanup(pool: pg.Pool, packetIds: number[], candidateIds: number[
   for (const id of packetIds) {
     await pool.query('DELETE FROM experience_packets WHERE id = $1', [id]).catch(() => {});
   }
-  await pool.query("DELETE FROM memories WHERE source = 'belief_promotion' AND content LIKE '[Promoted from candidate%'").catch(() => {});
+  await pool.query("DELETE FROM memories WHERE metadata->>'promotion_source' = 'belief_promotion_engine' AND content LIKE '[Promoted from candidate%'").catch(() => {});
 }
 
 describe('BeliefPromotionEngine', () => {
@@ -73,7 +125,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
     const report = await engine.promote({ dryRun: true, minConfidence: 0.7 });
 
     const decision = report.decisions.find(d => d.candidateId === candidateId);
@@ -92,7 +144,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
     const report = await engine.promote({ dryRun: true, minConfidence: 0.7, minReinforcement: 3 });
 
     const decision = report.decisions.find(d => d.candidateId === candidateId);
@@ -112,7 +164,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
     const report = await engine.promote({ dryRun: true, minConfidence: 0.7, minReinforcement: 3 });
 
     const decision = report.decisions.find(d => d.candidateId === candidateId);
@@ -131,7 +183,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
     const report = await engine.promote({ dryRun: true, minConfidence: 0.7, minReinforcement: 3, minEvidenceRefs: 3 });
 
     const decision = report.decisions.find(d => d.candidateId === candidateId);
@@ -151,7 +203,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
     const report = await engine.promote({ dryRun: true, minConfidence: 0.7, minReinforcement: 3, minEvidenceRefs: 2, minSessions: 1 });
 
     const decision = report.decisions.find(d => d.candidateId === candidateId);
@@ -159,7 +211,7 @@ describe('BeliefPromotionEngine', () => {
     assert.equal(decision.action, 'promote');
     assert.equal(report.promotedMemoryIds.length, 0, 'no memories written in dry-run');
 
-    const memCheck = await pool.query("SELECT COUNT(*) as cnt FROM memories WHERE source = 'belief_promotion'");
+    const memCheck = await pool.query("SELECT COUNT(*) as cnt FROM memories WHERE metadata->>'promotion_source' = 'belief_promotion_engine' AND content LIKE '[Promoted fr%'");
     const cnt = typeof memCheck.rows[0].cnt === 'string' ? parseInt(memCheck.rows[0].cnt) : memCheck.rows[0].cnt;
     assert.equal(cnt, 0, 'no memories should exist from dry-run');
 
@@ -179,7 +231,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
     const report = await engine.promote({ dryRun: false, minConfidence: 0.7, minReinforcement: 3, minEvidenceRefs: 2, minSessions: 1 });
 
     const decision = report.decisions.find(d => d.candidateId === candidateId);
@@ -203,7 +255,7 @@ describe('BeliefPromotionEngine', () => {
     const memResult = await pool.query('SELECT * FROM memories WHERE id = $1', [memId!]);
     assert.equal(memResult.rows.length, 1, 'memory exists');
     const mem = memResult.rows[0];
-    assert.equal(mem.source, 'belief_promotion');
+    assert.equal(mem.source, 'auto');
     assert.ok(mem.content.includes(`candidate ${candidateId}`), 'content references candidate');
 
     const meta = typeof mem.metadata === 'string' ? JSON.parse(mem.metadata) : mem.metadata;
@@ -229,7 +281,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
 
     // Default mode: minConfidence=0.7, should skip
     const report = await engine.promote({ dryRun: true });
@@ -260,7 +312,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
 
     // Relaxed mode: minConfidence=0.3, should promote
     const report = await engine.promote({ dryRun: true, relaxed: true });
@@ -287,7 +339,7 @@ describe('BeliefPromotionEngine', () => {
     });
 
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
-    const engine = new BeliefPromotionEngine(pool);
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
     const report = await engine.promote({ dryRun: true, minConfidence: 0.7 });
 
     const decision = report.decisions.find(d => d.candidateId === candidateId);

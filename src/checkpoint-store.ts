@@ -4,18 +4,52 @@ import { DatabasePool } from './types.js';
 import {
   CheckpointRecord, CreateCheckpointInput,
   RawCaptureRecord, ExpandedRef,
+  type RawCaptureKind,
 } from './checkpoint-types.js';
 import type { Redactor } from './redactor.js';
 
+interface CheckpointRow {
+  checkpoint_id: string;
+  session_id: string;
+  project_id: string | null;
+  created_at: Date;
+  source_message_start: number | null;
+  source_message_end: number | null;
+  summary_markdown: string;
+  summary_tokens: number;
+  input_tokens_estimate: number;
+  source_refs: string[] | string;
+  compacted_refs: string[] | string;
+  files_mentioned: string[] | string;
+  tests_mentioned: string[] | string;
+  risks: string[] | string;
+  next_steps: string[] | string;
+  supersedes_checkpoint_id: string | null;
+  schema_version: number;
+  is_active: boolean;
+}
+
+interface RawCaptureRow {
+  raw_id: string;
+  checkpoint_id: string;
+  message_id: string | null;
+  part_id: string | null;
+  tool_call_id: string | null;
+  kind: string;
+  content: string;
+  token_count: number;
+  captured_at: Date;
+}
+
 /** Maps a pg row to a CheckpointRecord (JSONB/TEXT[] auto-parsed by node-postgres). */
-function rowToCheckpoint(row: any): CheckpointRecord {
+function rowToCheckpoint(row: CheckpointRow): CheckpointRecord {
   return {
     checkpointId: row.checkpoint_id,
     sessionId: row.session_id,
     projectId: row.project_id ?? undefined,
     createdAt: row.created_at,
-    sourceMessageStart: row.source_message_start ?? undefined,
-    sourceMessageEnd: row.source_message_end ?? undefined,
+    sourceMessageStart: row.source_message_start as unknown as string | undefined,
+    sourceMessageEnd: row.source_message_end as unknown as string | undefined,
     summaryMarkdown: row.summary_markdown,
     summaryTokens: row.summary_tokens,
     inputTokensEstimate: row.input_tokens_estimate,
@@ -42,14 +76,14 @@ function readJsonArray<T>(value: unknown): T[] {
   }
 }
 
-function rowToRawCapture(row: any): RawCaptureRecord {
+function rowToRawCapture(row: RawCaptureRow): RawCaptureRecord {
   return {
     rawId: row.raw_id,
     checkpointId: row.checkpoint_id,
     messageId: row.message_id ?? undefined,
     partId: row.part_id ?? undefined,
     toolCallId: row.tool_call_id ?? undefined,
-    kind: row.kind,
+    kind: row.kind as RawCaptureKind,
     content: row.content,
     tokenCount: row.token_count,
     capturedAt: row.captured_at,
@@ -104,7 +138,7 @@ export class CheckpointStore {
           JSON.stringify(input.risks), JSON.stringify(input.nextSteps), prevId,
         ],
       );
-      const checkpoint = rowToCheckpoint(ins.rows[0]);
+      const checkpoint = rowToCheckpoint(ins.rows[0] as CheckpointRow);
       // Insert raw captures
       for (const rc of rawCaptures) {
         await client.query(
@@ -131,7 +165,7 @@ export class CheckpointStore {
       `SELECT * FROM checkpoints WHERE session_id = $1 AND is_active = true LIMIT 1`,
       [sessionId],
     );
-    return res.rows.length > 0 ? rowToCheckpoint(res.rows[0]) : null;
+    return res.rows.length > 0 ? rowToCheckpoint(res.rows[0] as CheckpointRow) : null;
   }
 
   /** Lists checkpoints for a session, newest first. */
@@ -140,7 +174,7 @@ export class CheckpointStore {
       `SELECT * FROM checkpoints WHERE session_id = $1 ORDER BY created_at DESC LIMIT $2`,
       [sessionId, limit],
     );
-    return res.rows.map(rowToCheckpoint);
+    return (res.rows as CheckpointRow[]).map(rowToCheckpoint);
   }
 
   /** Returns raw captures for a checkpoint (recovery data). */
@@ -149,7 +183,7 @@ export class CheckpointStore {
       `SELECT * FROM checkpoint_raw_captures WHERE checkpoint_id = $1 ORDER BY captured_at ASC`,
       [checkpointId],
     );
-    return res.rows.map(rowToRawCapture);
+    return (res.rows as RawCaptureRow[]).map(rowToRawCapture);
   }
 
   /**
@@ -173,6 +207,6 @@ export class CheckpointStore {
     if (res.rows.length === 0) {
       return { found: false, error: 'no_capture_for_identifier' };
     }
-    return { found: true, rawCapture: rowToRawCapture(res.rows[0]) };
+    return { found: true, rawCapture: rowToRawCapture(res.rows[0] as RawCaptureRow) };
   }
 }

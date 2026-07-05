@@ -1,6 +1,7 @@
 import type { BeliefPromotionEngine, PromotionConfig } from './belief-promotion.js';
+import type { BeliefPromotionConfig } from './types.js';
 
-export function beliefPromotionTool(engine: BeliefPromotionEngine) {
+export function beliefPromotionTool(engine: BeliefPromotionEngine, config: BeliefPromotionConfig) {
   return {
     name: 'csm_belief_promote',
     description: 'Promote high-confidence belief candidates into durable memories. Dry-run by default. Requires CSM_BELIEF_PROMOTION_ENABLED=true.',
@@ -17,9 +18,13 @@ export function beliefPromotionTool(engine: BeliefPromotionEngine) {
       },
     },
     execute: async (args: Record<string, unknown>) => {
-      const config: PromotionConfig = {
-        dryRun: args.dryRun as boolean ?? true,
-        relaxed: args.relaxed as boolean ?? false,
+      if (!config.enabled) {
+        return 'Belief promotion is disabled. Set CSM_BELIEF_PROMOTION_ENABLED=true to enable.';
+      }
+
+      const promotionConfig: PromotionConfig = {
+        dryRun: args.dryRun as boolean ?? config.dryRunByDefault,
+        relaxed: args.relaxed as boolean ?? config.relaxed,
         minConfidence: args.minConfidence as number | undefined,
         minReinforcement: args.minReinforcement as number | undefined,
         minEvidenceRefs: args.minEvidenceRefs as number | undefined,
@@ -27,7 +32,7 @@ export function beliefPromotionTool(engine: BeliefPromotionEngine) {
         maxPromote: args.maxPromote as number | undefined,
       };
 
-      const report = await engine.promote(config);
+      const report = await engine.promote(promotionConfig);
 
       const lines: string[] = [];
       lines.push(`=== BELIEF PROMOTION ${report.dryRun ? '(DRY RUN)' : '(APPLY)'} ===`);
