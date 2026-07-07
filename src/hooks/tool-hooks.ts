@@ -85,6 +85,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     context_fetch_file_region: contextFetchFileRegionTool({ pool: database.getPool() }),
     context_fetch_last_error: contextFetchLastErrorTool({ pool: database.getPool() }),
     context_fetch_decision_log: contextFetchDecisionLogTool({ pool: database.getPool() }),
+    context_fault: pluginCtx.vcmManager.faultTool(),
     goal_set: goalSetTool({ pool: database.getPool() }),
     goal_update: goalUpdateTool({ pool: database.getPool() }),
     goal_list: goalListTool({ pool: database.getPool() }),

@@ -139,7 +139,7 @@ export async function initializeMinimalSqliteSchema(pool: DatabasePool): Promise
       project_id TEXT,
       entry_type TEXT NOT NULL CHECK (entry_type IN (
         'tool_execution', 'error', 'milestone', 'decision',
-        'session_start', 'session_end', 'distill_group', 'loop_signal'
+        'session_start', 'session_checkpoint', 'session_end', 'distill_group', 'loop_signal'
       )),
       entry_id TEXT,
       internal_state TEXT NOT NULL DEFAULT '{}',

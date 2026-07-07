@@ -22,7 +22,7 @@ export async function ensureEmbeddingColumnContract(pool: DatabasePool): Promise
     return;
   }
 
-  const row = result.rows[0] as { column_type?: string };
+const row = result.rows[0] as { column_type?: string };
   const expectedType = `vector(${EMBEDDING_DIMENSIONS})`;
   if (row.column_type === expectedType) return;
 
@@ -31,8 +31,8 @@ export async function ensureEmbeddingColumnContract(pool: DatabasePool): Promise
    await pool.query(
      `ALTER TABLE memories ADD COLUMN embedding VECTOR(${EMBEDDING_DIMENSIONS})`,
    );
-   getLogger().warn(`Renamed mismatched embedding column to ${legacyColumn}; regenerate embeddings to backfill ${expectedType}.`);
- }
+    getLogger().warn(`Embedding dimension changed: ${row.column_type ?? '(unknown)'} → ${expectedType}. Old column preserved as ${legacyColumn}. Run csm_memory_backfill_embeddings tool to regenerate embeddings at the new dimension.`);
+  }
 
 export async function initializeMemorySchema(pool: DatabasePool): Promise<void> {
   await pool.query(`

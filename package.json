@@ -70,7 +70,8 @@
     "@opencode-ai/plugin": "1.17.13",
     "better-sqlite3": "^12.11.1",
     "pg": "^8.13.0",
-    "pgvector": "^0.3.0"
+    "pgvector": "^0.3.0",
+    "vcm": "file:../vcm"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.1.0",
@@ -91,6 +92,7 @@
     "@types/pg": "^8.20.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
+    "tsx": "^4.23.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.62.1"
   }

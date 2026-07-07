@@ -5,7 +5,7 @@ import { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { MemoryManager } from './memory-manager.js';
 import { getLogger } from './logger.js';
-import { nowFn } from './db/query-dialect.js';
+import { nowFn, jsonExtractText } from './db/query-dialect.js';
 import {
   MemoryType,
   MemoryEmotion,
@@ -20,6 +20,7 @@ export class MemoryExtractor {
   private database: Database;
   private embeddings: EmbeddingGenerator;
   private memoryManager: MemoryManager;
+  private recentlyExtractedGroupIds = new Set<string>();
   private config: {
     enabled: boolean;
     minTurnsBeforeExtract: number;
@@ -148,6 +149,7 @@ export class MemoryExtractor {
     const metadata: Record<string, unknown> = {
       source: 'distiller',
       extractionMethod: 'deterministic',
+      distillGroupId: group.id,
       intent: group.intent,
       filesChanged: group.filesChanged,
       commandsRun: group.commandsRun,
@@ -389,10 +391,25 @@ export class MemoryExtractor {
   }
 
   /**
-   * Save a candidate as a memory
+   * Save a candidate as a memory, with dedup guard for distilled groups.
+   * Prevents the same group.id from being saved multiple times across
+   * distillation passes — root cause of the 88-duplicate-cluster bug.
    */
   private async saveCandidateAsMemory(candidate: MemoryCandidate): Promise<void> {
     try {
+      const distillGroupId = candidate.metadata?.distillGroupId;
+      if (typeof distillGroupId === 'string' && distillGroupId) {
+        if (this.recentlyExtractedGroupIds.has(distillGroupId)) {
+          return;
+        }
+        const dbCheck = await this.isGroupAlreadyExtracted(candidate.sessionId, distillGroupId);
+        if (dbCheck) {
+          this.recentlyExtractedGroupIds.add(distillGroupId);
+          return;
+        }
+        this.recentlyExtractedGroupIds.add(distillGroupId);
+      }
+
       await this.memoryManager.saveMemory({
         content: candidate.content,
         type: candidate.proposedType,
@@ -412,6 +429,30 @@ export class MemoryExtractor {
      } catch (error) {
        getLogger().error('Failed to save candidate', error instanceof Error ? error : undefined);
      }
+  }
+
+  /**
+   * DB fallback dedup check: has this distillGroupId already been extracted
+   * for this session? Uses dialect-aware JSON extraction so it works on
+   * both PG (metadata->>'distillGroupId') and SQLite (json_extract).
+   */
+  private async isGroupAlreadyExtracted(sessionId: string, groupId: string): Promise<boolean> {
+    try {
+      const dialect = this.database.dialect;
+      const jsonExtract = jsonExtractText(dialect, 'metadata', 'distillGroupId');
+      const pool = this.database.getPool();
+      const result = await pool.query(
+        `SELECT 1 FROM memories
+         WHERE session_id = $1
+           AND memory_type IN ('procedural', 'lesson')
+           AND ${jsonExtract} = $2
+         LIMIT 1`,
+        [sessionId, groupId],
+      );
+      return result.rows.length > 0;
+    } catch {
+      return false;
+    }
   }
 
   /**
