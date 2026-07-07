@@ -336,6 +336,33 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     );
   }
 
+  /**
+   * Update memory metadata (merge with existing)
+   */
+  async updateMemoryMetadata(id: number, patch: Record<string, unknown>): Promise<void> {
+    const pool = this.database.getPool();
+    const dialect = this.database.dialect;
+
+    const result = await pool.query(
+      dialect === 'sqlite'
+        ? `SELECT metadata FROM memories WHERE id = $1`
+        : `SELECT metadata FROM memories WHERE id = $1`,
+      [id],
+    );
+
+    if (!result.rows[0]) return;
+    const row = result.rows[0] as { metadata?: string | Record<string, unknown> | null };
+    const existing = typeof row.metadata === 'string'
+      ? JSON.parse(row.metadata || '{}')
+      : (row.metadata ?? {});
+    const merged = { ...existing, ...patch };
+
+    await pool.query(
+      `UPDATE memories SET metadata = $1 WHERE id = $2`,
+      [JSON.stringify(merged), id],
+    );
+  }
+
   async backfillMissingEmbeddings(
     options: BackfillEmbeddingsOptions,
   ): Promise<BackfillEmbeddingsResult> {

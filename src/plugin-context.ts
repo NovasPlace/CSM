@@ -83,6 +83,8 @@ export interface PluginContext {
   livingState: LivingStateRuntime;
   livingStateAdvisor: LivingStateAdvisor;
   decisionRegistry?: import('./decision-registry.js').DecisionRegistry;
+  knownDebtRegistry?: import('./known-debt-registry.js').KnownDebtRegistry;
+  lintDeltaTracker?: import('./lint-delta-tracker.js').LintDeltaTracker;
   fileContextPrimer?: import('./file-context-primer.js').FileContextPrimer;
   lifecycleOrchestrator?: import('./lifecycle-orchestrator.js').LifecycleOrchestrator;
   vcmManager: VcmManager;

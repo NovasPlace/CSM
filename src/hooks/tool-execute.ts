@@ -312,6 +312,24 @@ function recordExperiencePacket(
         .catch((_err: unknown) => { /* non-critical */ });
     }
   }
+
+  // --- lint output parsing ---
+  if (input.tool === 'bash' && ctx.lintDeltaTracker) {
+    const cmd = (input.args?.command as string) ?? '';
+    const outputStr = typeof output.output === 'string' ? output.output : '';
+    if (/lint|eslint/i.test(cmd)) {
+      const match = outputStr.match(/(\d+)\s+problems?\s*\((\d+)\s+errors?,\s*(\d+)\s+warnings?\)/i);
+      if (match) {
+        ctx.lintDeltaTracker.recordSnapshot({
+          errors: +match[2],
+          warnings: +match[3],
+          maxWarnings: 0,
+          changedFiles: [],
+          toolName: cmd.includes(':src') ? 'lint:src' : 'lint',
+        }).catch(() => { /* non-critical */ });
+      }
+    }
+  }
 }
 
 async function recordContinuitySignals(

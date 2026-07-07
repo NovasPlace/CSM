@@ -6,6 +6,8 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/lint-delta-tracker.ts` | LintSnapshot, LintDelta, LintDeltaTracker | src | Module |
+| `src/known-debt-registry.ts` | DebtScope, DebtStatus, RegisterDebtParams, DebtRecord, KnownDebtRegistry | src | Module |
 | `src/file-context-primer.ts` | FileContextBlock, FileContextPrimer | src | Module |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/lifecycle-orchestrator.ts` | LifecycleOrchestrator | src | Module |

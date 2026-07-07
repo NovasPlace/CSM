@@ -12,16 +12,18 @@
  */
 
 import type { DecisionRegistry } from './decision-registry.js';
+import type { KnownDebtRegistry } from './known-debt-registry.js';
 import type { MemoryManager } from './memory-manager.js';
 import type { MemoryListOptions } from './types.js';
 
-const MAX_CHARS = 500;
+const MAX_CHARS = 600;
 const DEDUP_WINDOW = 5;
 
 export interface FileContextBlock {
   filePath: string;
   decisions: Array<{ content: string; scope: string }>;
   lessons: Array<{ content: string }>;
+  debts: Array<{ description: string; lastSeen: string }>;
   formatted: string;
 }
 
@@ -32,6 +34,7 @@ export class FileContextPrimer {
   constructor(
     private decisions: DecisionRegistry,
     private memories: MemoryManager,
+    private debts?: KnownDebtRegistry,
   ) {}
 
   async buildBlock(
@@ -40,14 +43,15 @@ export class FileContextPrimer {
   ): Promise<FileContextBlock | null> {
     if (this.shouldSkip(filePath)) return null;
 
-    const [fileDecisions, fileLessons] = await Promise.all([
+    const [fileDecisions, fileLessons, fileDebts] = await Promise.all([
       this.fetchDecisions(filePath, projectId),
       this.fetchLessons(filePath),
+      this.fetchDebts(filePath, projectId),
     ]);
 
-    if (fileDecisions.length === 0 && fileLessons.length === 0) return null;
+    if (fileDecisions.length === 0 && fileLessons.length === 0 && fileDebts.length === 0) return null;
 
-    const formatted = this.format(filePath, fileDecisions, fileLessons);
+    const formatted = this.format(filePath, fileDecisions, fileLessons, fileDebts);
     this.lastInjectedFile = filePath;
     this.callsSinceLastInject = 0;
 
@@ -55,6 +59,7 @@ export class FileContextPrimer {
       filePath,
       decisions: fileDecisions,
       lessons: fileLessons,
+      debts: fileDebts,
       formatted,
     };
   }
@@ -102,10 +107,27 @@ export class FileContextPrimer {
     }
   }
 
+private async fetchDebts(
+    filePath: string,
+    projectId?: string,
+  ): Promise<Array<{ description: string; lastSeen: string }>> {
+    if (!this.debts) return [];
+    try {
+      const records = await this.debts.getOpenForFile(filePath, projectId);
+      return records.slice(0, 3).map(d => ({
+        description: d.description,
+        lastSeen: d.lastSeen,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
   private format(
     filePath: string,
     decisions: Array<{ content: string; scope: string }>,
     lessons: Array<{ content: string }>,
+    debts: Array<{ description: string; lastSeen: string }>,
   ): string {
     const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
     const lines: string[] = [`## Prior Context for ${fileName}`];
@@ -117,6 +139,10 @@ export class FileContextPrimer {
 
     for (const l of lessons.slice(0, 2)) {
       lines.push(`- ${this.truncate(l.content, 120)} [lesson]`);
+    }
+
+    for (const db of debts.slice(0, 2)) {
+      lines.push(`- ${this.truncate(db.description, 120)} [debt, last seen ${db.lastSeen.slice(0, 10)}]`);
     }
 
     const result = lines.join('\n');

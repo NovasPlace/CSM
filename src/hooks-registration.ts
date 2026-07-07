@@ -18,6 +18,8 @@ import { LoopDetector } from './loop-detector.js';
 import { LoopSignalDetector } from './loop-signal-detector.js';
 import { LifecycleOrchestrator } from './lifecycle-orchestrator.js';
 import { DecisionRegistry } from './decision-registry.js';
+import { KnownDebtRegistry } from './known-debt-registry.js';
+import { LintDeltaTracker } from './lint-delta-tracker.js';
 import { FileContextPrimer } from './file-context-primer.js';
 import { ContextPressure } from './context-pressure.js';
 import { ToolCallDistiller } from './tool-distiller.js';
@@ -176,7 +178,11 @@ export async function registerHooks(
 
   const decisionRegistry = new DecisionRegistry(memoryManager);
   pluginCtx.decisionRegistry = decisionRegistry;
-  const fileContextPrimer = new FileContextPrimer(decisionRegistry, memoryManager);
+  const knownDebtRegistry = new KnownDebtRegistry(memoryManager);
+  pluginCtx.knownDebtRegistry = knownDebtRegistry;
+  const lintDeltaTracker = new LintDeltaTracker(memoryManager);
+  pluginCtx.lintDeltaTracker = lintDeltaTracker;
+  const fileContextPrimer = new FileContextPrimer(decisionRegistry, memoryManager, knownDebtRegistry);
   pluginCtx.fileContextPrimer = fileContextPrimer;
 
   const lifecycleOrchestrator = new LifecycleOrchestrator(pluginCtx);
