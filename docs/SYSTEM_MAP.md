@@ -6,6 +6,7 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/lifecycle-orchestrator.ts` | LifecycleOrchestrator | src | Module |
 | `test/work-journal-inject.test.ts` | none | test | Test suite |
 | `test/value-source-guard.test.ts` | none | test | Test suite |
 | `test/tui-adapter.test.ts` | none | test | Test suite |

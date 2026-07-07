@@ -319,6 +319,48 @@ export class BeliefKnowledgeConsolidator {
     }
   }
 
+  async migrateStalePreferenceEntries(): Promise<number> {
+    try {
+      const result = await this.pool.query(
+        `SELECT id, belief_kind, subject, claim, evidence_refs
+         FROM belief_knowledge_store
+         WHERE belief_kind = 'preference'
+           AND claim = 'succeeds reliably'
+           AND status != 'stale'`,
+      );
+      const entries = result.rows as BeliefRow[];
+      if (entries.length === 0) return 0;
+
+      const now = nowFn(this.dialect);
+      let migrated = 0;
+
+      for (const row of entries) {
+        const refs = parseEvidenceRefs(this.dialect, row.evidence_refs);
+        refs.push({
+          packetId: 0,
+          entryType: 'taxonomy_migration',
+          outcome: 'mixed',
+          timestamp: new Date().toISOString(),
+        });
+
+        await this.pool.query(
+          `UPDATE belief_knowledge_store
+           SET status = 'stale',
+               evidence_refs = $1,
+               updated_at = ${now}
+           WHERE id = $2`,
+          [JSON.stringify(refs), row.id],
+        );
+        migrated++;
+      }
+
+      getLogger().info(`Phase E migration: ${migrated} stale preference entries archived (audit note attached)`);
+      return migrated;
+    } catch {
+      return 0;
+    }
+  }
+
   private async loadExistingBeliefs(): Promise<BeliefEntry[]> {
     try {
       const result = await this.pool.query(

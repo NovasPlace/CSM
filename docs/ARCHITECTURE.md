@@ -4,8 +4,8 @@
 
 ## System Shape
 - Project root: `C:\Users\Donovan\Desktop\cross-session-memory`
-- Code files indexed: 3122
-- Dependency edges indexed: 7075
+- Code files indexed: 3123
+- Dependency edges indexed: 7079
 - README owns onboarding and setup.
 - ARCHITECTURE owns module flow and impact mapping.
 
@@ -33,7 +33,7 @@
 | `opencode/packages/core/src/plugin/internal.ts` | Module | opencode/packages/core/src/plugin/internal.ts, opencode/packages/core/src/agent.ts, opencode/packages/core/src/catalog.ts, opencode/packages/core/src/command.ts | opencode/packages/core/src/config/plugin/agent.ts, opencode/packages/core/src/config/plugin/command.ts, opencode/packages/core/src/config/plugin/external.ts, opencode/packages/core/src/config/plugin/provider.ts | High blast radius (45) |
 | `opencode/packages/core/src/schema.ts` | Schema | none | opencode/packages/core/src/config/agent.ts, opencode/packages/core/src/config/attachments.ts, opencode/packages/core/src/config/compaction.ts, opencode/packages/core/src/config/mcp.ts | High blast radius (45) |
 | `opencode/packages/core/src/database/migration.ts` | Module | opencode/packages/core/src/database/migration.ts, opencode/packages/core/src/database/migration.ts | opencode/packages/core/src/database/database.ts, opencode/packages/core/src/database/migration/20260127222353_familiar_lady_ursula.ts, opencode/packages/core/src/database/migration/20260211171708_add_project_commands.ts, opencode/packages/core/src/database/migration/20260213144116_wakeful_the_professor.ts | High blast radius (42) |
-| `src/logger.ts` | Module | src/plugin-context.ts | src/agent-work-journal.ts, src/belief-knowledge-schema.ts, src/belief-knowledge-store.ts, src/belief-promotion-scanner.ts | High blast radius (39) |
+| `src/logger.ts` | Module | src/plugin-context.ts | src/agent-work-journal.ts, src/belief-knowledge-schema.ts, src/belief-knowledge-store.ts, src/belief-promotion-scanner.ts | High blast radius (40) |
 
 ## Dependency Map
 | File | Role | Upstream | Downstream | Impact |
@@ -47,7 +47,7 @@
 | `opencode/packages/core/src/plugin/internal.ts` | Module | opencode/packages/core/src/plugin/internal.ts, opencode/packages/core/src/agent.ts, opencode/packages/core/src/catalog.ts, opencode/packages/core/src/command.ts | opencode/packages/core/src/config/plugin/agent.ts, opencode/packages/core/src/config/plugin/command.ts, opencode/packages/core/src/config/plugin/external.ts, opencode/packages/core/src/config/plugin/provider.ts | High blast radius (45) |
 | `opencode/packages/core/src/schema.ts` | Schema | none | opencode/packages/core/src/config/agent.ts, opencode/packages/core/src/config/attachments.ts, opencode/packages/core/src/config/compaction.ts, opencode/packages/core/src/config/mcp.ts | High blast radius (45) |
 | `opencode/packages/core/src/database/migration.ts` | Module | opencode/packages/core/src/database/migration.ts, opencode/packages/core/src/database/migration.ts | opencode/packages/core/src/database/database.ts, opencode/packages/core/src/database/migration/20260127222353_familiar_lady_ursula.ts, opencode/packages/core/src/database/migration/20260211171708_add_project_commands.ts, opencode/packages/core/src/database/migration/20260213144116_wakeful_the_professor.ts | High blast radius (42) |
-| `src/logger.ts` | Module | src/plugin-context.ts | src/agent-work-journal.ts, src/belief-knowledge-schema.ts, src/belief-knowledge-store.ts, src/belief-promotion-scanner.ts | High blast radius (39) |
+| `src/logger.ts` | Module | src/plugin-context.ts | src/agent-work-journal.ts, src/belief-knowledge-schema.ts, src/belief-knowledge-store.ts, src/belief-promotion-scanner.ts | High blast radius (40) |
 | `opencode/packages/core/test/plugin/fixture.ts` | Test | opencode/packages/core/test/fixture/location.ts | opencode/packages/core/test/config/plugin.test.ts, opencode/packages/core/test/config/provider.test.ts, opencode/packages/core/test/plugin/promise.test.ts, opencode/packages/core/test/plugin/provider-alibaba.test.ts | High blast radius (38) |
 | `opencode/packages/opencode/src/session/message-v2.ts` | Module | opencode/packages/opencode/src/session/schema.ts, opencode/packages/opencode/src/session/message-v2.ts | opencode/packages/opencode/src/cli/cmd/debug/agent.handler.ts, opencode/packages/opencode/src/cli/cmd/export.ts, opencode/packages/opencode/src/cli/cmd/github.handler.ts, opencode/packages/opencode/src/cli/cmd/import.ts | High blast radius (38) |
 | `opencode/packages/schema/src/schema.ts` | Schema | none | opencode/packages/schema/src/agent.ts, opencode/packages/schema/src/command.ts, opencode/packages/schema/src/credential.ts, opencode/packages/schema/src/event.ts | High blast radius (38) |
@@ -67,7 +67,7 @@
 - Removing `opencode/packages/core/src/plugin/internal.ts` breaks 45 dependents: opencode/packages/core/src/config/plugin/agent.ts, opencode/packages/core/src/config/plugin/command.ts, opencode/packages/core/src/config/plugin/external.ts, ....
 - Removing `opencode/packages/core/src/schema.ts` breaks 45 dependents: opencode/packages/core/src/config/agent.ts, opencode/packages/core/src/config/attachments.ts, opencode/packages/core/src/config/compaction.ts, ....
 - Removing `opencode/packages/core/src/database/migration.ts` breaks 42 dependents: opencode/packages/core/src/database/database.ts, opencode/packages/core/src/database/migration/20260127222353_familiar_lady_ursula.ts, opencode/packages/core/src/database/migration/20260211171708_add_project_commands.ts, ....
-- Removing `src/logger.ts` breaks 39 dependents: src/agent-work-journal.ts, src/belief-knowledge-schema.ts, src/belief-knowledge-store.ts, ....
+- Removing `src/logger.ts` breaks 40 dependents: src/agent-work-journal.ts, src/belief-knowledge-schema.ts, src/belief-knowledge-store.ts, ....
 - Removing `opencode/packages/core/test/plugin/fixture.ts` breaks 38 dependents: opencode/packages/core/test/config/plugin.test.ts, opencode/packages/core/test/config/provider.test.ts, opencode/packages/core/test/plugin/promise.test.ts, ....
 - Removing `opencode/packages/opencode/src/session/message-v2.ts` breaks 38 dependents: opencode/packages/opencode/src/cli/cmd/debug/agent.handler.ts, opencode/packages/opencode/src/cli/cmd/export.ts, opencode/packages/opencode/src/cli/cmd/github.handler.ts, ....
 

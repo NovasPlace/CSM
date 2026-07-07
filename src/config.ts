@@ -247,7 +247,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
   livingState: {
     enabled: getEnvBoolean('CSM_LIVING_STATE_ENABLED', true),
     previewOnly: getEnvBoolean('CSM_LIVING_STATE_PREVIEW_ONLY', true),
-    injectAdvisoryBlock: getEnvBoolean('CSM_LIVING_STATE_INJECT_ADVISORY', false),
+    injectAdvisoryBlock: getEnvBoolean('CSM_LIVING_STATE_INJECT_ADVISORY', true),
     maxAdvisoryBlockChars: getEnvNumber('CSM_LIVING_STATE_MAX_ADVISORY_CHARS', 600),
     scanLookbackMinutes: getEnvNumber('CSM_LIVING_STATE_LOOKBACK_MINUTES', 10),
     maxScanPerType: getEnvNumber('CSM_LIVING_STATE_MAX_PER_TYPE', 10),

@@ -35,6 +35,17 @@ export async function autoDistill(ctx: PluginContext, sid: string): Promise<void
   if (ctx.config.distiller.autoSaveAsMemory) {
     await ctx.memoryExtractor.extractFromDistilledSummaries(sid, sid, summary);
   }
+
+  ctx.experiencePackets.recordDistillGroupPacket({
+    sessionId: sid,
+    projectId: ctx.directory,
+    groupCount: summary.groups.length,
+    totalCallsSummarized: summary.totalCallsSummarized,
+    compressedPreview: summary.compressed,
+  }).catch((_err: unknown) => {
+    /* non-critical */
+  });
+
   await ctx.refreshActiveContext(sid);
 }
 

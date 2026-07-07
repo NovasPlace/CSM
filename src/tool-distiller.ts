@@ -12,6 +12,8 @@ const FILE_OP_TOOLS = new Set(['read', 'write', 'edit', 'glob', 'grep']);
 const BUILD_TOOLS = new Set(['bash']);
 const SEARCH_TOOLS = new Set(['glob', 'grep']);
 const DELEGATE_TOOLS = new Set(['task']);
+const RESEARCH_TOOLS = new Set(['read', 'glob', 'grep', 'webfetch', 'websearch']);
+const IMPLEMENT_TOOLS = new Set(['edit', 'write', 'multiedit']);
 
 export class ToolCallDistiller {
   private buffer: ToolCallRecord[] = [];
@@ -104,6 +106,11 @@ export class ToolCallDistiller {
     if (prevTool === next.tool) return true;
     if (BUILD_TOOLS.has(prevTool) && BUILD_TOOLS.has(next.tool)) return true;
     if (SEARCH_TOOLS.has(prevTool) && SEARCH_TOOLS.has(next.tool)) return true;
+
+    const allTools = new Set([...calls.map(c => c.tool), next.tool]);
+    const allResearchOrImpl = [...allTools].every(t => RESEARCH_TOOLS.has(t) || IMPLEMENT_TOOLS.has(t));
+    if (allResearchOrImpl && allTools.size <= 3) return true;
+
     return false;
   }
   private enrichGroup(group: ToolCallGroup): void {
@@ -130,8 +137,13 @@ export class ToolCallDistiller {
     }
     if ([...tools].every((t) => SEARCH_TOOLS.has(t))) return 'Search codebase';
     if (DELEGATE_TOOLS.has(firstTool)) return 'Delegate sub-task';
+
+    const toolList = [...tools].sort().join('+');
+    if ([...tools].every(t => RESEARCH_TOOLS.has(t))) return `Research (${toolList})`;
+    if ([...tools].every(t => RESEARCH_TOOLS.has(t) || IMPLEMENT_TOOLS.has(t))) return `Research+Implement (${toolList})`;
+
     if (group.toolCalls.length === 1) return `Call ${firstTool}`;
-    return 'Mixed tool sequence';
+    return `Multi-tool (${toolList})`;
   }
   private extractArtifacts(group: ToolCallGroup): { files: string[]; commands: string[] } {
     const files: string[] = [];

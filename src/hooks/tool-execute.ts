@@ -234,7 +234,7 @@ function recordExperiencePacket(
     /* non-critical */
   }
 
-  // --- emit the packet ---
+  // --- emit the tool_execution packet (always) ---
   const signals: Record<string, unknown> = {
     _schemaVersion: 2,
     _sourceHook: 'tool-execute',
@@ -262,6 +262,41 @@ function recordExperiencePacket(
   }).catch((_err: unknown) => {
     /* experience packet recording non-critical */
   });
+
+  // --- fire dedicated milestone packet ---
+  if (isMilestone) {
+    const intent = `file modified: ${filePath}`;
+    ctx.experiencePackets.recordMilestonePacket({
+      sessionId: sid,
+      projectId: ctx.directory,
+      intent,
+      signalsMetadata: { toolName: input.tool, filePath },
+    }).catch((_err: unknown) => {
+      /* non-critical */
+    });
+  }
+
+  // --- fire dedicated loop_signal packet ---
+  if (loopSignal) {
+    ctx.experiencePackets.recordLoopSignalPacket({
+      sessionId: sid,
+      projectId: ctx.directory,
+      toolName: loopSignal.toolName,
+      callCount: loopSignal.callCount,
+      evidence: {
+        gateD1: loopSignal.gateD1,
+        gateD2: loopSignal.gateD2,
+        gateD2Reason: loopSignal.gateD2Reason,
+        evidenceRefs: loopSignal.evidenceRefs,
+      },
+    }).catch((_err: unknown) => {
+      /* non-critical */
+    });
+  }
+
+  // --- debounce-trigger maintenance pipeline ---
+  ctx.lifecycleOrchestrator?.triggerDebounced('self-model', 5000);
+  ctx.lifecycleOrchestrator?.triggerDebounced('belief-consolidation', 8000);
 }
 
 async function recordContinuitySignals(

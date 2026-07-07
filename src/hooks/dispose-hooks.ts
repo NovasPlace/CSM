@@ -54,6 +54,8 @@ export async function disposeAll(
     workJournal.recordSessionEnd(state.currentSessionId, ctx.directory, state.messageCount);
   }
 
+  pluginCtx.lifecycleOrchestrator?.stop();
+
   if (state.currentSessionId) {
     try {
       await pluginCtx.experiencePackets.recordToolPacket({

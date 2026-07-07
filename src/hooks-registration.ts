@@ -16,6 +16,7 @@ import { SubconsciousWatcher } from './subconscious.js';
 import { GitWatcher } from './git-watcher.js';
 import { LoopDetector } from './loop-detector.js';
 import { LoopSignalDetector } from './loop-signal-detector.js';
+import { LifecycleOrchestrator } from './lifecycle-orchestrator.js';
 import { ContextPressure } from './context-pressure.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
@@ -170,6 +171,10 @@ export async function registerHooks(
     contextCapSensor,
     state: sessionState,
   };
+
+  const lifecycleOrchestrator = new LifecycleOrchestrator(pluginCtx);
+  pluginCtx.lifecycleOrchestrator = lifecycleOrchestrator;
+  lifecycleOrchestrator.start();
 
   return {
     event: createEventHook(ctx, pluginCtx),

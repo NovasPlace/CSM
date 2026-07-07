@@ -81,6 +81,7 @@ export interface PluginContext {
   beliefKnowledge: BeliefKnowledgeConsolidator;
   livingState: LivingStateRuntime;
   livingStateAdvisor: LivingStateAdvisor;
+  lifecycleOrchestrator?: import('./lifecycle-orchestrator.js').LifecycleOrchestrator;
   vcmManager: VcmManager;
   contextCapSensor: ContextCapSensor;
   redactor: Redactor;

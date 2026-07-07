@@ -230,6 +230,30 @@ export class ExperiencePacketCreator {
     });
   }
 
+  async recordDistillGroupPacket(params: {
+    sessionId: string;
+    projectId?: string;
+    groupCount: number;
+    totalCallsSummarized: number;
+    compressedPreview: string;
+    previous?: InternalState;
+  }): Promise<ExperiencePacket> {
+    const state = params.previous ?? deriveNeutralState();
+
+    return this.insert({
+      sessionId: params.sessionId,
+      projectId: params.projectId,
+      entryType: 'distill_group',
+      internalState: state,
+      signals: {
+        groupCount: params.groupCount,
+        totalCallsSummarized: params.totalCallsSummarized,
+        compressedPreview: params.compressedPreview.slice(0, 200),
+      },
+      confidence: 0.6,
+    });
+  }
+
   async getRecentPackets(limit: number): Promise<ExperiencePacket[]> {
     try {
       const result = await this.pool.query(
