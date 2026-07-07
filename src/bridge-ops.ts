@@ -188,6 +188,24 @@ function uniqueMemories(memories: Memory[]): Memory[] {
   });
 }
 
+export async function getRelatedMemoriesOp(
+  deps: BridgeDeps,
+  memoryId: number,
+  limit: number = 10,
+  context: BridgeContext = {},
+): Promise<Memory[]> {
+  const { getRelatedMemories } = await import('./memory-graph.js');
+  const db = deps.database;
+  if (!db) return [];
+  const related = await getRelatedMemories(
+    db,
+    memoryId,
+    limit,
+    context.sessionId ? { sessionId: context.sessionId, projectId: context.projectId } : { projectId: context.projectId },
+  );
+  return related.map((r) => r.memory);
+}
+
 function isRiskMemory(memory: Memory): boolean {
   const text = `${memory.content} ${(memory.tags ?? []).join(' ')}`.toLowerCase();
   return /risk|error|warning|fail|rollback|security/.test(text);

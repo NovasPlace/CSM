@@ -425,7 +425,9 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     // SQLite: skip vector search entirely, go to text fallback
     if (this.database.dialect === 'sqlite') {
       getLogger().debug('SQLite: skipping vector search, using text fallback');
-      return this.textSearchFallback(options);
+      const memories = await this.textSearchFallback(options);
+      await this.recordRecalls(memories, options.query, options.projectId, telemetry, 'text_only');
+      return memories;
     }
 
     const queryEmbedding = await this.embeddings.generate(options.query);
@@ -507,12 +509,12 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         await this.touchMemory(memory.id);
         memories.push({ memory, score });
       }
-      await this.recordRecalls(memories, options.query, options.projectId, telemetry);
+      await this.recordRecalls(memories, options.query, options.projectId, telemetry, 'vector_only');
       return memories;
     } catch (_err) {
       getLogger().warn('Vector search failed, falling back to text search');
       const memories = await this.textSearchFallback(options);
-      await this.recordRecalls(memories, options.query, options.projectId, telemetry);
+      await this.recordRecalls(memories, options.query, options.projectId, telemetry, 'text_fallback');
       return memories;
     }
   }
@@ -942,11 +944,28 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     query: string,
     projectId?: string,
     telemetry?: { sessionId?: string; source?: RecallTelemetrySource },
+    sourceOverride?: RecallTelemetrySource,
   ): Promise<void> {
-    if (entries.length === 0) return;
-
     const pool = this.database.getPool();
+    const source = sourceOverride ?? telemetry?.source ?? 'search';
+
     try {
+      if (entries.length === 0) {
+        // Record empty-result recall event (memory_id is NULL) for telemetry coverage
+        await recordRecallBatch(pool, [
+          {
+            memoryId: null,
+            sessionId: telemetry?.sessionId,
+            projectId: projectId ?? null,
+            query,
+            source: 'empty_result',
+            rank: 0,
+            score: null,
+          },
+        ]);
+        return;
+      }
+
       await recordRecallBatch(
         pool,
         entries.map((entry, index) => ({
@@ -954,7 +973,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
           sessionId: telemetry?.sessionId,
           projectId: entry.memory.projectId ?? projectId ?? null,
           query,
-          source: telemetry?.source ?? 'search',
+          source,
           rank: index + 1,
           score: entry.score,
         })),

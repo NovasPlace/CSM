@@ -12,6 +12,7 @@ import { ContextCompactor } from './context-compactor.js';
 import { Database } from './database.js';
 import type { Redactor } from './redactor.js';
 import { listMemoriesOp, saveMemoryOp, searchMemoriesOp } from './bridge-ops.js';
+import { RecallQualityAuditReportBuilder, validateRecallQualityAuditParams } from './recall-quality-tool.js';
 
 const CSM_TOOL_NAMES = [
   'csm_memory_save',
@@ -37,6 +38,8 @@ const CSM_TOOL_NAMES = [
   'csm_belief_knowledge',
   'csm_living_state_preview',
   'csm_living_state_debug',
+  'csm_recall_quality_report',
+  'csm_memory_related',
 ] as const;
 
 /**
@@ -853,6 +856,103 @@ export function compactionAuditTool(database: Database) {
         title: result.passed ? 'Compaction Audit PASSED' : 'Compaction Audit ISSUES FOUND',
         output: formatAuditReport(result),
         metadata: result,
+      };
+    },
+  });
+}
+
+/**
+ * csm_recall_quality_report - Read-only audit of recall quality
+ * Phase 6B: Report-only, no scoring. PG-specific (SQLite degrades to N/A).
+ */
+export function recallQualityReportTool(database: Database) {
+  return tool({
+    description:
+      'Produce a read-only audit of recall quality metrics over a time window. Report-only (Phase 6B). PG-specific SQL (SQLite degrades to N/A).',
+    args: {
+      scope: tool.schema.enum(['project', 'session', 'file']).optional().describe(
+        'Filter scope: project (default), session, or file',
+      ),
+      projectId: tool.schema.string().optional().describe(
+        'Project ID to filter (required when scope=project and you want a specific project)',
+      ),
+      sessionId: tool.schema.string().optional().describe(
+        'Session ID to filter (required when scope=session)',
+      ),
+      filePath: tool.schema.string().optional().describe(
+        'File path to filter (required when scope=file)',
+      ),
+      since: tool.schema.string().optional().describe(
+        'ISO date string for window start (default: 24h ago)',
+      ),
+      limit: tool.schema.number().optional().describe(
+        'Max recall events to scan per metric (default 1000, max 10000)',
+      ),
+    },
+    async execute(args) {
+      const params = {
+        scope: args.scope,
+        projectId: args.projectId,
+        sessionId: args.sessionId,
+        filePath: args.filePath,
+        since: args.since,
+        limit: args.limit,
+      };
+
+      try {
+        validateRecallQualityAuditParams(params);
+      } catch (e) {
+        return {
+          title: 'Invalid Parameters',
+          output: `Parameter validation failed: ${(e as Error).message}`,
+          metadata: { error: 'invalid_params', message: (e as Error).message },
+        };
+      }
+
+      const builder = new RecallQualityAuditReportBuilder(database.getPool());
+      const report = await builder.generateReport(params);
+
+      return {
+        title: 'Recall Quality Report',
+        output: report,
+        metadata: {
+          scope: params.scope || 'project',
+          since: params.since || '24h',
+          limit: params.limit || 1000,
+        },
+      };
+    },
+  });
+}
+
+/**
+ * csm_memory_related - Surface memories linked to a given memory via the graph.
+ * Records graph-source recall telemetry (Phase 6C Hook 4).
+ */
+export function memoryRelatedTool(database: Database) {
+  return tool({
+    description: 'List memories linked to a given memory ID via the memory graph (memory_links). Read-only; records graph recall telemetry.',
+    args: {
+      memoryId: tool.schema.number().describe('Memory ID to find related memories for'),
+      limit: tool.schema.number().optional().describe('Max related memories to return (default 10)'),
+    },
+    async execute(args, context) {
+      const { getRelatedMemories } = await import('./memory-graph.js');
+      const related = await getRelatedMemories(
+        database,
+        args.memoryId,
+        args.limit ?? 10,
+        { sessionId: context.sessionID, projectId: (context as { projectId?: string })?.projectId },
+      );
+      const memories = related.map((r) => r.memory);
+
+      const lines = memories.map((m, i) =>
+        `${i + 1}. [${m.id}] ${m.memoryType} (imp ${m.importance?.toFixed?.(2) ?? '?'}) ${m.content.slice(0, 120)}`,
+      );
+      return {
+        title: `Related to memory ${args.memoryId}`,
+        output: memories.length > 0 ? lines.join('\n') : 'No linked memories found.',
+        metadata: { memoryId: args.memoryId, count: memories.length },
       };
     },
   });

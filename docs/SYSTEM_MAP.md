@@ -6,6 +6,7 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/recall-quality-tool.ts` | RecallQualityAuditParams, IRecallQualityTool, validateRecallQualityAuditParams, RecallQualityAuditReportBuilder, mockRecallQualityAuditReport | src | Tool registration |
 | `src/milestone-tracker.ts` | MilestoneScope, MilestoneEvidence, MilestonePromptBlock, SaveMilestoneParams, SavedMilestone, MilestoneTracker | src | Module |
 | `src/lint-delta-tracker.ts` | LintSnapshot, LintDelta, LintDeltaTracker | src | Module |
 | `src/known-debt-registry.ts` | DebtScope, DebtStatus, RegisterDebtParams, DebtRecord, KnownDebtRegistry | src | Module |
@@ -116,7 +117,7 @@
 | `src/trace-vault-store.ts` | initializeTraceVaultSchema, captureTraceVault, loadTraceVaultEntries, seedTeacherTracesFromVault, formatTraceVaultForInjection | src | Module |
 | `src/trace-vault-ops.ts` | captureTraceVaultOp, previewTraceVaultOp, seedTeacherTracesFromVaultOp | src | Module |
 | `src/trace-vault-core.ts` | buildTraceVaultCapture, formatTraceVaultCapture | src | Module |
-| `src/tools.ts` | memorySaveTool, memorySearchTool, memoryDeleteTool, memoryContextTool, memoryLessonTool, memoryListTool, memoryTranscriptTool, memoryCandidateListTool, memoryCandidateApproveTool, memoryCandidateRejectTool, memoryProjectListTool, memoryCleanupTool, memoryDistillTool, memoryDistilledViewTool, memoryCompactTool, runtimeStatusTool, compactionAuditTool | src | Tool registration |
+| `src/tools.ts` | memorySaveTool, memorySearchTool, memoryDeleteTool, memoryContextTool, memoryLessonTool, memoryListTool, memoryTranscriptTool, memoryCandidateListTool, memoryCandidateApproveTool, memoryCandidateRejectTool, memoryProjectListTool, memoryCleanupTool, memoryDistillTool, memoryDistilledViewTool, memoryCompactTool, runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool | src | Tool registration |
 | `src/tool-output-distiller.ts` | ShellOutputInput, DistilledShellOutput, ToolOutputDistiller | src | Tool registration |
 | `src/tool-execute-runtime-dedup.ts` | ToolExecuteRuntimeDedup | src | Tool registration |
 | `src/tool-distiller.ts` | ToolCallDistiller | src | Tool registration |
@@ -289,7 +290,7 @@
 | `src/bridge-session-state.ts` | BridgeGoalSummary, BridgeFailureSummary, BridgeSessionStateSummary, loadBridgeSessionState | src | Module |
 | `src/bridge-recovery-state.ts` | BridgeRecoveryAction, BridgeCheckpointRefSummary, BridgeRecoveryItemSummary, BridgeCheckpointSummary, BridgeRecoveryStateSummary, loadBridgeRecoveryState | src | Module |
 | `src/bridge-provenance.ts` | BridgeProvenanceSummary, rankMemoriesByProvenance, summarizeMemoryProvenance, withBridgeProvenance, buildBridgeProvenanceMetadata | src | Memory & recall subsystem |
-| `src/bridge-ops.ts` | BridgeDeps, BridgeContext, ContextBriefPayload, CompactionReportPayload, saveMemoryOp, searchMemoriesOp, listMemoriesOp, recallLessonsOp, getContextBriefOp, pruneMemoriesDryRunOp, backfillMissingEmbeddingsOp, getCompactionReportOp | src | Context compaction engine |
+| `src/bridge-ops.ts` | BridgeDeps, BridgeContext, ContextBriefPayload, CompactionReportPayload, saveMemoryOp, searchMemoriesOp, listMemoriesOp, recallLessonsOp, getContextBriefOp, pruneMemoriesDryRunOp, backfillMissingEmbeddingsOp, getCompactionReportOp, getRelatedMemoriesOp | src | Context compaction engine |
 | `src/bridge-action-plan.ts` | BridgeActionPlanItem, buildBridgeActionPlan | src | Module |
 | `src/benchmark.ts` | authenticate, runBenchmarkSuite | src | Module |
 | `src/belief-scan-tool.ts` | beliefScanTool, beliefScanReportTool | src | Tool registration |

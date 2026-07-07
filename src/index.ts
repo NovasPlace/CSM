@@ -5,11 +5,11 @@
 // Import and re-export from module exports
 import { registerHooks } from './hooks-registration.js';
 
-// Default export
-export default registerHooks;
-
-// Re-export tool names
-export { CSM_TOOL_NAMES } from './tools.js';
+// v1 plugin format: default export object with server() and id
+export default {
+  id: 'cross-session-memory',
+  server: registerHooks,
+};
 
 // Re-export types
 export type { PluginInput, PluginOptions, Hooks } from '@opencode-ai/plugin';

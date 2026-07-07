@@ -2,7 +2,7 @@ import {
   memorySaveTool, memorySearchTool, memoryListTool, memoryDeleteTool,
   memoryContextTool, memoryLessonTool, memoryTranscriptTool,
   memoryDistillTool, memoryDistilledViewTool, memoryCompactTool,
-  runtimeStatusTool, compactionAuditTool,
+  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool,
 } from '../tools.js';
 import { memoryBackfillEmbeddingsTool, memoryDedupDetectTool, memoryMergeDuplicatesTool, memoryCandidateGenerateTool, memoryCandidateReportTool } from '../maintenance-tools.js';
 import { archiveCandidateReportTool } from '../archive-candidate-report-tool.js';
@@ -76,6 +76,8 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     csm_living_state_debug: livingStateDebugTool(pluginCtx.livingStateAdvisor),
     csm_runtime_status: runtimeStatusTool(database, memoryManager, config, pluginCtx.state.currentSessionId),
     csm_compaction_audit: compactionAuditTool(database),
+    csm_recall_quality_report: recallQualityReportTool(database),
+    csm_memory_related: memoryRelatedTool(database),
     create_checkpoint: createCheckpointTool(checkpointToolDeps),
     expand_checkpoint_ref: expandCheckpointRefTool(checkpointToolDeps),
     list_checkpoints: listCheckpointsTool(checkpointToolDeps),

@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import type { BeliefPromotionConfig, MemorySaveOptions, Memory } from '../src/types.js';
@@ -108,10 +108,38 @@ async function cleanup(pool: pg.Pool, packetIds: number[], candidateIds: number[
   await pool.query("DELETE FROM memories WHERE metadata->>'promotion_source' = 'belief_promotion_engine' AND content LIKE '[Promoted from candidate%'").catch(() => {});
 }
 
+/**
+ * Purge all test-pattern candidates and their packets before each test.
+ *
+ * Without this, failed test runs leave pending candidates in the DB (cleanup
+ * at the end of each it() never runs when an assertion throws). The engine
+ * loads ALL pending candidates ordered by confidence/reinforcement DESC, and
+ * maxPromotePerRun=10 breaks the loop early — so a leftover 0.9/5 candidate
+ * shadows the test's 0.3/2 candidate, causing "decision should exist" to fail.
+ */
+async function cleanupTestArtifacts(pool: pg.Pool) {
+  await pool.query(
+    `DELETE FROM memory_candidate_queue
+     WHERE dedup_key LIKE 'relaxed-test-%'
+        OR dedup_key LIKE 'low-conf-default-%'
+        OR dedup_key LIKE 'low-conf-test-%'
+        OR dedup_key LIKE 'test-dedup-%'
+        OR dedup_key LIKE 'checks-test-%'
+        OR dedup_key LIKE 'live-test-%'`,
+  ).catch(() => {});
+  await pool.query(
+    "DELETE FROM experience_packets WHERE session_id IN ('test-promotion-session', 'relaxed-sess-1', 'relaxed-sess-2', 'live-promote-sess')",
+  ).catch(() => {});
+  await pool.query(
+    "DELETE FROM memories WHERE metadata->>'promotion_source' = 'belief_promotion_engine' AND content LIKE '[Promoted from candidate%'",
+  ).catch(() => {});
+}
+
 describe('BeliefPromotionEngine', () => {
   let pool: pg.Pool;
 
   before(() => { pool = makePool(); });
+  beforeEach(async () => { await cleanupTestArtifacts(pool); });
   after(async () => { await pool.end(); });
 
   it('skips candidates below minConfidence', async () => {
