@@ -330,6 +330,21 @@ function recordExperiencePacket(
       }
     }
   }
+
+  // --- milestone detection ---
+  if (ctx.milestoneTracker) {
+    if (input.tool === 'bash') {
+      const cmd = (input.args?.command as string) ?? '';
+      const outputStr = typeof output.output === 'string' ? output.output : '';
+      const block = ctx.milestoneTracker.detectFromBashOutput(cmd, outputStr);
+      if (block) ctx.state.pendingMilestonePrompt = block;
+    }
+    if (input.tool === 'todowrite') {
+      const lastUserText = [...ctx.state.recentUserMessages.values()].pop() ?? '';
+      const block = ctx.milestoneTracker.detectFromTodoUpdate(input.args, lastUserText);
+      if (block) ctx.state.pendingMilestonePrompt = block;
+    }
+  }
 }
 
 async function recordContinuitySignals(

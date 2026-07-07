@@ -6,6 +6,7 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/milestone-tracker.ts` | MilestoneScope, MilestoneEvidence, MilestonePromptBlock, SaveMilestoneParams, SavedMilestone, MilestoneTracker | src | Module |
 | `src/lint-delta-tracker.ts` | LintSnapshot, LintDelta, LintDeltaTracker | src | Module |
 | `src/known-debt-registry.ts` | DebtScope, DebtStatus, RegisterDebtParams, DebtRecord, KnownDebtRegistry | src | Module |
 | `src/file-context-primer.ts` | FileContextBlock, FileContextPrimer | src | Module |

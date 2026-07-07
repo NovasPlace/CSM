@@ -20,6 +20,7 @@ import { LifecycleOrchestrator } from './lifecycle-orchestrator.js';
 import { DecisionRegistry } from './decision-registry.js';
 import { KnownDebtRegistry } from './known-debt-registry.js';
 import { LintDeltaTracker } from './lint-delta-tracker.js';
+import { MilestoneTracker } from './milestone-tracker.js';
 import { FileContextPrimer } from './file-context-primer.js';
 import { ContextPressure } from './context-pressure.js';
 import { ToolCallDistiller } from './tool-distiller.js';
@@ -182,6 +183,8 @@ export async function registerHooks(
   pluginCtx.knownDebtRegistry = knownDebtRegistry;
   const lintDeltaTracker = new LintDeltaTracker(memoryManager);
   pluginCtx.lintDeltaTracker = lintDeltaTracker;
+  const milestoneTracker = new MilestoneTracker(memoryManager);
+  pluginCtx.milestoneTracker = milestoneTracker;
   const fileContextPrimer = new FileContextPrimer(decisionRegistry, memoryManager, knownDebtRegistry);
   pluginCtx.fileContextPrimer = fileContextPrimer;
 

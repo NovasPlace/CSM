@@ -241,6 +241,13 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         ctx.state.pendingFileContext = null;
       }
 
+      // --- Milestone save prompt (one-shot) ---
+      const msPrompt = ctx.state.pendingMilestonePrompt;
+      if (msPrompt && capTrimLevel !== 'minimal') {
+        output.system.push(msPrompt.formatted);
+        ctx.state.pendingMilestonePrompt = null;
+      }
+
       // --- VCM working set injection ---
       if (shouldInjectVcm(capTrimLevel) && ctx.vcmManager) {
         try {

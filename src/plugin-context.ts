@@ -48,6 +48,7 @@ export interface PluginState {
   stateChangeTracker?: Record<string, unknown>;
   _docsInitialized?: boolean;
   pendingFileContext?: import('./file-context-primer.js').FileContextBlock | null;
+  pendingMilestonePrompt?: import('./milestone-tracker.js').MilestonePromptBlock | null;
 }
 
 export interface PluginContext {
@@ -85,6 +86,7 @@ export interface PluginContext {
   decisionRegistry?: import('./decision-registry.js').DecisionRegistry;
   knownDebtRegistry?: import('./known-debt-registry.js').KnownDebtRegistry;
   lintDeltaTracker?: import('./lint-delta-tracker.js').LintDeltaTracker;
+  milestoneTracker?: import('./milestone-tracker.js').MilestoneTracker;
   fileContextPrimer?: import('./file-context-primer.js').FileContextPrimer;
   lifecycleOrchestrator?: import('./lifecycle-orchestrator.js').LifecycleOrchestrator;
   vcmManager: VcmManager;

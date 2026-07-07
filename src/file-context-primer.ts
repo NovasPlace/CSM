@@ -24,6 +24,7 @@ export interface FileContextBlock {
   decisions: Array<{ content: string; scope: string }>;
   lessons: Array<{ content: string }>;
   debts: Array<{ description: string; lastSeen: string }>;
+  milestones: Array<{ summary: string; commit?: string }>;
   formatted: string;
 }
 
@@ -43,15 +44,16 @@ export class FileContextPrimer {
   ): Promise<FileContextBlock | null> {
     if (this.shouldSkip(filePath)) return null;
 
-    const [fileDecisions, fileLessons, fileDebts] = await Promise.all([
+    const [fileDecisions, fileLessons, fileDebts, fileMilestones] = await Promise.all([
       this.fetchDecisions(filePath, projectId),
       this.fetchLessons(filePath),
       this.fetchDebts(filePath, projectId),
+      this.fetchMilestones(filePath, projectId),
     ]);
 
-    if (fileDecisions.length === 0 && fileLessons.length === 0 && fileDebts.length === 0) return null;
+    if (fileDecisions.length === 0 && fileLessons.length === 0 && fileDebts.length === 0 && fileMilestones.length === 0) return null;
 
-    const formatted = this.format(filePath, fileDecisions, fileLessons, fileDebts);
+    const formatted = this.format(filePath, fileDecisions, fileLessons, fileDebts, fileMilestones);
     this.lastInjectedFile = filePath;
     this.callsSinceLastInject = 0;
 
@@ -60,6 +62,7 @@ export class FileContextPrimer {
       decisions: fileDecisions,
       lessons: fileLessons,
       debts: fileDebts,
+      milestones: fileMilestones,
       formatted,
     };
   }
@@ -123,11 +126,37 @@ private async fetchDebts(
     }
   }
 
+private async fetchMilestones(
+    filePath: string,
+    projectId?: string,
+  ): Promise<Array<{ summary: string; commit?: string }>> {
+    try {
+      const tag = `target:${filePath}`;
+      const opts: MemoryListOptions = {
+        type: 'lesson',
+        tags: ['milestone', 'scope:file'],
+        limit: 5,
+        sortBy: 'recent',
+      };
+      if (projectId) opts.projectId = projectId;
+      const memories = await this.memories.listMemories(opts);
+      return memories
+        .filter(m => (m.tags ?? []).includes(tag))
+        .map(m => ({
+          summary: m.content,
+          commit: (m.metadata as { commit?: string } | null)?.commit,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
   private format(
     filePath: string,
     decisions: Array<{ content: string; scope: string }>,
     lessons: Array<{ content: string }>,
     debts: Array<{ description: string; lastSeen: string }>,
+    milestones: Array<{ summary: string; commit?: string }>,
   ): string {
     const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
     const lines: string[] = [`## Prior Context for ${fileName}`];
@@ -143,6 +172,11 @@ private async fetchDebts(
 
     for (const db of debts.slice(0, 2)) {
       lines.push(`- ${this.truncate(db.description, 120)} [debt, last seen ${db.lastSeen.slice(0, 10)}]`);
+    }
+
+    for (const m of milestones.slice(0, 2)) {
+      const suffix = m.commit ? ` @${m.commit.slice(0, 7)}` : '';
+      lines.push(`- ${this.truncate(m.summary, 100)}${suffix} [milestone]`);
     }
 
     const result = lines.join('\n');
