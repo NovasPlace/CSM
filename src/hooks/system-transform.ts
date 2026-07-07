@@ -234,6 +234,13 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         } catch { /* advisory block non-critical */ }
       }
 
+      // --- File context primer (context-on-touch) ---
+      const fileCtx = ctx.state.pendingFileContext;
+      if (fileCtx && capTrimLevel !== 'minimal') {
+        output.system.push(fileCtx.formatted);
+        ctx.state.pendingFileContext = null;
+      }
+
       // --- VCM working set injection ---
       if (shouldInjectVcm(capTrimLevel) && ctx.vcmManager) {
         try {

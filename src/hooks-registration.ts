@@ -17,6 +17,8 @@ import { GitWatcher } from './git-watcher.js';
 import { LoopDetector } from './loop-detector.js';
 import { LoopSignalDetector } from './loop-signal-detector.js';
 import { LifecycleOrchestrator } from './lifecycle-orchestrator.js';
+import { DecisionRegistry } from './decision-registry.js';
+import { FileContextPrimer } from './file-context-primer.js';
 import { ContextPressure } from './context-pressure.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
@@ -171,6 +173,11 @@ export async function registerHooks(
     contextCapSensor,
     state: sessionState,
   };
+
+  const decisionRegistry = new DecisionRegistry(memoryManager);
+  pluginCtx.decisionRegistry = decisionRegistry;
+  const fileContextPrimer = new FileContextPrimer(decisionRegistry, memoryManager);
+  pluginCtx.fileContextPrimer = fileContextPrimer;
 
   const lifecycleOrchestrator = new LifecycleOrchestrator(pluginCtx);
   pluginCtx.lifecycleOrchestrator = lifecycleOrchestrator;

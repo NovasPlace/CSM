@@ -297,6 +297,21 @@ function recordExperiencePacket(
   // --- debounce-trigger maintenance pipeline ---
   ctx.lifecycleOrchestrator?.triggerDebounced('self-model', 5000);
   ctx.lifecycleOrchestrator?.triggerDebounced('belief-consolidation', 8000);
+
+  // --- file-touch context primer ---
+  const FILE_TOOLS = new Set(['read', 'edit', 'write', 'multiedit']);
+  if (FILE_TOOLS.has(input.tool)) {
+    const touchPath = (input.args?.filePath ?? input.args?.path) as string | undefined;
+    if (touchPath) {
+      ctx.state.pendingFileContext = null;
+      ctx.fileContextPrimer?.tickCall();
+      ctx.fileContextPrimer?.buildBlock(touchPath, ctx.directory)
+        .then(block => {
+          if (block) ctx.state.pendingFileContext = block;
+        })
+        .catch((_err: unknown) => { /* non-critical */ });
+    }
+  }
 }
 
 async function recordContinuitySignals(

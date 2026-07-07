@@ -6,6 +6,8 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/file-context-primer.ts` | FileContextBlock, FileContextPrimer | src | Module |
+| `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/lifecycle-orchestrator.ts` | LifecycleOrchestrator | src | Module |
 | `test/work-journal-inject.test.ts` | none | test | Test suite |
 | `test/value-source-guard.test.ts` | none | test | Test suite |
@@ -245,7 +247,7 @@
 | `src/context-cap-sensor.ts` | InjectionTrimLevel, CapPressure, ContextCapSensor, shouldInjectAdvisory, advisoryCharBudget, shouldInjectVcm, shouldInjectFullMemoryBrief | src | Memory & recall subsystem |
 | `src/context-cache-tools.ts` | ContextCacheToolDeps, contextFetchTool, contextSearchTool, contextFetchFileRegionTool, contextFetchLastErrorTool, contextFetchDecisionLogTool | src | Tool registration |
 | `src/context-cache-store.ts` | CacheKind, CacheItemInput, CacheItem, storeItem, fetchItem, searchItems, fetchFileReads, fetchLastError, fetchDecisions, fetchLatestDecisionBySource, searchLatestDecisionBySources, countItems, pruneOldItems | src | Module |
-| `src/context-cache-signals.ts` | cacheBridgeTurnSignal, cacheToolErrorSignal, cacheBridgeWorkflowSignal | src | Module |
+| `src/context-cache-signals.ts` | cacheBridgeTurnSignal, cacheToolErrorSignal, cacheBridgeWorkflowSignal, detectDecisionIntent | src | Module |
 | `src/context-cache-schema.ts` | initializeContextCacheSchema | src | SQL schema |
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |

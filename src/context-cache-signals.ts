@@ -107,3 +107,26 @@ function readFilePath(args?: Record<string, unknown>): string | undefined {
 function summarize(value: string, limit: number): string {
   return value.length <= limit ? value : `${value.slice(0, limit)}...`;
 }
+
+const DECISION_PATTERNS = /\b(should|must|never|always|only|do not|don't|keep|preserve|use|prefer|avoid|require|ban|forbid)\b/i;
+const DECISION_BOOSTERS = /\b(all files|every time|as a rule|going forward|from now on|this is how|the convention|the standard)\b/i;
+const DECISION_WEAKENERS = /\b(maybe|perhaps|might|could|what if|what about|thoughts|ideas?|brainstorm)\b/i;
+
+export function detectDecisionIntent(text: string): { confidence: number; matchedPattern: string | null } {
+  const trimmed = text.replace(/\s+/g, ' ').trim();
+  if (trimmed.length < 10 || trimmed.length > 500) return { confidence: 0, matchedPattern: null };
+
+  const hasPattern = DECISION_PATTERNS.test(trimmed);
+  if (!hasPattern) return { confidence: 0, matchedPattern: null };
+
+  const match = trimmed.match(DECISION_PATTERNS);
+  const matchedPattern = match?.[0]?.toLowerCase() ?? null;
+
+  let confidence = 0.4;
+  if (DECISION_BOOSTERS.test(trimmed)) confidence += 0.3;
+  if (DECISION_WEAKENERS.test(trimmed)) confidence -= 0.3;
+  if (/^[A-Z]/.test(trimmed) && /[.!?]\s*$/.test(trimmed)) confidence += 0.1;
+  if (trimmed.length > 30 && trimmed.length < 200) confidence += 0.1;
+
+  return { confidence: Math.max(0, Math.min(1, confidence)), matchedPattern };
+}

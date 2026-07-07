@@ -47,6 +47,7 @@ export interface PluginState {
   recentUserMessages: Map<string, string>;
   stateChangeTracker?: Record<string, unknown>;
   _docsInitialized?: boolean;
+  pendingFileContext?: import('./file-context-primer.js').FileContextBlock | null;
 }
 
 export interface PluginContext {
@@ -81,6 +82,8 @@ export interface PluginContext {
   beliefKnowledge: BeliefKnowledgeConsolidator;
   livingState: LivingStateRuntime;
   livingStateAdvisor: LivingStateAdvisor;
+  decisionRegistry?: import('./decision-registry.js').DecisionRegistry;
+  fileContextPrimer?: import('./file-context-primer.js').FileContextPrimer;
   lifecycleOrchestrator?: import('./lifecycle-orchestrator.js').LifecycleOrchestrator;
   vcmManager: VcmManager;
   contextCapSensor: ContextCapSensor;
