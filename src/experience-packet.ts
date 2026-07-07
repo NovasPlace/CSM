@@ -20,6 +20,7 @@ export type PacketEntryType =
   | 'milestone'
   | 'decision'
   | 'session_start'
+  | 'session_checkpoint'
   | 'session_end'
   | 'distill_group'
   | 'loop_signal';
@@ -48,6 +49,7 @@ export class ExperiencePacketCreator {
     args?: Record<string, unknown>;
     recentErrors?: number;
     previous?: InternalState;
+    signals?: Record<string, unknown>;
   }): Promise<ExperiencePacket> {
     const input: DeriveInput = {
       toolName: params.toolName,
@@ -57,12 +59,16 @@ export class ExperiencePacketCreator {
       recentErrors: params.recentErrors,
     };
     const state = deriveInternalState(input, params.previous);
-    const signals: Record<string, unknown> = {
+    const baseSignals: Record<string, unknown> = {
       toolName: params.toolName,
       argsPreview: summarizeArgs(params.toolName, params.args),
     };
-    if (params.exitCode !== undefined) signals.exitCode = params.exitCode;
-    if (params.error) signals.error = params.error;
+    if (params.exitCode !== undefined) baseSignals.exitCode = params.exitCode;
+    if (params.error) baseSignals.error = params.error;
+
+    const signals = params.signals
+      ? { ...baseSignals, ...params.signals }
+      : baseSignals;
 
     return this.insert({
       sessionId: params.sessionId,
@@ -104,6 +110,7 @@ export class ExperiencePacketCreator {
     projectId?: string;
     intent: string;
     previous?: InternalState;
+    signalsMetadata?: Record<string, unknown>;
   }): Promise<ExperiencePacket> {
     const input: DeriveInput = {
       intent: params.intent,
@@ -115,7 +122,7 @@ export class ExperiencePacketCreator {
       projectId: params.projectId,
       entryType: 'milestone',
       internalState: state,
-      signals: { intent: params.intent },
+      signals: { intent: params.intent, ...params.signalsMetadata },
       confidence: 0.7,
     });
   }
@@ -124,23 +131,30 @@ export class ExperiencePacketCreator {
     sessionId: string;
     projectId?: string;
     intent: string;
+    decisionKind?: string;
+    confidence?: number;
     previous?: InternalState;
+    signalsMetadata?: Record<string, unknown>;
   }): Promise<ExperiencePacket> {
     const state = params.previous ?? deriveNeutralState();
+    const signals: Record<string, unknown> = { intent: params.intent };
+    if (params.decisionKind) signals.decisionKind = params.decisionKind;
+    if (params.signalsMetadata) Object.assign(signals, params.signalsMetadata);
 
     return this.insert({
       sessionId: params.sessionId,
       projectId: params.projectId,
       entryType: 'decision',
       internalState: state,
-      signals: { intent: params.intent },
-      confidence: 0.5,
+      signals,
+      confidence: params.confidence ?? 0.5,
     });
   }
 
   async recordSessionStartPacket(params: {
     sessionId: string;
     projectId?: string;
+    signalsMetadata?: Record<string, unknown>;
   }): Promise<ExperiencePacket> {
     const state = deriveNeutralState();
 
@@ -149,8 +163,26 @@ export class ExperiencePacketCreator {
       projectId: params.projectId,
       entryType: 'session_start',
       internalState: state,
-      signals: {},
+      signals: { ...params.signalsMetadata },
       confidence: 0.9,
+    });
+  }
+
+  async recordSessionCheckpointPacket(params: {
+    sessionId: string;
+    projectId?: string;
+    messageCount?: number;
+    signalsMetadata?: Record<string, unknown>;
+  }): Promise<ExperiencePacket> {
+    const state = deriveNeutralState();
+
+    return this.insert({
+      sessionId: params.sessionId,
+      projectId: params.projectId,
+      entryType: 'session_checkpoint',
+      internalState: state,
+      signals: { messageCount: params.messageCount, ...params.signalsMetadata },
+      confidence: 0.8,
     });
   }
 
@@ -159,6 +191,7 @@ export class ExperiencePacketCreator {
     projectId?: string;
     messageCount?: number;
     previous?: InternalState;
+    signalsMetadata?: Record<string, unknown>;
   }): Promise<ExperiencePacket> {
     const state = params.previous ?? deriveNeutralState();
 
@@ -167,7 +200,7 @@ export class ExperiencePacketCreator {
       projectId: params.projectId,
       entryType: 'session_end',
       internalState: state,
-      signals: { messageCount: params.messageCount },
+      signals: { messageCount: params.messageCount, ...params.signalsMetadata },
       confidence: 0.9,
     });
   }
@@ -177,7 +210,9 @@ export class ExperiencePacketCreator {
     projectId?: string;
     toolName: string;
     callCount: number;
+    evidence?: Record<string, unknown>;
     previous?: InternalState;
+    signalsMetadata?: Record<string, unknown>;
   }): Promise<ExperiencePacket> {
     const input: DeriveInput = {
       toolName: params.toolName,
@@ -190,7 +225,7 @@ export class ExperiencePacketCreator {
       projectId: params.projectId,
       entryType: 'loop_signal',
       internalState: state,
-      signals: { toolName: params.toolName, callCount: params.callCount },
+      signals: { toolName: params.toolName, callCount: params.callCount, ...(params.evidence ?? {}), ...(params.signalsMetadata ?? {}) },
       confidence: 0.9,
     });
   }

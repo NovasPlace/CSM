@@ -12,6 +12,7 @@ export interface BeliefScanConfig {
   maxPerType?: number;
   lookbackMinutes?: number;
   minPacketCount?: number;
+  minReinforcement?: number;
   projectId?: string;
 }
 
@@ -85,6 +86,22 @@ function normalizeError(error: string): string {
 export class BeliefPromotionScanner {
   private readonly pool: DatabasePool;
 
+  /**
+   * Phase 5A: gate pattern emission by reinforcement count.
+   * Milestones must recur >= 3x in the same category before generating a
+   * `candidate_worldview`. Other candidate types default to 1 (one-shot ok).
+   * Constraint 3: milestones are evidence first; only worldview candidates
+   * after recurring patterns.
+   */
+  private static readonly MIN_EMIT: Partial<Record<BeliefCandidateType, number>> = {
+    candidate_worldview: 3,
+    candidate_drift_warning: 0,
+    candidate_belief: 0,
+    candidate_preference: 0,
+    candidate_opinion: 0,
+    candidate_capability: 5,
+  };
+
   constructor(pool: DatabasePool) {
     this.pool = pool;
   }
@@ -126,7 +143,14 @@ export class BeliefPromotionScanner {
     if (dryRun) {
       return {
         dryRun: true,
-        candidates: patternGroups.filter(g => g.eventCount >= minPacketCount).map(g => this.toCandidateRow(g)),
+        candidates: patternGroups
+          .filter(g => g.eventCount >= minPacketCount)
+          .filter(g => {
+            if (config.minReinforcement !== undefined) return true;
+            const min = BeliefPromotionScanner.MIN_EMIT[g.candidateType] ?? 1;
+            return g.reinforcementCount >= min;
+          })
+          .map(g => this.toCandidateRow(g)),
         inserted: 0,
         updated: 0,
         skippedDuplicates: 0,
@@ -142,7 +166,13 @@ export class BeliefPromotionScanner {
     const candidates: BeliefCandidateRow[] = [];
     const actualByType: Record<string, number> = {};
 
-    const worthyGroups = patternGroups.filter(g => g.eventCount >= minPacketCount);
+    const worthyGroups = patternGroups
+      .filter(g => g.eventCount >= minPacketCount)
+      .filter(g => {
+        if (config.minReinforcement !== undefined) return true;
+        const min = BeliefPromotionScanner.MIN_EMIT[g.candidateType] ?? 1;
+        return g.reinforcementCount >= min;
+      });
 
     const typeCounts: Record<string, number> = {};
     for (const g of worthyGroups) {
@@ -182,7 +212,7 @@ export class BeliefPromotionScanner {
     const result = await this.pool.query(
       `SELECT candidate_type, status, COUNT(*) AS count
        FROM memory_candidate_queue
-       WHERE candidate_type IN ('candidate_belief', 'candidate_preference', 'candidate_worldview', 'candidate_drift_warning', 'candidate_opinion')
+       WHERE candidate_type IN ('candidate_belief', 'candidate_preference', 'candidate_worldview', 'candidate_drift_warning', 'candidate_opinion', 'candidate_capability')
        GROUP BY candidate_type, status
        ORDER BY candidate_type, status`,
     );
@@ -255,22 +285,57 @@ export class BeliefPromotionScanner {
     const error = signals.error as string | undefined;
     const exitCode = signals.exitCode as number | undefined;
     const intent = signals.intent as string | undefined;
+    const freeTextDecision = signals.freeTextDecision as boolean | undefined;
 
     switch (entryType) {
       case 'tool_execution': {
         if (!toolName) return null;
         const isError = !!error || (exitCode !== undefined && exitCode !== 0);
-        const outcome = isError ? 'fail' : 'ok';
-        const dedupKey = `tool:${toolName}:${outcome}`;
+
+        if (isError) {
+          return {
+            candidateType: 'candidate_belief',
+            dedupKey: `tool:${toolName}:fail`,
+            isReinforcement: false,
+            isContradiction: true,
+            reason: `${toolName} fails — ${(error ?? `exit ${exitCode}`).slice(0, 60)}`,
+            sampleSignals: { toolName, outcome: 'fail' },
+          };
+        }
+
+        if (freeTextDecision) {
+          return {
+            candidateType: 'candidate_preference',
+            dedupKey: `pref:freetext:${toolName}`,
+            isReinforcement: true,
+            isContradiction: false,
+            reason: `User free-text decision via ${toolName}`,
+            sampleSignals: { toolName, source: 'freeTextDecision' },
+          };
+        }
+
+        if (toolName === 'question') {
+          return {
+            candidateType: 'candidate_preference',
+            dedupKey: `pref:question:${toolName}`,
+            isReinforcement: true,
+            isContradiction: false,
+            reason: 'User answered question (free-text commitment)',
+            sampleSignals: { toolName, source: 'questionAnswer' },
+          };
+        }
+
+        if (toolName.startsWith('csm_')) {
+          return null;
+        }
+
         return {
-          candidateType: isError ? 'candidate_belief' as const : 'candidate_preference' as const,
-          dedupKey,
-          isReinforcement: !isError,
-          isContradiction: isError,
-          reason: isError
-            ? `${toolName} fails — ${(error ?? `exit ${exitCode}`).slice(0, 60)}`
-            : `${toolName} succeeds`,
-          sampleSignals: { toolName, outcome },
+          candidateType: 'candidate_capability',
+          dedupKey: `cap:${toolName}:ok`,
+          isReinforcement: true,
+          isContradiction: false,
+          reason: `${toolName} used successfully`,
+          sampleSignals: { toolName, outcome: 'ok' },
         };
       }
 
@@ -305,13 +370,13 @@ export class BeliefPromotionScanner {
       case 'decision': {
         if (!intent) return null;
         const cat = categorizeIntent(intent);
-        const dedupKey = `dec:${cat}`;
+        const dedupKey = `pref:decision:${cat}`;
         return {
-          candidateType: 'candidate_opinion',
+          candidateType: 'candidate_preference',
           dedupKey,
           isReinforcement: true,
           isContradiction: false,
-          reason: `Opinion from decision category: ${cat}`,
+          reason: `User decision — category: ${cat}`,
           sampleSignals: { category: cat },
         };
       }

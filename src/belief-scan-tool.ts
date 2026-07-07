@@ -5,12 +5,12 @@ export function beliefScanTool(scanner: BeliefPromotionScanner) {
   return tool({
     description:
       'Scan experience packets for recurring patterns and write belief candidates ' +
-      '(candidate_belief, candidate_preference, candidate_worldview, candidate_drift_warning, candidate_opinion) ' +
+      '(candidate_belief, candidate_preference, candidate_worldview, candidate_drift_warning, candidate_opinion, candidate_capability) ' +
       'to the unified memory_candidate_queue. ADVISORY ONLY: writes candidates, never promotes to memories. ' +
       'Dry-run by default.',
     args: {
       dryRun: tool.schema.boolean().optional().describe('Report without writing candidates (default true)'),
-      types: tool.schema.array(tool.schema.enum(['candidate_belief', 'candidate_preference', 'candidate_worldview', 'candidate_drift_warning', 'candidate_opinion'])).optional().describe('Candidate types to generate (default: all)'),
+      types: tool.schema.array(tool.schema.enum(['candidate_belief', 'candidate_preference', 'candidate_worldview', 'candidate_drift_warning', 'candidate_opinion', 'candidate_capability'])).optional().describe('Candidate types to generate (default: all)'),
       maxPerType: tool.schema.number().optional().describe('Max candidates per type (default 20)'),
       lookbackMinutes: tool.schema.number().optional().describe('How far back to scan packets (default 1440 = 24h)'),
       minPacketCount: tool.schema.number().optional().describe('Min packets to form a candidate (default 2)'),

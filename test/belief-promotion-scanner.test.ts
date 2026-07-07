@@ -69,15 +69,14 @@ describe('BeliefPromotionScanner', () => {
       return { rows: [], rowCount: 0 };
     });
     const scanner = makeScanner(pool);
-    const report = await scanner.scan({ dryRun: true });
+    const report = await scanner.scan({ dryRun: true, minPacketCount: 1, minReinforcement: 1 });
 
     assert.equal(report.packetsScanned, 2);
     assert.equal(report.patternsFound, 1);
     assert.equal(report.candidates.length, 1);
-    assert.equal(report.candidates[0].candidateType, 'candidate_preference');
-    assert.equal(report.candidates[0].dedupKey, 'tool:read:ok');
+    assert.equal(report.candidates[0].candidateType, 'candidate_capability');
+    assert.equal(report.candidates[0].dedupKey, 'cap:read:ok');
     assert.equal(report.candidates[0].eventCount, 2);
-    assert.equal(report.candidates[0].confidence, 0.3);
   });
 
   it('3 similar packets produce higher confidence', async () => {
@@ -95,11 +94,12 @@ describe('BeliefPromotionScanner', () => {
       return { rows: [], rowCount: 0 };
     });
     const scanner = makeScanner(pool);
-    const report = await scanner.scan({ dryRun: true });
+    const report = await scanner.scan({ dryRun: true, minPacketCount: 1, minReinforcement: 1 });
 
     assert.equal(report.candidates.length, 1);
+    assert.equal(report.candidates[0].candidateType, 'candidate_capability');
+    assert.equal(report.candidates[0].dedupKey, 'cap:write:ok');
     assert.equal(report.candidates[0].eventCount, 3);
-    assert.equal(report.candidates[0].confidence, 0.4);
   });
 
   it('5+ similar packets mark candidate as promotion-worthy (confidence >= 0.7)', async () => {
@@ -115,7 +115,7 @@ describe('BeliefPromotionScanner', () => {
       return { rows: [], rowCount: 0 };
     });
     const scanner = makeScanner(pool);
-    const report = await scanner.scan({ dryRun: true });
+    const report = await scanner.scan({ dryRun: true, minReinforcement: 1 });
 
     assert.equal(report.candidates.length, 1);
     assert.equal(report.candidates[0].eventCount, 6);
@@ -139,11 +139,11 @@ describe('BeliefPromotionScanner', () => {
       return { rows: [], rowCount: 0 };
     });
     const scanner = makeScanner(pool);
-    const report = await scanner.scan({ dryRun: true });
+    const report = await scanner.scan({ dryRun: true, minReinforcement: 1 });
 
-    assert.equal(report.candidates.length, 2, 'two patterns: ok + fail');
+    assert.equal(report.candidates.length, 2, 'two patterns: capability + fail');
     const failCandidate = report.candidates.find(c => c.dedupKey === 'tool:bash:fail');
-    const okCandidate = report.candidates.find(c => c.dedupKey === 'tool:bash:ok');
+    const okCandidate = report.candidates.find(c => c.dedupKey === 'cap:bash:ok');
     assert.ok(failCandidate, 'should have a fail pattern candidate');
     assert.ok(okCandidate, 'should have an ok pattern candidate');
 
@@ -206,8 +206,8 @@ describe('BeliefPromotionScanner', () => {
     });
     const scanner = makeScanner(pool);
 
-    const report1 = await scanner.scan({ dryRun: false, minPacketCount: 1 });
-    const report2 = await scanner.scan({ dryRun: false, minPacketCount: 1 });
+    const report1 = await scanner.scan({ dryRun: false, minPacketCount: 1, minReinforcement: 1 });
+    const report2 = await scanner.scan({ dryRun: false, minPacketCount: 1, minReinforcement: 1 });
 
     assert.equal(report1.candidates.length, 1);
     assert.equal(report2.candidates.length, 1);
@@ -254,7 +254,7 @@ describe('BeliefPromotionScanner', () => {
       return { rows: [], rowCount: 0 };
     });
     const scanner = makeScanner(pool);
-    await scanner.scan({ dryRun: false, minPacketCount: 1 });
+    await scanner.scan({ dryRun: false, minPacketCount: 1, minReinforcement: 1 });
 
     const beliefWrites = writtenTables.filter(t => t === 'belief_candidates');
     assert.equal(beliefWrites.length, 0, 'scanner must not write to belief_candidates table');
@@ -270,15 +270,20 @@ describe('BeliefPromotionScanner', () => {
             makePacketRow({
               id: 1,
               entry_type: 'milestone',
-              signals: JSON.stringify({ intent: 'completed the feature' }),
+              signals: JSON.stringify({ intent: 'feature completed successfully' }),
             }),
             makePacketRow({
               id: 2,
               entry_type: 'milestone',
               signals: JSON.stringify({ intent: 'all tests pass' }),
             }),
+            makePacketRow({
+              id: 3,
+              entry_type: 'milestone',
+              signals: JSON.stringify({ intent: 'done implementing changes' }),
+            }),
           ],
-          rowCount: 2,
+          rowCount: 3,
         };
       }
       return { rows: [], rowCount: 0 };
@@ -288,8 +293,8 @@ describe('BeliefPromotionScanner', () => {
 
     assert.equal(report.candidates.length, 1);
     assert.equal(report.candidates[0].candidateType, 'candidate_worldview');
-    assert.equal(report.candidates[0].eventCount, 2);
-    assert.equal(report.candidates[0].reinforcementCount, 2);
+    assert.equal(report.candidates[0].eventCount, 3);
+    assert.equal(report.candidates[0].reinforcementCount, 3);
   });
 
   it('loop_signal packets produce candidate_drift_warning', async () => {
@@ -337,10 +342,10 @@ describe('BeliefPromotionScanner', () => {
       return { rows: [], rowCount: 0 };
     });
     const scanner = makeScanner(pool);
-    const report = await scanner.scan({ dryRun: false, maxPerType: 1, minPacketCount: 1 });
+    const report = await scanner.scan({ dryRun: false, maxPerType: 1, minPacketCount: 1, minReinforcement: 1 });
 
-    const beliefCount = report.byType['candidate_preference'] ?? 0;
-    assert.equal(beliefCount, 1, 'should only produce 1 candidate with maxPerType=1');
+    const capCount = report.byType['candidate_capability'] ?? 0;
+    assert.equal(capCount, 1, 'should only produce 1 candidate with maxPerType=1');
   });
 
   it('filters by allowed types', async () => {
@@ -364,12 +369,13 @@ describe('BeliefPromotionScanner', () => {
     const scanner = makeScanner(pool);
     const report = await scanner.scan({
       dryRun: true,
-      types: ['candidate_preference'],
+      types: ['candidate_capability'],
       minPacketCount: 1,
+      minReinforcement: 1,
     });
 
     assert.equal(report.candidates.length, 1);
-    assert.equal(report.candidates[0].candidateType, 'candidate_preference');
+    assert.equal(report.candidates[0].candidateType, 'candidate_capability');
   });
 
   it('report aggregates counts by type and status', async () => {

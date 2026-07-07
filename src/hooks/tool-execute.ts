@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { PluginContext } from '../plugin-context.js';
 import { cacheToolErrorSignal } from '../context-cache-signals.js';
 import type { ToolCallRecord } from '../types.js';
@@ -188,6 +189,68 @@ function recordExperiencePacket(
   sid: string | null,
 ): void {
   if (!sid) return;
+
+  // --- hashing helpers ---
+  const hash = (val: unknown): string =>
+    createHash('sha256').update(JSON.stringify(val ?? '')).digest('hex').slice(0, 16);
+
+  const argsHash = hash(input.args);
+  const outputHash = hash(output.output);
+  const errorHash = hash(output.metadata?.error);
+  const filePath = (input.args?.filePath as string) ?? (input.args?.path as string) ?? null;
+  const isError = !!(output.metadata?.error || output.metadata?.exitCode);
+
+  // --- milestone detection ---
+  const editTools = new Set(['edit', 'write', 'multiedit']);
+  const isEditTool = editTools.has(input.tool);
+  const isMilestone = isEditTool && !isError && !!filePath;
+
+  // --- free-text decision classifier ---
+  const isFreeTextDecision =
+    input.tool === 'question' &&
+    typeof output.output === 'string' &&
+    output.output.length > 0;
+
+  // --- record to loop signal detector ---
+  try {
+    ctx.loopSignalDetector.record({
+      toolName: input.tool,
+      inputHash: argsHash,
+      outputHash,
+      errorHash,
+      filePath,
+      isError,
+      isMilestone,
+    });
+  } catch {
+    /* non-critical */
+  }
+
+  // --- check loop signal ---
+  let loopSignal: ReturnType<typeof ctx.loopSignalDetector.check> = null;
+  try {
+    loopSignal = ctx.loopSignalDetector.check();
+  } catch {
+    /* non-critical */
+  }
+
+  // --- emit the packet ---
+  const signals: Record<string, unknown> = {
+    _schemaVersion: 2,
+    _sourceHook: 'tool-execute',
+    _correlationId: loopSignal?.correlationId,
+    _evidenceRefs: loopSignal?.evidenceRefs,
+    milestone: isMilestone,
+    freeTextDecision: isFreeTextDecision,
+    loopSignal: loopSignal ? {
+      toolName: loopSignal.toolName,
+      callCount: loopSignal.callCount,
+      gateD1: loopSignal.gateD1,
+      gateD2: loopSignal.gateD2,
+      gateD2Reason: loopSignal.gateD2Reason,
+    } : undefined,
+  };
+
   ctx.experiencePackets.recordToolPacket({
     sessionId: sid,
     projectId: ctx.directory,
@@ -195,6 +258,7 @@ function recordExperiencePacket(
     exitCode: output.metadata?.exitCode,
     error: output.metadata?.error,
     args: input.args ?? {},
+    signals,
   }).catch((_err: unknown) => {
     /* experience packet recording non-critical */
   });

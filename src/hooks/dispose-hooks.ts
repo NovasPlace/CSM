@@ -54,6 +54,25 @@ export async function disposeAll(
     workJournal.recordSessionEnd(state.currentSessionId, ctx.directory, state.messageCount);
   }
 
+  if (state.currentSessionId) {
+    try {
+      await pluginCtx.experiencePackets.recordToolPacket({
+        sessionId: state.currentSessionId,
+        projectId: directory,
+        toolName: 'session_end',
+        exitCode: 0,
+        args: { messageCount: state.messageCount },
+        signals: {
+          _schemaVersion: 2,
+          _sourceHook: 'dispose-hooks',
+          messageCount: state.messageCount,
+        },
+      });
+    } catch {
+      /* experience packet recording non-critical */
+    }
+  }
+
   if (state.currentSessionId && config.selfContinuity.enabled) {
     try {
       const generator = new SelfContinuityGenerator(

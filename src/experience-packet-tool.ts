@@ -103,6 +103,8 @@ function formatEventSummary(p: ExperiencePacket): string {
       return intent ?? 'decision made';
     case 'session_start':
       return 'session started';
+    case 'session_checkpoint':
+      return msgCount !== undefined ? `session checkpoint (${msgCount} messages)` : 'session checkpoint';
     case 'session_end':
       return msgCount !== undefined ? `session ended (${msgCount} messages)` : 'session ended';
     case 'loop_signal':

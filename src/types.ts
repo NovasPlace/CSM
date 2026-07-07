@@ -291,6 +291,7 @@ export interface PluginConfig {
   gitPollInterval: number; // seconds
   contextPressureRecommend: number; // 0-1
   contextPressureDemand: number; // 0-1
+  targetContextCap: number; // target context window cap in tokens (for CSM injection trimming)
   loopDetectionThreshold: number;
   // Noise reduction flags (default: false to suppress junk)
   logToolUsage: boolean;       // Log "Tool used: X" episodic memories
