@@ -6,7 +6,8 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
-| `src/recall-quality-tool.ts` | RecallQualityAuditParams, IRecallQualityTool, validateRecallQualityAuditParams, RecallQualityAuditReportBuilder, mockRecallQualityAuditReport | src | Tool registration |
+| `test/recall-quality-scoring.test.ts` | none | test | Test suite |
+| `src/recall-quality-tool.ts` | RecallQualityAuditParams, IRecallQualityTool, RecallQualityGrade, RecallQualityScore, RecallMetrics, scoreMetrics, RecallQualityAuditParams, IRecallQualityTool, validateRecallQualityAuditParams, RecallQualityAuditReportBuilder, mockRecallQualityAuditReport | src | Tool registration |
 | `src/milestone-tracker.ts` | MilestoneScope, MilestoneEvidence, MilestonePromptBlock, SaveMilestoneParams, SavedMilestone, MilestoneTracker | src | Module |
 | `src/lint-delta-tracker.ts` | LintSnapshot, LintDelta, LintDeltaTracker | src | Module |
 | `src/known-debt-registry.ts` | DebtScope, DebtStatus, RegisterDebtParams, DebtRecord, KnownDebtRegistry | src | Module |
