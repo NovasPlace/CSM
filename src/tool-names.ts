@@ -26,6 +26,7 @@ export const CSM_TOOL_NAMES = [
   'csm_belief_scan',
   'csm_belief_scan_report',
   'csm_belief_promote',
+  'csm_belief_promotion_scan',
   'csm_self_model',
   'csm_belief_knowledge',
   'csm_living_state_preview',
