@@ -22,20 +22,27 @@ interface PendingDocUpdate {
 }
 
 const pendingUpdates: PendingDocUpdate[] = [];
-let flushed = false;
 const initializedProjects = new Set<string>();
+
+let autoDocsEnabled = true;
+
+export function setAutoDocsEnabled(enabled: boolean): void {
+  autoDocsEnabled = enabled;
+}
 
 export function queueDocUpdate(
   filePath: string,
   changeType: "write" | "edit" | "delete"
 ): void {
+  if (!autoDocsEnabled) return;
   if (isIgnoredPath(filePath)) return;
-  const existing = pendingUpdates.find(u => u.filePath === filePath);
+  const normalized = filePath.replace(/\\/g, "/");
+  const existing = pendingUpdates.find(u => u.filePath === normalized);
   if (existing) {
     existing.changeType = changeType;
     existing.timestamp = new Date();
   } else {
-    pendingUpdates.push({ filePath, changeType, timestamp: new Date() });
+    pendingUpdates.push({ filePath: normalized, changeType, timestamp: new Date() });
   }
 }
 
@@ -72,7 +79,6 @@ export function isIgnoredPath(filePath: string): boolean {
   }
 
 export async function flushDocUpdates(context?: PluginContext, workspaceDir?: string): Promise<void> {
-  if (flushed) return;
   if (pendingUpdates.length === 0) return;
 
   const config = context?.config?.autoDocs ?? {
@@ -132,7 +138,6 @@ export async function flushDocUpdates(context?: PluginContext, workspaceDir?: st
     console.error("[auto-docs] reconcile error:", err);
   }
 
-  flushed = true;
   pendingUpdates.length = 0;
 }
 
@@ -169,7 +174,11 @@ export function getPendingUpdates(): PendingDocUpdate[] {
 }
 
 export function resetFlushedFlag(): void {
-  flushed = false;
+  pendingUpdates.length = 0;
+}
+
+export function resetInitializedProjects(): void {
+  initializedProjects.clear();
 }
 
 export async function ensureProjectDocsInitialized(projectDir: string): Promise<void> {

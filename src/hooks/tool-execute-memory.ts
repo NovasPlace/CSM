@@ -1,5 +1,5 @@
 import type { PluginContext } from '../plugin-context.js';
-import { flushDocUpdates, getPendingUpdates, queueDocUpdate } from './auto-docs.js';
+import { flushDocUpdates, getPendingUpdates } from './auto-docs.js';
 import { packageCommandEvidence, packageToolEvidence } from './tool-execute-budget.js';
 import { ToolExecuteRuntimeDedup } from '../tool-execute-runtime-dedup.js';
 
@@ -7,7 +7,7 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const FLUSH_DELAY_MS = 2000;
 const toolDedup = new ToolExecuteRuntimeDedup(60_000);
 
-function scheduleDocFlush(ctx: PluginContext): void {
+export function scheduleDocFlushLocal(ctx: PluginContext): void {
   if (flushTimer) clearTimeout(flushTimer);
   flushTimer = setTimeout(async () => {
     flushTimer = null;
@@ -89,10 +89,8 @@ export async function logToolUsage(
     });
   }
 
-  if (input.tool === 'write' || input.tool === 'edit') {
+  if (input.tool === 'write' || input.tool === 'edit' || input.tool === 'multiedit') {
     const filePath = input.args?.filePath ?? input.args?.path ?? 'unknown';
-    queueDocUpdate(filePath, input.tool === 'write' ? 'write' : 'edit');
-    scheduleDocFlush(ctx);
     await ctx.memoryManager.saveMemory({
       content: `File ${input.tool === 'write' ? 'written' : 'edited'}: ${filePath}`,
       type: 'episodic',

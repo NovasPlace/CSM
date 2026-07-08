@@ -192,7 +192,7 @@
 | `src/hooks/work-journal-inject.ts` | createWorkJournalInjectHook | src | Hook handler |
 | `src/hooks/tool-hooks.ts` | registerTools | src | Hook handler |
 | `src/hooks/tool-execute.ts` | createToolExecuteBeforeHook, createToolExecuteAfterHook | src | Hook handler |
-| `src/hooks/tool-execute-memory.ts` | autoDistill, logToolUsage | src | Hook handler |
+| `src/hooks/tool-execute-memory.ts` | scheduleDocFlushLocal, autoDistill, logToolUsage | src | Hook handler |
 | `src/hooks/tool-execute-budget.ts` | packageToolEvidence, packageCommandEvidence | src | Hook handler |
 | `src/hooks/system-transform.ts` | isGreetingLikeTurn, isWorkspaceFactTurn, createSystemTransformHook | src | Hook handler |
 | `src/hooks/session-compaction.ts` | createSessionCompactingHook, createAutocontinueHook | src | Hook handler |
@@ -200,7 +200,7 @@
 | `src/hooks/event-hooks.ts` | createEventHook | src | Hook handler |
 | `src/hooks/doc-analyzer.ts` | isIgnoredForAnalysis, isStubContent, updateDocContent, shouldSkipEntry, autoDocumentChange, reconcileSystemMap, initializeDocsForProject | src | Hook handler |
 | `src/hooks/dispose-hooks.ts` | disposeAll | src | Hook handler |
-| `src/hooks/auto-docs.ts` | DEFAULT_AUTO_DOCS_CONFIG, queueDocUpdate, isIgnoredPath, flushDocUpdates, clearPendingUpdates, getPendingUpdates, resetFlushedFlag, ensureProjectDocsInitialized, isProjectInitialized | src | Hook handler |
+| `src/hooks/auto-docs.ts` | DEFAULT_AUTO_DOCS_CONFIG, setAutoDocsEnabled, queueDocUpdate, isIgnoredPath, flushDocUpdates, clearPendingUpdates, getPendingUpdates, resetFlushedFlag, resetInitializedProjects, ensureProjectDocsInitialized, isProjectInitialized | src | Hook handler |
 | `src/hooks/architecture-doc.ts` | reconcileArchitectureDoc | src | Hook handler |
 | `src/hooks/architecture-doc-render.ts` | renderArchitectureDoc | src | Hook handler |
 | `src/hooks/architecture-doc-graph.ts` | GraphNode, buildGraph | src | Hook handler |
