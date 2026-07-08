@@ -4,14 +4,13 @@ import { buildResumeInjection, type WorkJournalInjectDeps } from '../work-journa
 import { getLogger } from '../logger.js';
 
 export function createWorkJournalInjectHook(ctx: PluginContext) {
-  return async (input: any, output: any): Promise<typeof output> => {
+  return async (input: { sessionID?: string }, output: { system?: string[] }): Promise<void> => {
     try {
-      if (!input.sessionID) return output;
-
+      if (!input.sessionID) return;
       ctx.syncActiveSession(input.sessionID);
       const sid = ctx.state.currentSessionId;
 
-      if (!ctx.config.workJournal?.enabled || !sid) return output;
+      if (!ctx.config.workJournal?.enabled || !sid) return;
 
       const deps: WorkJournalInjectDeps = {
         maxInjectTokens: ctx.config.workJournal.injectMaxTokens,
@@ -22,7 +21,7 @@ export function createWorkJournalInjectHook(ctx: PluginContext) {
         ctx.directory,
       );
 
-      if (!payload) return output;
+      if (!payload) return;
 
       const injection = buildResumeInjection(payload, deps);
 
@@ -31,9 +30,9 @@ export function createWorkJournalInjectHook(ctx: PluginContext) {
 
       getLogger().info(`[WorkJournal] Injected resume payload for session ${sid.slice(0, 8)} (${payload.totalEntries} entries)`);
     } catch (error) {
-      console.error('[WorkJournal] Inject hook error:', error);
+      getLogger().error('[WorkJournal] Inject hook error', error instanceof Error ? error : new Error(String(error)));
     }
 
-    return output;
+    return;
   };
 }
