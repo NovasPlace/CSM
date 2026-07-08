@@ -13,38 +13,7 @@ import { Database } from './database.js';
 import type { Redactor } from './redactor.js';
 import { listMemoriesOp, saveMemoryOp, searchMemoriesOp } from './bridge-ops.js';
 import { RecallQualityAuditReportBuilder, validateRecallQualityAuditParams } from './recall-quality-tool.js';
-
-const CSM_TOOL_NAMES = [
-  'csm_memory_save',
-  'csm_memory_search',
-  'csm_memory_list',
-  'csm_memory_delete',
-  'csm_memory_context',
-  'csm_memory_lesson',
-  'csm_memory_transcript',
-  'csm_memory_distill',
-  'csm_memory_distilled_view',
-  'csm_memory_compact',
-  'csm_memory_backfill_embeddings',
-  'csm_memory_dedup_detect',
-  'csm_memory_merge',
-  'csm_memory_candidate_generate',
-  'csm_memory_candidate_report',
-  'csm_memory_archive_candidate_report',
-  'csm_memory_governance_report',
-  'csm_runtime_status',
-  'csm_compaction_audit',
-  'csm_memory_packets',
-  'csm_belief_scan',
-  'csm_belief_scan_report',
-  'csm_belief_promote',
-  'csm_self_model',
-  'csm_belief_knowledge',
-  'csm_living_state_preview',
-  'csm_living_state_debug',
-  'csm_recall_quality_report',
-  'csm_memory_related',
-] as const;
+import { CSM_TOOL_NAMES } from './tool-names.js';
 
 /**
  * memory_save - Save information to cross-session memory
@@ -847,8 +816,6 @@ export function runtimeStatusTool(
   });
 }
 
-export { CSM_TOOL_NAMES };
-
 export function compactionAuditTool(database: Database) {
   return tool({
     description: 'Audit compaction telemetry for correctness. Recomputes totals from raw before/after values, checks for duplicates, negative values, math errors, and zero fields. Verifies SUM(tokens_saved) matches SUM(before_tokens - after_tokens).',
@@ -957,6 +924,40 @@ export function memoryRelatedTool(database: Database) {
         title: `Related to memory ${args.memoryId}`,
         output: memories.length > 0 ? lines.join('\n') : 'No linked memories found.',
         metadata: { memoryId: args.memoryId, count: memories.length },
+      };
+    },
+  });
+}
+
+/**
+ * csm_continuity_report - Read-only resilience dashboard over the full CSM stack.
+ * Phase 6E: Reports health of memory, recall, graph, pipeline, living state, docs, tools.
+ * No mutations. No repairs. No auto-action.
+ */
+export function continuityReportTool(database: Database) {
+  return tool({
+    description:
+      'Produce a read-only continuity resilience report covering memory inventory, recall health, graph readiness, pipeline status, living state, docs freshness, tool registry, advisories, and overall confidence. Advisory only — no mutations.',
+    args: {
+      windowHours: tool.schema.number().optional().describe(
+        'Time window in hours for recall health metrics (default 24)',
+      ),
+    },
+    async execute(args, context) {
+      const { buildContinuityResilienceReport } = await import('./continuity-resilience-report.js');
+      const workspaceDir = (context as { worktree?: string }).worktree || process.cwd();
+      const toolMap: Record<string, unknown> = {};
+      for (const name of CSM_TOOL_NAMES) toolMap[name] = true;
+      const report = await buildContinuityResilienceReport(
+        database,
+        workspaceDir,
+        toolMap,
+        args.windowHours ?? 24,
+      );
+      return {
+        title: 'Continuity Resilience Report',
+        output: report,
+        metadata: { windowHours: args.windowHours ?? 24 },
       };
     },
   });

@@ -6,7 +6,7 @@ import type { CodexBridgeExtraDeps } from './codex-bridge-extra-ops.js';
 import { auditCompactionTelemetry, formatAuditReport } from './compaction-telemetry-audit.js';
 import { getActiveGoal, listGoals, setActiveGoal, updateGoal } from './goal-schema.js';
 import { asLimit, asMessages, asNumber, asRecord, asString, requireSession, requireString } from './codex-bridge-extra-utils.js';
-import { CSM_TOOL_NAMES } from './tools.js';
+import { CSM_TOOL_NAMES } from './tool-names.js';
 
 export async function contextFetchOp(deps: CodexBridgeExtraDeps, sessionId: string | undefined, input: Record<string, unknown>) {
   return { item: await fetchItem(deps.database.getPool(), requireSession(sessionId), requireString(input.id, 'id')) };

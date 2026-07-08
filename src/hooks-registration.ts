@@ -205,4 +205,4 @@ export async function registerHooks(
   };
 }
 
-export { CSM_TOOL_NAMES } from './tools.js';
+export { CSM_TOOL_NAMES } from './tool-names.js';
