@@ -39,7 +39,6 @@
 | `test/postgres-pool.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
 | `test/phase32-benchmark.test.ts` | none | test | Test suite |
 | `test/merge-tool.test.ts` | none | test | Tool registration |
@@ -86,7 +85,6 @@
 | `test/benchmark-short-tool-compaction.ts` | process | test | Tool registration |
 | `test/benchmark-hybrid.ts` | none | test | Test suite |
 | `test/benchmark-context-governor.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/belief-promotion.test.ts` | none | test | Test suite |
 | `test/belief-promotion-scanner.test.ts` | none | test | Test suite |
 | `test/belief-knowledge-store.test.ts` | none | test | Test suite |
@@ -243,8 +241,6 @@
 | `src/context-pressure.ts` | Message, ContextPressure | src | Module |
 | `src/context-governor.ts` | AdaptiveContextGovernor | src | Module |
 | `src/context-governor-types.ts` | GovernorProfileName, GovernorActionName, GovernorThresholds, GovernorProfile, GovernorConfig, GovernorMetrics, GovernorDecision, GovernorResult | src | Module |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/context-governor-slope.ts` | estimateSlopeGrowth | src | Module |
 | `src/context-governor-profiles.ts` | DEFAULT_GOVERNOR_CONFIG, getGovernorProfile | src | Module |
 | `src/context-governor-optimizer.ts` | optimizeGovernorContext | src | Module |
@@ -2661,7 +2657,6 @@
 | `test/postgres-pool.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
 | `test/phase32-benchmark.test.ts` | none | test | Test suite |
 | `test/merge-tool.test.ts` | none | test | Tool registration |
@@ -2707,7 +2702,6 @@
 | `test/benchmark-short-tool-compaction.ts` | process | test | Tool registration |
 | `test/benchmark-hybrid.ts` | none | test | Test suite |
 | `test/benchmark-context-governor.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/belief-promotion.test.ts` | none | test | Test suite |
 | `test/belief-promotion-scanner.test.ts` | none | test | Test suite |
 | `test/belief-knowledge-store.test.ts` | none | test | Test suite |
@@ -2855,8 +2849,6 @@
 | `src/context-pressure.ts` | Message, ContextPressure | src | Module |
 | `src/context-governor.ts` | AdaptiveContextGovernor | src | Module |
 | `src/context-governor-types.ts` | GovernorProfileName, GovernorActionName, GovernorThresholds, GovernorProfile, GovernorConfig, GovernorMetrics, GovernorDecision, GovernorResult | src | Module |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/context-governor-slope.ts` | estimateSlopeGrowth | src | Module |
 | `src/context-governor-profiles.ts` | DEFAULT_GOVERNOR_CONFIG, getGovernorProfile | src | Module |
 | `src/context-governor-optimizer.ts` | optimizeGovernorContext | src | Module |
@@ -5262,7 +5254,6 @@
 | `test/postgres-pool.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
 | `test/phase32-benchmark.test.ts` | none | test | Test suite |
 | `test/merge-tool.test.ts` | none | test | Tool registration |
@@ -5308,7 +5299,6 @@
 | `test/benchmark-short-tool-compaction.ts` | process | test | Tool registration |
 | `test/benchmark-hybrid.ts` | none | test | Test suite |
 | `test/benchmark-context-governor.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/belief-promotion.test.ts` | none | test | Test suite |
 | `test/belief-promotion-scanner.test.ts` | none | test | Test suite |
 | `test/belief-knowledge-store.test.ts` | none | test | Test suite |
@@ -5456,8 +5446,6 @@
 | `src/context-pressure.ts` | Message, ContextPressure | src | Module |
 | `src/context-governor.ts` | AdaptiveContextGovernor | src | Module |
 | `src/context-governor-types.ts` | GovernorProfileName, GovernorActionName, GovernorThresholds, GovernorProfile, GovernorConfig, GovernorMetrics, GovernorDecision, GovernorResult | src | Module |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/context-governor-slope.ts` | estimateSlopeGrowth | src | Module |
 | `src/context-governor-profiles.ts` | DEFAULT_GOVERNOR_CONFIG, getGovernorProfile | src | Module |
 | `src/context-governor-optimizer.ts` | optimizeGovernorContext | src | Module |
@@ -7868,7 +7856,6 @@
 | `test/postgres-pool.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
 | `test/phase32-benchmark.test.ts` | none | test | Test suite |
 | `test/merge-tool.test.ts` | none | test | Tool registration |
@@ -7913,7 +7900,6 @@
 | `test/benchmark-short-tool-compaction.ts` | process | test | Tool registration |
 | `test/benchmark-hybrid.ts` | none | test | Test suite |
 | `test/benchmark-context-governor.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/belief-promotion.test.ts` | none | test | Test suite |
 | `test/belief-promotion-scanner.test.ts` | none | test | Test suite |
 | `test/belief-knowledge-store.test.ts` | none | test | Test suite |
@@ -8056,8 +8042,6 @@
 | `src/context-pressure.ts` | Message, ContextPressure | src | Module |
 | `src/context-governor.ts` | AdaptiveContextGovernor | src | Module |
 | `src/context-governor-types.ts` | GovernorProfileName, GovernorActionName, GovernorThresholds, GovernorProfile, GovernorConfig, GovernorMetrics, GovernorDecision, GovernorResult | src | Module |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/context-governor-slope.ts` | estimateSlopeGrowth | src | Module |
 | `src/context-governor-profiles.ts` | DEFAULT_GOVERNOR_CONFIG, getGovernorProfile | src | Module |
 | `src/context-governor-optimizer.ts` | optimizeGovernorContext | src | Module |
@@ -10492,7 +10476,6 @@
 | `test/postgres-pool.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
 | `test/phase32-benchmark.test.ts` | none | test | Test suite |
 | `test/merge-tool.test.ts` | none | test | Tool registration |
@@ -10533,7 +10516,6 @@
 | `test/benchmark-short-tool-compaction.ts` | process | test | Tool registration |
 | `test/benchmark-hybrid.ts` | none | test | Test suite |
 | `test/benchmark-context-governor.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/behavioral-growth-tracker.test.ts` | none | test | Test suite |
 | `test/backfill-recall-telemetry.test.ts` | none | test | Test suite |
 | `test/backend-contract.test.ts` | none | test | Test suite |
@@ -10663,8 +10645,6 @@
 | `src/context-pressure.ts` | Message, ContextPressure | src | Module |
 | `src/context-governor.ts` | AdaptiveContextGovernor | src | Module |
 | `src/context-governor-types.ts` | GovernorProfileName, GovernorActionName, GovernorThresholds, GovernorProfile, GovernorConfig, GovernorMetrics, GovernorDecision, GovernorResult | src | Module |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/context-governor-slope.ts` | estimateSlopeGrowth | src | Module |
 | `src/context-governor-profiles.ts` | DEFAULT_GOVERNOR_CONFIG, getGovernorProfile | src | Module |
 | `src/context-governor-optimizer.ts` | optimizeGovernorContext | src | Module |
@@ -13056,7 +13036,6 @@
 | `test/postgres-pool.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
 | `test/phase32-benchmark.test.ts` | none | test | Test suite |
 | `test/merge-tool.test.ts` | none | test | Tool registration |
@@ -13097,7 +13076,6 @@
 | `test/benchmark-short-tool-compaction.ts` | process | test | Tool registration |
 | `test/benchmark-hybrid.ts` | none | test | Test suite |
 | `test/benchmark-context-governor.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/behavioral-growth-tracker.test.ts` | none | test | Test suite |
 | `test/backfill-recall-telemetry.test.ts` | none | test | Test suite |
 | `test/auto-docs.test.ts` | hello | test | Test suite |
@@ -13226,8 +13204,6 @@
 | `src/context-pressure.ts` | Message, ContextPressure | src | Module |
 | `src/context-governor.ts` | AdaptiveContextGovernor | src | Module |
 | `src/context-governor-types.ts` | GovernorProfileName, GovernorActionName, GovernorThresholds, GovernorProfile, GovernorConfig, GovernorMetrics, GovernorDecision, GovernorResult | src | Module |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/context-governor-slope.ts` | estimateSlopeGrowth | src | Module |
 | `src/context-governor-profiles.ts` | DEFAULT_GOVERNOR_CONFIG, getGovernorProfile | src | Module |
 | `src/context-governor-optimizer.ts` | optimizeGovernorContext | src | Module |
@@ -15643,7 +15619,6 @@
 | `test/priming-engine.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
 | `test/phase32-benchmark.test.ts` | none | test | Test suite |
 | `test/memory-type-quota.test.ts` | none | test | Test suite |
@@ -15680,7 +15655,6 @@
 | `test/benchmark-short-tool-compaction.ts` | process | test | Tool registration |
 | `test/benchmark-hybrid.ts` | none | test | Test suite |
 | `test/benchmark-context-governor.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/behavioral-growth-tracker.test.ts` | none | test | Test suite |
 | `test/backfill-recall-telemetry.test.ts` | none | test | Test suite |
 | `test/auto-docs.test.ts` | hello | test | Test suite |
@@ -15792,8 +15766,6 @@
 | `src/context-pressure.ts` | Message, ContextPressure | src | Module |
 | `src/context-governor.ts` | AdaptiveContextGovernor | src | Module |
 | `src/context-governor-types.ts` | GovernorProfileName, GovernorActionName, GovernorThresholds, GovernorProfile, GovernorConfig, GovernorMetrics, GovernorDecision, GovernorResult | src | Module |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/context-governor-slope.ts` | estimateSlopeGrowth | src | Module |
 | `src/context-governor-profiles.ts` | DEFAULT_GOVERNOR_CONFIG, getGovernorProfile | src | Module |
 | `src/context-governor-optimizer.ts` | optimizeGovernorContext | src | Module |
@@ -18190,7 +18162,6 @@
 | `test/priming-engine.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
 | `test/phase32-benchmark.test.ts` | none | test | Test suite |
 | `test/memory-graph.test.ts` | none | test | Test suite |
@@ -18225,7 +18196,6 @@
 | `test/benchmark-short-tool-compaction.ts` | process | test | Tool registration |
 | `test/benchmark-hybrid.ts` | none | test | Test suite |
 | `test/benchmark-context-governor.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/behavioral-growth-tracker.test.ts` | none | test | Test suite |
 | `test/backfill-recall-telemetry.test.ts` | none | test | Test suite |
 | `test/auto-docs.test.ts` | hello | test | Test suite |
@@ -18330,8 +18300,6 @@
 | `src/context-pressure.ts` | Message, ContextPressure | src | Module |
 | `src/context-governor.ts` | AdaptiveContextGovernor | src | Module |
 | `src/context-governor-types.ts` | GovernorProfileName, GovernorActionName, GovernorThresholds, GovernorProfile, GovernorConfig, GovernorMetrics, GovernorDecision, GovernorResult | src | Module |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/context-governor-slope.ts` | estimateSlopeGrowth | src | Module |
 | `src/context-governor-profiles.ts` | DEFAULT_GOVERNOR_CONFIG, getGovernorProfile | src | Module |
 | `src/context-governor-optimizer.ts` | optimizeGovernorContext | src | Module |
@@ -20698,13 +20666,9 @@
 | `src/compaction-telemetry-audit.ts` | AuditResult, AuditAnomaly, SessionBreakdown, auditCompactionTelemetry, formatAuditReport | src | Context compaction engine |
 | `src/codex-mcp-vault-tools.ts` | VAULT_TOOL_SPECS, teacherTraceArgs, traceVaultArgs, traceVaultPreviewArgs, ToolAnnotations | src | Tool registration |
 | `src/agent-work-journal.ts` | AgentWorkJournal | src | Module |
-| `test/phase32-trace-benchmark.test.ts` | none | test | Test suite |
 | `test/phase32-docs-continuity.test.ts` | none | test | Test suite |
-| `test/benchmark-context-governor-trace.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace.test.ts` | none | test | Test suite |
 | `test/phase33-teacher-trace-benchmark.ts` | none | test | Test suite |
-| `src/context-governor-trace.ts` | TraceBenchmarkReport, TraceSessionMetrics, CapturedTraceBenchmarkReport, measureTraceSession, compareTraceSessions, runTraceBenchmark | src | Module |
-| `src/context-governor-trace-capture.ts` | captureTraceSession | src | Module |
 | `src/teacher-trace.ts` | none | src | Module |
 | `src/teacher-trace-core.ts` | deriveTeacherTraceCards, formatTeacherTraceCards, summarizeTeacherTraceSeed | src | Module |
 | `src/teacher-trace-seeder.ts` | previewTeacherTraces, seedTeacherTraces | src | Module |

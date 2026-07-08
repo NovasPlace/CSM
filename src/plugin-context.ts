@@ -50,6 +50,7 @@ export interface PluginState {
   _docsInitialized?: boolean;
   pendingFileContext?: import('./file-context-primer.js').FileContextBlock | null;
   pendingMilestonePrompt?: import('./milestone-tracker.js').MilestonePromptBlock | null;
+  reentryInjected: Set<string>;
 }
 
 export interface PluginContext {
@@ -84,6 +85,7 @@ export interface PluginContext {
   beliefKnowledge: BeliefKnowledgeConsolidator;
   livingState: LivingStateRuntime;
   livingStateAdvisor: LivingStateAdvisor;
+  reEntryProtocol?: import('./re-entry-protocol.js').ReEntryProtocol;
   decisionRegistry?: import('./decision-registry.js').DecisionRegistry;
   knownDebtRegistry?: import('./known-debt-registry.js').KnownDebtRegistry;
   lintDeltaTracker?: import('./lint-delta-tracker.js').LintDeltaTracker;

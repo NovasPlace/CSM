@@ -35,6 +35,7 @@ import { SelfModelUpdater } from './self-model-updater.js';
 import { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
 import { LivingStateRuntime } from './living-state-runtime.js';
 import { LivingStateAdvisor } from './living-state-advisor.js';
+import { ReEntryProtocol } from './re-entry-protocol.js';
 import { VcmManager } from './vcm-manager.js';
 import { ContextCapSensor } from './context-cap-sensor.js';
 import { BeliefPromotionScanner } from './belief-promotion-scanner.js';
@@ -101,6 +102,7 @@ export async function registerHooks(
     messageCount: 0,
     capturedMessageSizes: new Map<string, number>(),
     recentUserMessages: new Map<string, string>(),
+    reentryInjected: new Set<string>(),
   };
 
   const syncActiveSession = (sessionId?: string): string | null => {
@@ -144,6 +146,13 @@ export async function registerHooks(
     beliefPromotion,
   );
   const livingStateAdvisor = new LivingStateAdvisor(livingState, config.livingState);
+  const reEntryProtocol = new ReEntryProtocol({
+    pool: database.getPool(),
+    memoryManager,
+    selfModel,
+    beliefStore: beliefKnowledge,
+    workJournal,
+  });
   const vcmManager = new VcmManager(memoryManager, database);
   const contextCapSensor = new ContextCapSensor(config.targetContextCap);
   const lessonTriggers = new LessonTriggerCache(database.getPool());
@@ -172,6 +181,7 @@ export async function registerHooks(
     refreshActiveContext, syncActiveSession,
     lastCompileResult: null,
     workJournal, experiencePackets, lessonTriggers, selfModel, beliefKnowledge, livingState, livingStateAdvisor,
+    reEntryProtocol,
     vcmManager,
     contextCapSensor,
     state: sessionState,

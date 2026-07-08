@@ -286,6 +286,31 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         output.system.push(contextBrief.compressed);
       }
 
+      // --- Phase 7B: Re-entry context injection (first turn only) ---
+      const sessionId = input.sessionID ?? '';
+
+      if (ctx.reEntryProtocol && sessionId && !ctx.state.reentryInjected.has(sessionId)) {
+        ctx.state.reentryInjected.add(sessionId);
+        try {
+          const projectId = ctx.directory ?? 'unknown';
+          const diag = await ctx.reEntryProtocol.diagnose(sessionId, projectId);
+
+          getLogger().info('Re-entry block diagnosed', {
+            sessionId,
+          });
+
+          if (diag.layersDropped.length > 0 || diag.layersTrimmed.length > 0) {
+            getLogger().info('Re-entry budget trimming applied', { sessionId });
+          }
+
+          const block = await ctx.reEntryProtocol.buildBlock(sessionId, projectId);
+          if (block && capTrimLevel !== 'minimal') {
+            output.system.push(block);
+            getLogger().info('Re-entry block injected', { sessionId });
+          }
+        } catch { /* re-entry injection non-critical */ }
+      }
+
       // --- Phase 4F: Advisory Living State block ---
       if (shouldInjectAdvisory(capTrimLevel) && ctx.livingStateAdvisor) {
         try {
