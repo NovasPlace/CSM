@@ -2,6 +2,14 @@ import { Database } from "./database.js";
 import type { MemorySearchOptions } from "./types.js";
 import { ilikeExpr, jsonContainsParam, jsonExtractValue } from "./db/query-dialect.js";
 
+// --- Typed row DTO for search results (Phase L4-K) ---
+
+interface SearchRow {
+  id: number;
+  rank?: number;
+  boost?: number;
+}
+
 export type HybridWeights = {
   vector: number;
   text: number;
@@ -72,7 +80,7 @@ export async function ftsSearch(
        LIMIT $2`,
       params,
     );
-    return result.rows.map((r: any, i: number) => ({ id: r.id, rank: 1 / (RRF_K + i + 1) }));
+    return (result.rows as SearchRow[]).map((r, i) => ({ id: r.id, rank: 1 / (RRF_K + i + 1) }));
   } catch {
     return [];
   }
@@ -99,7 +107,7 @@ export async function vectorSearch(
      LIMIT $2`,
     params,
   );
-  return result.rows.map((r: any, i: number) => ({ id: r.id, rank: 1 / (RRF_K + i + 1) }));
+  return (result.rows as SearchRow[]).map((r, i) => ({ id: r.id, rank: 1 / (RRF_K + i + 1) }));
 }
 
 export async function entityMatchBoost(
@@ -135,7 +143,7 @@ export async function entityMatchBoost(
        LIMIT $${params.length}`,
       params,
     );
-    return result.rows.map((r: any) => ({ id: r.id, boost: r.boost }));
+    return (result.rows as SearchRow[]).map((r) => ({ id: r.id, boost: r.boost ?? 0 }));
   } catch {
     return [];
   }
