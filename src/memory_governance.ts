@@ -63,33 +63,35 @@ export class MemoryGovernance {
       const now = Date.now();
       const vetoes: GovernanceVeto[] = [];
 
-      for (const row of result.rows as any[]) {
-        const gov = row.metadata?.governance ?? {};
+      for (const row of result.rows as unknown[]) {
+        const r = row as Record<string, unknown>;
+        const meta = r.metadata as Record<string, unknown> | undefined;
+        const gov = (meta?.governance as Record<string, unknown> | undefined) ?? {};
         if (!gov.failure_mode || !gov.veto_action || !gov.required_action) continue;
-        if (hasNonGovernanceProvenance(row.metadata)) continue;
+        if (hasNonGovernanceProvenance(meta ?? {})) continue;
 
-        const createdMs = new Date(row.created_at).getTime();
+        const createdMs = new Date(r.created_at as string).getTime();
         const stalenessMs = now - createdMs;
 
         accessLog.push({
-          memoryId: row.id,
+          memoryId: r.id as number,
           accessedAt: new Date().toISOString(),
           accessType: 'direct_db_query',
           stalenessMs,
-          confidence: row.confidence ?? 0.7,
+          confidence: (r.confidence as number) ?? 0.7,
         });
 
         vetoes.push({
-          memoryId: row.id,
-          failureMode: gov.failure_mode,
-          vetoAction: gov.veto_action,
-          requiredAction: gov.required_action,
-          content: row.content,
-          importance: row.importance,
-          confidence: row.confidence ?? 0.7,
+          memoryId: r.id as number,
+          failureMode: gov.failure_mode as string,
+          vetoAction: gov.veto_action as string,
+          requiredAction: gov.required_action as string,
+          content: (r.content as string) ?? '',
+          importance: r.importance as number,
+          confidence: (r.confidence as number) ?? 0.7,
           stalenessMs,
-          sourceSessionId: row.session_id ?? null,
-          provenanceVerified: hasGovernanceProvenance(row.metadata),
+          sourceSessionId: r.session_id as string | null,
+          provenanceVerified: hasGovernanceProvenance(meta ?? {}),
         });
       }
 
@@ -181,14 +183,15 @@ export class MemoryGovernance {
   }
 }
 
-function hasGovernanceProvenance(metadata: any): boolean {
-  const sourceKind = metadata?.source_kind;
-  const evidence = metadata?.evidence_strength;
-  return ['transcript', 'tool_trace', 'file_diff', 'user_supplied'].includes(sourceKind)
+function hasGovernanceProvenance(metadata: Record<string, unknown>): boolean {
+  const sourceKind = metadata?.source_kind as string | undefined;
+  const evidence = metadata?.evidence_strength as string | undefined;
+  return sourceKind !== undefined
+    && ['transcript', 'tool_trace', 'file_diff', 'user_supplied'].includes(sourceKind)
     && evidence === 'direct_original';
 }
 
-function hasNonGovernanceProvenance(metadata: any): boolean {
+function hasNonGovernanceProvenance(metadata: Record<string, unknown>): boolean {
   if (!metadata?.source_kind && !metadata?.evidence_strength) return false;
   return !hasGovernanceProvenance(metadata);
 }

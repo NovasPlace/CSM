@@ -56,10 +56,10 @@ import { disposeAll } from './hooks/dispose-hooks.js';
 export async function registerHooks(
   ctx: PluginInput,
   options?: PluginOptions,
-  _defaultExports: any = {}
+  _defaultExports: unknown = {}
 ): Promise<Hooks> {
   const config = validateAndReturnConfig();
-  const mergedConfig = { ...config, ...(options as any ?? {}) };
+  const mergedConfig = { ...config, ...(options as unknown ?? {}) };
 
   const logging = new Logger({
     sessionId: undefined,
@@ -200,7 +200,7 @@ export async function registerHooks(
     'experimental.compaction.autocontinue': createAutocontinueHook(pluginCtx),
     'tool.execute.before': createToolExecuteBeforeHook(pluginCtx),
     'tool.execute.after': createToolExecuteAfterHook(pluginCtx),
-    tool: registerTools(pluginCtx),
+    tool: registerTools(pluginCtx) as unknown as Hooks['tool'],
     dispose: () => disposeAll(ctx, pluginCtx),
   };
 }

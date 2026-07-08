@@ -30,7 +30,7 @@ import { CandidateGenerator } from '../candidate-generator.js';
 import { ArchiveCandidateReportBuilder } from '../archive-candidate-report.js';
 import { MemoryGovernanceReportBuilder } from '../memory-governance-report.js';
 
-export function registerTools(pluginCtx: PluginContext): Record<string, any> {
+export function registerTools(pluginCtx: PluginContext): Record<string, unknown> {
   const {
     memoryManager, database, primingEngine, contextRecall,
     toolDistiller, memoryExtractor, redactor, contextCompactor,

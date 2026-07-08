@@ -3,7 +3,7 @@ import { AlchemistEngine } from './alchemist.js';
 import { Redactor } from './redactor.js';
 import { DEFAULT_CONFIG } from './config.js';
 import { estimateTokens } from './token-bucket-analyzer.js';
-import type { CompressedPartDetail } from './types.js';
+import type { CompressedPartDetail, ContextCompilerConfig } from './types.js';
 
 interface BenchmarkPart {
   type?: string;
@@ -131,7 +131,7 @@ function extractEvidenceRetained(result: CompileResult): number {
 
 function runBenchmark(
   messages: BenchmarkMessage[],
-  config: any,
+  config: ContextCompilerConfig,
   alchemist?: AlchemistEngine,
   redactor?: Redactor,
 ): BenchmarkReport {

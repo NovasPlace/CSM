@@ -3,6 +3,7 @@
  * Passed to each extracted hook so they can access shared state
  * without capturing closure variables from index.ts.
  */
+import type { PluginInput } from '@opencode-ai/plugin';
 import type { PluginConfig } from './types.js';
 import type { Database } from './database.js';
 import type { MemoryManager } from './memory-manager.js';
@@ -54,7 +55,7 @@ export interface PluginState {
 export interface PluginContext {
   config: PluginConfig;
   database: Database;
-  client: any;
+  client: PluginInput['client'];
   directory: string;
   worktree?: string;
   memoryManager: MemoryManager;

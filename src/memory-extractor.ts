@@ -16,6 +16,13 @@ import {
   ToolCallGroup,
   ToolCallSummary,
 } from './types.js';
+
+interface Turn {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export class MemoryExtractor {
   private database: Database;
   private embeddings: EmbeddingGenerator;
@@ -41,7 +48,7 @@ export class MemoryExtractor {
   /**
    * Extract memories from conversation turns
    */
-  async extractFromTurns(sessionId: string, projectId: string, turns: any[]): Promise<MemoryCandidate[]> {
+  async extractFromTurns(sessionId: string, projectId: string, turns: unknown[]): Promise<MemoryCandidate[]> {
     if (!this.config.enabled) return [];
 
     if (turns.length < this.config.minTurnsBeforeExtract) {
@@ -56,7 +63,7 @@ export class MemoryExtractor {
       }
 
       // Analyze turn for extractable content
-      const analysis = await this.analyzeTurnForMemories(turn);
+      const analysis = await this.analyzeTurnForMemories(turn as Turn);
 
       if (analysis.score >= this.config.confidenceThreshold) {
         const candidate: MemoryCandidate = {
@@ -70,8 +77,8 @@ export class MemoryExtractor {
           confidence: analysis.score,
           tags: this.generateTags(analysis),
           metadata: {
-            turnId: turn.id,
-            role: turn.role,
+            turnId: (turn as Turn).id,
+            role: (turn as Turn).role,
             source: 'extractor',
             extractionMethod: 'llm',
           },
@@ -139,11 +146,8 @@ export class MemoryExtractor {
     const importance = isFailure ? 0.75 : 0.6;
     const emotion: MemoryEmotion = isFailure ? 'frustration' : 'success';
     const confidence = 0.92;
-
-    let content = group.proceduralInsight ?? group.intent;
-    if (isFailure) {
-      content = this.makeActionableLesson(content, group);
-    }
+    const content = isFailure ? this.makeActionableLesson(group.proceduralInsight ?? group.intent, group) : (group.proceduralInsight ?? group.intent);
+    const status = this.determineInitialStatus(confidence) as 'pending' | 'approved' | 'rejected' | 'auto-approved';
 
     const tags = this.generateDistilledTags(group, isFailure);
     const metadata: Record<string, unknown> = {
@@ -177,7 +181,7 @@ export class MemoryExtractor {
       confidence,
       tags,
       metadata,
-      status: this.determineInitialStatus(confidence),
+      status,
       source: 'extractor',
       createdAt: new Date(),
       reviewedAt: undefined,
@@ -235,7 +239,7 @@ export class MemoryExtractor {
   /**
    * Analyze a turn for extractable memory content
    */
-  private async analyzeTurnForMemories(turn: any): Promise<{
+  private async analyzeTurnForMemories(turn: unknown): Promise<{
     type: MemoryType;
     content: string;
     importance: number;
@@ -282,12 +286,12 @@ export class MemoryExtractor {
   /**
    * Extract relevant content from a turn
    */
-  private extractContentFromTurn(turn: any): string {
-    if (turn.role === 'user') {
-      return `[User request]: ${turn.content}`;
-    } else if (turn.role === 'assistant') {
+  private extractContentFromTurn(turn: unknown): string {
+    if ((turn as Turn).role === 'user') {
+      return `[User request]: ${(turn as Turn).content}`;
+    } else if ((turn as Turn).role === 'assistant') {
       // Extract key decisions, solutions, or insights
-      const content = turn.content;
+      const content = (turn as Turn).content;
       
       // Look for decision patterns
       const decisionPatterns = [
@@ -344,10 +348,10 @@ export class MemoryExtractor {
       }
       
       return `[Assistant response]: ${content.substring(0, 200)}`;
-    }
-    
-    return turn.content ?? '';
-  }
+     }
+
+     return (turn as Turn).content ?? '';
+   }
 
   /**
    * Calculate confidence score for extraction

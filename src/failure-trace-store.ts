@@ -1,5 +1,5 @@
 import type { DatabasePool } from './types.js';
-import type { FailureTrace, FailureTraceStorage } from './failure-trace-types.js';
+import type { FailureTrace, FailureTraceStatus, FailureTraceStorage } from './failure-trace-types.js';
 import { redact } from './redactor.js';
 import { ilikeExpr, dialectFromPool } from './db/query-dialect.js';
 
@@ -26,6 +26,26 @@ CREATE INDEX IF NOT EXISTS failure_traces_session_idx ON failure_traces(created_
 CREATE INDEX IF NOT EXISTS failure_traces_phase_idx ON failure_traces(linked_phase);
 CREATE INDEX IF NOT EXISTS failure_traces_created_idx ON failure_traces(created_at DESC);
 `;
+
+interface FailureTraceRow {
+  id: number;
+  problem: string;
+  attempted_action: string;
+  result: string;
+  failure_reason?: string;
+  diagnosis?: string;
+  correction?: string;
+  lesson_created?: string;
+  later_behavior_change?: string;
+  evidence_anchors?: unknown;
+  drift_summary?: string;
+  linked_phase?: number;
+  linked_commit?: string;
+  created_at: string;
+  updated_at?: string;
+  created_by_session: string;
+  related_trace_ids?: unknown;
+}
 
 export class FailureTraceStore implements FailureTraceStorage {
   constructor(private pool: DatabasePool) {}
@@ -148,19 +168,19 @@ export class FailureTraceStore implements FailureTraceStorage {
     return this.mapRows(res.rows);
   }
 
-  private mapRows(rows: any[]): FailureTrace[] {
+  private mapRows(rows: unknown[]): FailureTrace[] {
     if (!rows || rows.length === 0) return [];
-    const parseJson = (v: any) => {
+    const parseJson = (v: unknown) => {
       if (typeof v === 'string') {
         try { return JSON.parse(v); } catch { return v; }
       }
       return v;
     };
-    return rows.map(r => ({
+    return (rows as FailureTraceRow[]).map(r => ({
       id: r.id,
       problem: r.problem,
       attemptedAction: r.attempted_action,
-      result: r.result,
+      result: r.result as FailureTraceStatus,
       failureReason: r.failure_reason ? redact(r.failure_reason).text : undefined,
       diagnosis: r.diagnosis ? redact(r.diagnosis).text : undefined,
       correction: r.correction ? redact(r.correction).text : undefined,

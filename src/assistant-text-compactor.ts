@@ -2,6 +2,7 @@
 // Conservative precision pass: preserves semantic signals, compresses verbose prose.
 
 import { estimateTokens } from './token-bucket-analyzer.js';
+import type { SessionPart } from './checkpoint-types.js';
 
 // chars per token constant removed — unused
 
@@ -96,7 +97,7 @@ function compactTextPart(
  * @returns Result with before/after token counts
  */
 export function compactAssistantText(
-  messages: { info?: { role?: string; time?: { created?: number } }; parts?: any[] }[],
+  messages: { info?: { role?: string; time?: { created?: number } }; parts?: SessionPart[] }[],
   config: AssistantCompactorConfig,
 ): AssistantCompactionResult {
   if (!config.enabled) {

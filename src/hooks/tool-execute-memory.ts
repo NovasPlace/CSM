@@ -59,27 +59,29 @@ function shouldLogTool(tool: string): boolean {
 
 export async function logToolUsage(
   ctx: PluginContext,
-  input: any,
-  output: any,
+  input: unknown,
+  output: unknown,
   sid: string | null,
 ): Promise<void> {
-  const packagedToolMetadata = await packageToolEvidence(ctx, input, output);
+  const inputRecord = input as Record<string, unknown>;
+  const outputRecord = output as Record<string, unknown>;
+  const packagedToolMetadata = await packageToolEvidence(ctx, inputRecord, outputRecord);
 
-  if (shouldLogTool(input.tool)) {
-    if (toolDedup.shouldSuppress(input.tool, input.args)) {
+  if (shouldLogTool(inputRecord.tool as string)) {
+    if (toolDedup.shouldSuppress(inputRecord.tool as string, inputRecord.args)) {
       return;
     }
     await ctx.memoryManager.saveMemory({
-      content: `Tool used: ${input.tool}`,
+      content: `Tool used: ${inputRecord.tool as string}`,
       type: 'episodic',
       importance: 0.2,
       source: 'auto',
-      tags: ['tool-usage', input.tool],
+      tags: ['tool-usage', inputRecord.tool as string],
       metadata: {
-        tool: input.tool,
-        args: input.args,
-        outputPreview: typeof output.output === 'string'
-          ? output.output.substring(0, 200)
+        tool: inputRecord.tool as string,
+        args: inputRecord.args,
+        outputPreview: typeof outputRecord.output === 'string'
+          ? (outputRecord.output as string).substring(0, 200)
           : 'non-string output',
         contextBudget: packagedToolMetadata?.contextBudget,
         evidenceRef: packagedToolMetadata?.evidenceRef,
@@ -89,30 +91,33 @@ export async function logToolUsage(
     });
   }
 
-  if (input.tool === 'write' || input.tool === 'edit' || input.tool === 'multiedit') {
-    const filePath = input.args?.filePath ?? input.args?.path ?? 'unknown';
+  const tool = inputRecord.tool as string;
+  const args = inputRecord.args as Record<string, unknown> | undefined;
+
+  if (tool === 'write' || tool === 'edit' || tool === 'multiedit') {
+    const filePath = args?.filePath ?? args?.path ?? 'unknown';
     await ctx.memoryManager.saveMemory({
-      content: `File ${input.tool === 'write' ? 'written' : 'edited'}: ${filePath}`,
+      content: `File ${tool === 'write' ? 'written' : 'edited'}: ${filePath}`,
       type: 'episodic',
       importance: 0.4,
       source: 'auto',
-      tags: ['file-operation', input.tool],
-      metadata: { operation: input.tool, filePath },
+      tags: ['file-operation', tool],
+      metadata: { operation: tool, filePath },
       sessionId: sid ?? undefined,
     });
   }
 
-  if (ctx.config.logCommands && input.tool === 'bash') {
-    const metadata = await packageCommandEvidence(ctx, input, output);
-    const command = String(input.args?.command ?? 'unknown');
-    await ctx.memoryManager.saveMemory({
-      content: `Command executed: ${command.substring(0, 200)}`,
-      type: 'procedural',
-      importance: 0.3,
-      source: 'auto',
-      tags: ['command', 'procedural', 'context-budget'],
-      metadata: metadata ?? { command: command.substring(0, 500), exitCode: output.metadata?.exitCode },
-      sessionId: sid ?? undefined,
-    });
+  if (ctx.config.logCommands && tool === 'bash') {
+    const metadata = await packageCommandEvidence(ctx, inputRecord, outputRecord);
+     const command = String(args?.command ?? 'unknown');
+     await ctx.memoryManager.saveMemory({
+       content: `Command executed: ${command.substring(0, 200)}`,
+       type: 'procedural',
+       importance: 0.3,
+       source: 'auto',
+       tags: ['command', 'procedural', 'context-budget'],
+       metadata: metadata ?? { command: command.substring(0, 500) },
+       sessionId: sid ?? undefined,
+     });
+   }
   }
-}

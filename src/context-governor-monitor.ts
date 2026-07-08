@@ -1,16 +1,22 @@
 import { estimateTokens } from './token-bucket-analyzer.js';
 import type { GovernorMetrics } from './context-governor-types.js';
 
-interface MessageLike {
-  info?: { role?: string };
-  parts?: any[];
+interface MonitorPart {
+  type?: string;
+  text?: string;
+  state?: Record<string, unknown>;
 }
 
-function partText(part: any): string {
+interface MessageLike {
+  info?: { role?: string };
+  parts?: MonitorPart[];
+}
+
+function partText(part: MonitorPart): string {
   return String(part.text ?? part.state?.output ?? '');
 }
 
-function countTokens(parts: any[] | undefined): number {
+function countTokens(parts: MonitorPart[] | undefined): number {
   return (parts ?? []).reduce((sum, part) => sum + estimateTokens(partText(part)), 0);
 }
 

@@ -1,7 +1,12 @@
 import { estimateTokens } from './token-bucket-analyzer.js';
 
+interface SlopePart {
+  text?: string;
+  state?: Record<string, unknown>;
+}
+
 interface MessageLike {
-  parts?: any[];
+  parts?: SlopePart[];
 }
 
 function messageTokens(message: MessageLike): number {

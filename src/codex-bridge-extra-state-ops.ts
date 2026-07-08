@@ -1,10 +1,12 @@
 import { ContextPressure } from './context-pressure.js';
 import { buildCheckpoint } from './checkpoint-builder.js';
+import type { SessionMessage } from './checkpoint-types.js';
 import { getRecentCompilation } from './context-compilation-log.js';
 import { fetchDecisions, fetchFileReads, fetchItem, fetchLastError, searchItems } from './context-cache-store.js';
 import type { CodexBridgeExtraDeps } from './codex-bridge-extra-ops.js';
 import { auditCompactionTelemetry, formatAuditReport } from './compaction-telemetry-audit.js';
 import { getActiveGoal, listGoals, setActiveGoal, updateGoal } from './goal-schema.js';
+import type { Goal } from './goal-schema.js';
 import { asLimit, asMessages, asNumber, asRecord, asString, requireSession, requireString } from './codex-bridge-extra-utils.js';
 import { CSM_TOOL_NAMES } from './tool-names.js';
 
@@ -42,7 +44,7 @@ export async function goalUpdateOp(deps: CodexBridgeExtraDeps, sessionId: string
   const sid = requireSession(sessionId);
   const goalId = asString(input.goalId) ?? (await getActiveGoal(deps.database.getPool(), sid))?.id;
   if (!goalId) return { found: false };
-  return updateGoal(deps.database.getPool(), goalId, { description: asString(input.description) ?? undefined, status: asString(input.status) as any, context: asRecord(input.context) });
+  return updateGoal(deps.database.getPool(), goalId, { description: asString(input.description) ?? undefined, status: asString(input.status) as Goal['status'], context: asRecord(input.context) });
 }
 
 export async function goalListOp(deps: CodexBridgeExtraDeps, sessionId: string | undefined, input: Record<string, unknown>) {
@@ -53,7 +55,7 @@ export async function createCheckpointOp(deps: CodexBridgeExtraDeps, sessionId: 
   const sid = requireSession(sessionId);
   const messages = Array.isArray(input.messages) ? input.messages : [];
   if (messages.length === 0) return { created: false, reason: 'messages_required' };
-  const built = buildCheckpoint({ sessionId: sid, projectId: asString(input.projectRoot) ?? sid, messages: messages as any[], config: deps.checkpointConfig });
+  const built = buildCheckpoint({ sessionId: sid, projectId: asString(input.projectRoot) ?? sid, messages: messages as SessionMessage[], config: deps.checkpointConfig });
   return { created: true, checkpoint: await deps.checkpointStore.createCheckpoint(built.checkpoint), build: built };
 }
 

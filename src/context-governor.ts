@@ -35,9 +35,15 @@ function getThresholds(config: GovernorConfig): { lightBrief: number; compactToo
   };
 }
 
+interface GovernorPart {
+  type?: string;
+  text?: string;
+  state?: Record<string, unknown>;
+}
+
 interface MessageLike {
   info?: { role?: string };
-  parts?: any[];
+  parts?: GovernorPart[];
 }
 
 function chooseAction(total: number, projected: number, budget: number, thresholds: { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number }): GovernorActionName {
@@ -70,7 +76,7 @@ function compileBudget(targetBudget: number, projectedGrowth: number): number {
   return Math.max(2_000, targetBudget - projectedGrowth);
 }
 
-function textPart(text: string): any {
+function textPart(text: string): GovernorPart {
   return { type: 'text', text };
 }
 

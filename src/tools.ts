@@ -527,15 +527,15 @@ export function memoryProjectListTool(memoryManager: MemoryManager) {
     description: 'List all project scopes with memory counts.',
     args: {},
     async execute(_args, _context) {
-      const projects = await memoryManager.getAllProjectScopes();
+       const projects = await memoryManager.getAllProjectScopes();
 
-      let output = `Found ${projects.length} projects:\n\n`;
+       let output = `Found ${projects.length} projects:\n\n`;
 
-      for (const project of projects) {
-        output += `#${project.project_id} - ${project.name}\n`;
-        output += `  Directory: ${project.directory}\n`;
-        output += `  Memories: ${project.memory_count} | Last active: ${project.last_active_at}\n\n`;
-      }
+       for (const project of projects) {
+         output += `#${project.projectId} - ${project.name}\n`;
+         output += `  Directory: ${project.directory}\n`;
+         output += `  Memories: ${project.memoryCount} | Last active: ${project.lastActiveAt}\n\n`;
+       }
 
       return {
         title: 'Project Scopes',
