@@ -70,6 +70,17 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
       if (ctx.config.logToolUsage) {
         await logToolUsage(ctx, input, output, sid);
       }
+
+      // Auto-docs: queue file changes regardless of logToolUsage config
+      if (input.tool === 'write' || input.tool === 'edit' || input.tool === 'multiedit') {
+        const { queueDocUpdate, setAutoDocsEnabled } = await import('./auto-docs.js');
+        const { scheduleDocFlushLocal } = await import('./tool-execute-memory.js');
+        setAutoDocsEnabled(ctx.config?.autoDocs?.enabled !== false);
+        const args = (input as { args?: { filePath?: string; path?: string } }).args;
+        const filePath = args?.filePath ?? args?.path ?? 'unknown';
+        queueDocUpdate(filePath, input.tool === 'write' ? 'write' : 'edit');
+        scheduleDocFlushLocal(ctx);
+      }
     } catch (error) {
       console.error('[CrossSessionMemory] Tool tracking error:', error);
     }

@@ -20,6 +20,11 @@ export function createEventHook(
         syncActiveSession(session.id);
         subconscious.watchPath(ctx.directory);
 
+        // Reset auto-docs state for new session
+        const { resetInitializedProjects, resetFlushedFlag } = await import('./auto-docs.js');
+        resetInitializedProjects();
+        resetFlushedFlag();
+
         if (ctx.worktree) {
           gitWatcher.watchRepo(ctx.worktree);
         }
