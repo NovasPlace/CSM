@@ -33,6 +33,11 @@
 
 ### Done
 - **Phase 8A-Impl — Re-entry Preview Adapter + Tool**: `src/reentry-ux-tool.ts` — `ReEntryPreviewAdapter` wrapping real `ReEntryProtocol` (built against actual `ReEntryDiagnostic` interface, not an imagined one). `csm_reentry_preview` tool registered in `src/hooks/tool-hooks.ts`; `ReEntryPreviewAdapter` instantiated from `pluginCtx.reEntryProtocol`. Read-only: calls `buildBlock()`/`diagnose()` only, no writes. 5 new tests. Tool count 31→32. Committed `4b7c2f1`.
+- **Phase 8A Complete**: `csm_reentry_preview` live, read-only, tool count 32, 813/813 tests, default behavior unchanged. Preview-only default preserved; no injection unless explicitly enabled.
+
+### Next (not started — awaiting explicit go-ahead)
+- **Phase 8B — Re-entry Live Enablement Controls**: `docs/PHASE8B_REENTRY_ENABLEMENT.md` spec captured. Explicit operator flag to enable injection (default stays preview-only). Gated on operator request.
+- **Phase 8C — Smart Trimming**: Adaptive token budgeting (after 8B).
 
 ### Done
 - **Phase 1A (Config Contract)**: `.env.example` (19 env vars), `src/config.ts` with `getEnvString/getEnvBoolean/getEnvNumber`, provider-specific env vars, mode-based DB URL, `validateAndReturnConfig()`
