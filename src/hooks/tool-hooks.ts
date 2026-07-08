@@ -11,7 +11,7 @@ import { memoryPacketsTool } from '../experience-packet-tool.js';
 import { beliefScanTool, beliefScanReportTool } from '../belief-scan-tool.js';
 import { BeliefPromotionScanner } from '../belief-promotion-scanner.js';
 import { BeliefPromotionEngine } from '../belief-promotion.js';
-import { beliefPromotionTool } from '../belief-promotion-tool.js';
+import { beliefPromotionTool, beliefPromotionScanTool } from '../belief-promotion-tool.js';
 import { selfModelTool } from '../self-model-tool.js';
 import { beliefKnowledgeTool } from '../belief-knowledge-tool.js';
 import { livingStatePreviewTool, livingStateDebugTool } from '../living-state-tool.js';
@@ -70,6 +70,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     csm_belief_scan: beliefScanTool(beliefScanner),
     csm_belief_scan_report: beliefScanReportTool(beliefScanner),
     csm_belief_promote: beliefPromotionTool(beliefPromotion, config.beliefPromotion),
+    csm_belief_promotion_scan: beliefPromotionScanTool(beliefPromotion, config.beliefPromotion),
     csm_self_model: selfModelTool(pluginCtx.selfModel),
     csm_belief_knowledge: beliefKnowledgeTool(pluginCtx.beliefKnowledge),
     csm_living_state_preview: livingStatePreviewTool(pluginCtx.livingState),

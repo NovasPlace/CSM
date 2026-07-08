@@ -8,7 +8,7 @@
 |------|---------|------|------|
 | `src/tool-names.ts` | CSM_TOOL_NAMES, CsmToolName | src | Tool registration |
 | `test/continuity-report.test.ts` | none | test | Test suite |
-| `src/continuity-resilience-report.ts` | ContinuityGrade, SectionResult, ContinuityReport, MemoryInventory, RecallHealthData, GraphReadinessData, PipelineStatusData, LivingStateData, DocsFreshnessData, ToolRegistryData, SystemAdvisory, KnowledgeSignals, ContinuityConfidence, collectDocsFreshness, collectToolRegistryHealth, collectSystemHealthAdvisories, computeContinuityConfidence, buildContinuityResilienceReport | src | Memory & recall subsystem |
+| `src/continuity-resilience-report.ts` | ContinuityGrade, SectionResult, ContinuityReport, MemoryInventory, RecallHealthData, GraphReadinessData, PipelineStatusData, LivingStateData, DocsFreshnessData, ToolRegistryData, SystemAdvisory, KnowledgeSignals, ContinuityConfidence, collectDocsFreshness, collectToolRegistryHealth, collectSystemHealthAdvisories, computeContinuityConfidence, formatReport, buildContinuityResilienceReportData, buildContinuityResilienceReport, ReportMode, ReportFormat, ContinuityReportOptions, ReportSnapshot, ContinuityComparison, ContinuityDelta, snapshotFromReport, saveSnapshot, loadSnapshot, compareSnapshots, buildExecSummary, formatReportCompact, formatReportJson, formatReportFull, buildContinuityReportWithOptions | src | Memory & recall subsystem |
 | `test/recall-quality-scoring.test.ts` | none | test | Test suite |
 | `src/recall-quality-tool.ts` | RecallQualityAuditParams, IRecallQualityTool, RecallQualityGrade, RecallQualityScore, RecallMetrics, scoreMetrics, RecallQualityAuditParams, IRecallQualityTool, validateRecallQualityAuditParams, RecallQualityAuditReportBuilder, mockRecallQualityAuditReport | src | Tool registration |
 | `src/milestone-tracker.ts` | MilestoneScope, MilestoneEvidence, MilestonePromptBlock, SaveMilestoneParams, SavedMilestone, MilestoneTracker | src | Module |
@@ -299,7 +299,7 @@
 | `src/benchmark.ts` | authenticate, runBenchmarkSuite | src | Module |
 | `src/belief-scan-tool.ts` | beliefScanTool, beliefScanReportTool | src | Tool registration |
 | `src/belief-promotion.ts` | PromotionConfig, PromotionCandidate, PromotionDecision, PromotionReport, BeliefPromotionEngine | src | Module |
-| `src/belief-promotion-tool.ts` | beliefPromotionTool | src | Tool registration |
+| `src/belief-promotion-tool.ts` | beliefPromotionTool, beliefPromotionScanTool | src | Tool registration |
 | `src/belief-promotion-scanner.ts` | BeliefScanConfig, BeliefCandidateRow, BeliefScanReport, BeliefPromotionScanner | src | Module |
 | `src/belief-knowledge-tool.ts` | beliefKnowledgeTool | src | Tool registration |
 | `src/belief-knowledge-store.ts` | BeliefKnowledgeConsolidator | src | Module |

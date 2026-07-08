@@ -383,4 +383,168 @@ describe('BeliefPromotionEngine', () => {
 
     await cleanup(pool, [packetId], [candidateId]);
   });
+
+  it('live promotion is idempotent (re-running does not re-promote applied candidates)', async () => {
+    const packetId1 = await insertTestPacket(pool, { session_id: 'test-sess-1' });
+    const packetId2 = await insertTestPacket(pool, { session_id: 'test-sess-2' });
+    const dedupKey = `live-test-idempotent-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const candidateId = await insertTestCandidate(pool, {
+      confidence: 0.95,
+      reinforcement_count: 7,
+      source_packet_ids: [packetId1, packetId2],
+      dedup_key: dedupKey,
+      reason: `Idempotent promotion test ${Date.now()}`,
+    });
+
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
+
+    // First run: promote
+    const report1 = await engine.promote({ dryRun: false, minConfidence: 0.7, minReinforcement: 3, minEvidenceRefs: 2, minSessions: 1 });
+    const decision1 = report1.decisions.find(d => d.candidateId === candidateId);
+    assert.ok(decision1, 'first run decision should exist');
+    assert.equal(decision1.action, 'promote');
+    const promotedCount1 = report1.promotedMemoryIds.length;
+    assert.ok(promotedCount1 >= 1, 'first run should promote at least one');
+
+    // Second run: candidate should be 'applied', not re-promoted
+    const report2 = await engine.promote({ dryRun: false, minConfidence: 0.7, minReinforcement: 3, minEvidenceRefs: 2, minSessions: 1 });
+    const decision2 = report2.decisions.find(d => d.candidateId === candidateId);
+    // The candidate should not appear in the second run since it's already 'applied'
+    const stillPending = report2.decisions.find(d => d.candidateId === candidateId && d.action === 'promote');
+    assert.equal(stillPending, undefined, 'applied candidate should not be re-promoted');
+
+    // Verify candidate status is 'applied' in DB
+    const candResult = await pool.query('SELECT status FROM memory_candidate_queue WHERE id = $1', [candidateId]);
+    assert.equal(candResult.rows[0].status, 'applied', 'candidate should be applied in DB');
+
+    await cleanup(pool, [packetId1, packetId2], []);
+  });
+
+  it('empty candidate queue returns clean empty result, not failure', async () => {
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
+
+    // Clear all test artifacts to ensure clean queue (other pending candidates may exist in dev DB)
+    // We just verify that the engine doesn't throw on an empty result set
+    const report = await engine.promote({ dryRun: true, minConfidence: 0.99, minReinforcement: 999 });
+
+    assert.ok(report, 'should return a report');
+    assert.equal(report.promoted, 0, 'should not promote anything');
+    // candidatesEvaluated may be > 0 if real candidates exist in dev DB, but no errors
+    assert.ok(typeof report.candidatesEvaluated === 'number', 'candidatesEvaluated should be a number');
+    assert.ok(Array.isArray(report.decisions), 'decisions should be an array');
+  });
+});
+
+// ============================================================================
+// Phase 4G: csm_belief_promotion_scan tool (read-only)
+// ============================================================================
+
+describe('csm_belief_promotion_scan tool', () => {
+  let pool: pg.Pool;
+
+  before(() => { pool = makePool(); });
+  beforeEach(async () => { await cleanupTestArtifacts(pool); });
+  after(async () => { await pool.end(); });
+
+  it('scan tool performs no writes (no memories created)', async () => {
+    const packetId1 = await insertTestPacket(pool, { session_id: 'scan-sess-1' });
+    const packetId2 = await insertTestPacket(pool, { session_id: 'scan-sess-2' });
+    const candidateId = await insertTestCandidate(pool, {
+      confidence: 0.95,
+      reinforcement_count: 7,
+      source_packet_ids: [packetId1, packetId2],
+      dedup_key: `scan-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      reason: `Scan tool test ${Date.now()}`,
+    });
+
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const { beliefPromotionScanTool } = await import('../dist/belief-promotion-tool.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
+    const tool = beliefPromotionScanTool(engine, testPromotionConfig);
+
+    const output = await tool.execute({}) as string;
+
+    // Verify no memories were created
+    const memCheck = await pool.query(
+      "SELECT COUNT(*) as cnt FROM memories WHERE metadata->>'promotion_source' = 'belief_promotion_engine' AND content LIKE '[Promoted fr%'",
+    );
+    const cnt = typeof memCheck.rows[0].cnt === 'string' ? parseInt(memCheck.rows[0].cnt) : memCheck.rows[0].cnt;
+    assert.equal(cnt, 0, 'scan tool should not create any memories');
+
+    // Verify candidate is still 'pending' (not promoted)
+    const candResult = await pool.query('SELECT status FROM memory_candidate_queue WHERE id = $1', [candidateId]);
+    assert.equal(candResult.rows[0].status, 'pending', 'scan tool should not change candidate status');
+
+    // Verify output mentions read-only
+    assert.ok(output.includes('READ-ONLY') || output.includes('read-only') || output.includes('No writes'), 'output should mention read-only');
+
+    await cleanup(pool, [packetId1, packetId2], [candidateId]);
+  });
+
+  it('scan tool shows decisions with reasoning', async () => {
+    const packetId = await insertTestPacket(pool);
+    const candidateId = await insertTestCandidate(pool, {
+      confidence: 0.3,
+      reinforcement_count: 1,
+      source_packet_ids: [packetId],
+      dedup_key: `scan-low-${Date.now()}`,
+      reason: `Scan low confidence test ${Date.now()}`,
+    });
+
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const { beliefPromotionScanTool } = await import('../dist/belief-promotion-tool.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
+    const tool = beliefPromotionScanTool(engine, testPromotionConfig);
+
+    const output = await tool.execute({}) as string;
+
+    assert.ok(output.includes('BELIEF PROMOTION SCAN'), 'output should have scan header');
+    assert.ok(output.includes('Would promote') || output.includes('Would skip'), 'output should show promotion counts');
+
+    await cleanup(pool, [packetId], [candidateId]);
+  });
+
+  it('scan tool returns graceful message when promotion is disabled', async () => {
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const { beliefPromotionScanTool } = await import('../dist/belief-promotion-tool.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), { ...testPromotionConfig, enabled: false });
+    const tool = beliefPromotionScanTool(engine, { ...testPromotionConfig, enabled: false });
+
+    const output = await tool.execute({}) as string;
+    assert.ok(output.includes('disabled'), 'should mention disabled state');
+  });
+
+  it('scan tool on empty queue does not fail', async () => {
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const { beliefPromotionScanTool } = await import('../dist/belief-promotion-tool.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
+    const tool = beliefPromotionScanTool(engine, testPromotionConfig);
+
+    const output = await tool.execute({ minConfidence: 0.99, minReinforcement: 999 }) as string;
+    assert.ok(output.includes('SCAN'), 'should return scan output');
+    assert.ok(output.includes('Would promote: 0'), 'should show zero promotions');
+  });
+});
+
+// ============================================================================
+// Phase 4G: Tool registration
+// ============================================================================
+
+describe('Phase 4G: tool registration', () => {
+  it('csm_belief_promotion_scan is registered in CSM_TOOL_NAMES', async () => {
+    const { CSM_TOOL_NAMES } = await import('../dist/tool-names.js');
+    assert.ok(CSM_TOOL_NAMES.includes('csm_belief_promotion_scan'), 'csm_belief_promotion_scan should be in CSM_TOOL_NAMES');
+  });
+
+  it('csm_belief_promote is registered in CSM_TOOL_NAMES', async () => {
+    const { CSM_TOOL_NAMES } = await import('../dist/tool-names.js');
+    assert.ok(CSM_TOOL_NAMES.includes('csm_belief_promote'), 'csm_belief_promote should be in CSM_TOOL_NAMES');
+  });
+
+  it('tool count is 31 (30 + 1 new scan tool)', async () => {
+    const { CSM_TOOL_NAMES } = await import('../dist/tool-names.js');
+    assert.equal(CSM_TOOL_NAMES.length, 31, `expected 31 tools, got ${CSM_TOOL_NAMES.length}`);
+  });
 });

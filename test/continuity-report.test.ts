@@ -167,8 +167,8 @@ describe('Phase 6E: Continuity Resilience Report', () => {
     assert.notEqual(result.grade, 'unknown');
   });
 
-  it('tool count is 30 after Phase 6E', () => {
-    assert.equal(CSM_TOOL_NAMES.length, 30);
+  it('tool count is 31 after Phase 6E+6F+4G', () => {
+    assert.equal(CSM_TOOL_NAMES.length, 31);
   });
 
   it('CSM_TOOL_NAMES includes csm_continuity_report', () => {
