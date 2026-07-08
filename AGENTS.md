@@ -23,6 +23,11 @@
 
 ## Progress
 ### Done
+- **Phase 7A — Re-entry Context Builder**: `src/re-entry-protocol.ts` orchestrates 8 layers with priority-based trimming, builds contextual block, preview-only mode.
+- **Phase 7B — Session Start Integration**: `src/hooks/system-transform.ts` injects re-entry block on first turn (preview-only default, first-turn tracking via `reentryInjected` Set). 4 new tests (all pass).
+- **Phase 7C — Re-entry Protocol Documentation**: `docs/PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md` created with purpose, injection mode, layer order, trimming behavior, safety model, diagnostics, validation checklist.
+
+### Done
 - **Phase 1A (Config Contract)**: `.env.example` (19 env vars), `src/config.ts` with `getEnvString/getEnvBoolean/getEnvNumber`, provider-specific env vars, mode-based DB URL, `validateAndReturnConfig()`
 - **Phase 1B (Logger Foundation)**: `src/logger.ts` with levels (debug/info/warn/error) and context (session/project/turn/memoryId), `src/stats-writer.ts` updated, `src/index.ts` startup/dispose paths use logger
 - **Phase 1C (Index Split)**: `src/hooks-registration.ts` (466 lines) with verbatim hooks/tools/dispose; `src/index.ts` simplified to re-exports; `src/plugin-entry.ts` removed
@@ -67,8 +72,6 @@
 - **Phase 4F-B (Advisory Context Brief Block)**: `src/living-state-advisor.ts` — LivingStateAdvisor module with assembleBlock(), diagnose(), buildBlockLines(), dropSection(), trimToBudget(). Wired into system-transform.ts after context brief. injectAdvisoryBlock=false default. maxAdvisoryBlockChars=1000. Untrusted trace labeling. 17 tests pass. Budget trimming: beliefs→capabilities→signals dropped first.
 - **Phase 4F-C (Staged Enablement)**: LivingStateDiagnostic interface, diagnose() method, csm_living_state_debug diagnostic tool. 6 acceptance tests. `docs/PHASE4FC_STAGED_ENABLEMENT.md`. Production schema bug fix: DROP INDEX IF EXISTS before CREATE UNIQUE INDEX IF NOT EXISTS (PG does not upgrade non-unique indexes). CSM lesson #55513.
 - **Phase 4F-C Live Smoke Test**: All 4 tools verified against live PG. Advisory block injection verified: "preview, not durable truth", no imperative language, evidence refs, prompt ordering context brief → advisory → task context. 722/722 tests pass, lint 102, build clean. Committed `b06e90d`.
-
-### Done
 
 ### Blocked
 - **`no-explicit-any` cleanup (~102 warnings)**: Typed-debt remains in checkpoint-store.ts (row mapper), agent-work-journal.ts, context-cache-runtime.ts, and other modules. Requires per-module typed DTOs and generic row mappers, not blanket replacement.

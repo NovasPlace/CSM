@@ -282,23 +282,80 @@ interface ReEntryDiagnostic {
 
 **Tests:** Integration test that system prompt contains re-entry block on first turn, not on subsequent turns.
 
-### Phase 7C — Re-entry Quality Loop
+### Phase 7B — Session Start Integration
 
-**File:** `src/reentry-quality.ts`
+**Files:** `src/hooks/system-transform.ts`, `src/hooks/event-hooks.ts`
 
 **Responsibilities:**
-- At session end, measure how well injected context predicted actual work
-- Metrics: layer hit rate (was a layer's content referenced in agent actions?), over/under-injection
-- Feedback: adjust layer priorities based on hit rates
+- Wire `reentryProtocol.buildBlock()` into system-transform.ts
+- First-turn detection via sessionState
+- Wire session.created event to pre-warm reentry (optional async prefetch)
 
-**Metrics:**
-```
-reentry_hit_rate:     fraction of layers whose content was "used" (heuristic: keyword overlap with agent messages)
-reentry_overinject:   chars injected but never referenced
-reentry_underinject:  agent had to query memory for something not in reentry block
-```
+**Tests:** Integration test that system prompt contains re-entry block on first turn, not on subsequent turns.
 
-**Tests:** Quality scoring with synthetic session data.
+### Phase 7C — Re-entry Protocol Documentation
+
+**File:** `docs/PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md`
+
+**Purpose:**
+Document Phase 7A/7B so future agents understand how onboarding/re-entry works and how to safely enable it.
+
+**Required sections:**
+
+1. **Purpose**
+   - Rehydrates a fresh model/session into current CSM-backed agent context.
+
+2. **Injection mode**
+   - System prompt augmentation only.
+   - No first-turn synthetic message.
+   - No dual-mode switching yet.
+
+3. **Preview-only default**
+   - `CSM_REENTRY_PREVIEW_ONLY=true`
+   - Builds block and logs diagnostics.
+   - Does not inject unless explicitly enabled.
+
+4. **Layer order**
+   - Identity
+   - Active Goals
+   - In-Progress Work
+   - Preferences
+   - Capabilities
+   - Beliefs
+   - Recent Context
+   - Constraints
+
+5. **Trimming behavior**
+   - Identity and Constraints are never trimmed.
+   - Lower-priority layers trim first.
+
+6. **Safety model**
+   - Operational context, not user instruction.
+   - Read-only assembly.
+   - No memory/belief/work-journal mutation during transform.
+
+7. **Diagnostics**
+   - Built / injected status
+   - Trimmed layers
+   - Preview-only status
+   - Session first-turn tracking
+
+8. **Validation checklist**
+   - Full tests
+   - Typecheck
+   - Build
+   - Lint
+   - Preview-only live restart
+   - Enabled injection test
+
+**Phase 7C Acceptance:**
+- [x] `docs/PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md` created
+- [x] Full test suite passes
+- [x] Typecheck clean
+- [x] Build clean
+- [x] Lint remains 7 (opentui.d.ts only)
+- [ ] Live preview-only restart confirms no default behavior change
+- [ ] Enabled injection test passes
 
 ### Phase 7D — Diagnostic Tools
 
