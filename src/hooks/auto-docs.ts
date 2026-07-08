@@ -122,7 +122,7 @@ export async function flushDocUpdates(context?: PluginContext, workspaceDir?: st
       await fs.writeFile(changelogPath, updated, "utf-8");
     }
   } catch (err) {
-    console.error("[auto-docs] flush error:", err);
+    getLogger().error('[auto-docs] flush error', err instanceof Error ? err : new Error(String(err)));
   }
 
   try {
@@ -135,7 +135,7 @@ export async function flushDocUpdates(context?: PluginContext, workspaceDir?: st
       getLogger().info(`[auto-docs] ARCHITECTURE refreshed: files=${archResult.fileCount} edges=${archResult.edgeCount}`);
     }
   } catch (err) {
-    console.error("[auto-docs] reconcile error:", err);
+    getLogger().error('[auto-docs] reconcile error', err instanceof Error ? err : new Error(String(err)));
   }
 
   pendingUpdates.length = 0;
@@ -188,7 +188,7 @@ export async function ensureProjectDocsInitialized(projectDir: string): Promise<
     await initializeDocsForProject(projectDir);
     getLogger().info(`[auto-docs] Initialized docs for project: ${projectDir}`);
   } catch (err) {
-    console.error(`[auto-docs] Failed to initialize docs for ${projectDir}:`, err);
+    getLogger().error(`[auto-docs] Failed to initialize docs for ${projectDir}`, err instanceof Error ? err : new Error(String(err)));
   }
 }
 

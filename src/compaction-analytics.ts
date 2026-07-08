@@ -2,6 +2,18 @@ import type { CompactionReport, SessionAnalytics, ProviderPricing, BudgetMode, C
 import type { CompileResult } from './context-compiler.js';
 import { estimateTokens } from './token-bucket-analyzer.js';
 
+// --- Typed DTO for messages with parts (Phase L4-H) ---
+
+interface AnalyticsPart {
+  type?: string;
+  text?: string;
+  state?: { output?: string };
+}
+
+interface MessageWithParts {
+  parts?: AnalyticsPart[];
+}
+
 export const DEFAULT_PROVIDER_PRICING: ProviderPricing = {
   inputPerMtok: 3,
   outputPerMtok: 15,
@@ -9,7 +21,7 @@ export const DEFAULT_PROVIDER_PRICING: ProviderPricing = {
   cacheReadPerMtok: 0.3,
 };
 
-function countToolTokens(messages: { parts?: any[] }[] | undefined): number {
+function countToolTokens(messages: MessageWithParts[] | undefined): number {
   if (!messages || !Array.isArray(messages)) return 0;
   let tokens = 0;
   for (const msg of messages) {
@@ -23,7 +35,7 @@ function countToolTokens(messages: { parts?: any[] }[] | undefined): number {
   return tokens;
 }
 
-function countTotalTokens(messages: { parts?: any[] }[] | undefined): number {
+function countTotalTokens(messages: MessageWithParts[] | undefined): number {
   if (!messages || !Array.isArray(messages)) return 0;
   let tokens = 0;
   for (const msg of messages) {
@@ -64,7 +76,7 @@ export class CompactionAnalytics {
 
   recordCompaction(
     compileResult: CompileResult,
-    messagesBefore: { parts?: any[] }[] | undefined,
+    messagesBefore: MessageWithParts[] | undefined,
     sessionId: string,
     budget: number = 20000,
     budgetMode: BudgetMode = 'normal',
@@ -78,7 +90,7 @@ export class CompactionAnalytics {
 
   private _recordCompaction(
     compileResult: CompileResult,
-    messagesBefore: { parts?: any[] }[] | undefined,
+    messagesBefore: MessageWithParts[] | undefined,
     sessionId: string,
     budget: number,
     budgetMode: BudgetMode,
