@@ -6,6 +6,9 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/tool-names.ts` | CSM_TOOL_NAMES, CsmToolName | src | Tool registration |
+| `test/continuity-report.test.ts` | none | test | Test suite |
+| `src/continuity-resilience-report.ts` | ContinuityGrade, SectionResult, ContinuityReport, MemoryInventory, RecallHealthData, GraphReadinessData, PipelineStatusData, LivingStateData, DocsFreshnessData, ToolRegistryData, SystemAdvisory, KnowledgeSignals, ContinuityConfidence, collectDocsFreshness, collectToolRegistryHealth, collectSystemHealthAdvisories, computeContinuityConfidence, buildContinuityResilienceReport | src | Memory & recall subsystem |
 | `test/recall-quality-scoring.test.ts` | none | test | Test suite |
 | `src/recall-quality-tool.ts` | RecallQualityAuditParams, IRecallQualityTool, RecallQualityGrade, RecallQualityScore, RecallMetrics, scoreMetrics, RecallQualityAuditParams, IRecallQualityTool, validateRecallQualityAuditParams, RecallQualityAuditReportBuilder, mockRecallQualityAuditReport | src | Tool registration |
 | `src/milestone-tracker.ts` | MilestoneScope, MilestoneEvidence, MilestonePromptBlock, SaveMilestoneParams, SavedMilestone, MilestoneTracker | src | Module |
@@ -118,7 +121,7 @@
 | `src/trace-vault-store.ts` | initializeTraceVaultSchema, captureTraceVault, loadTraceVaultEntries, seedTeacherTracesFromVault, formatTraceVaultForInjection | src | Module |
 | `src/trace-vault-ops.ts` | captureTraceVaultOp, previewTraceVaultOp, seedTeacherTracesFromVaultOp | src | Module |
 | `src/trace-vault-core.ts` | buildTraceVaultCapture, formatTraceVaultCapture | src | Module |
-| `src/tools.ts` | memorySaveTool, memorySearchTool, memoryDeleteTool, memoryContextTool, memoryLessonTool, memoryListTool, memoryTranscriptTool, memoryCandidateListTool, memoryCandidateApproveTool, memoryCandidateRejectTool, memoryProjectListTool, memoryCleanupTool, memoryDistillTool, memoryDistilledViewTool, memoryCompactTool, runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool | src | Tool registration |
+| `src/tools.ts` | memorySaveTool, memorySearchTool, memoryDeleteTool, memoryContextTool, memoryLessonTool, memoryListTool, memoryTranscriptTool, memoryCandidateListTool, memoryCandidateApproveTool, memoryCandidateRejectTool, memoryProjectListTool, memoryCleanupTool, memoryDistillTool, memoryDistilledViewTool, memoryCompactTool, runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool | src | Tool registration |
 | `src/tool-output-distiller.ts` | ShellOutputInput, DistilledShellOutput, ToolOutputDistiller | src | Tool registration |
 | `src/tool-execute-runtime-dedup.ts` | ToolExecuteRuntimeDedup | src | Tool registration |
 | `src/tool-distiller.ts` | ToolCallDistiller | src | Tool registration |
