@@ -11,6 +11,7 @@ import type { ContextPressure } from './context-pressure.js';
 import type { ContextCompactor } from './context-compactor.js';
 import type { ToolCallDistiller } from './tool-distiller.js';
 import type { LoopDetector } from './loop-detector.js';
+import type { LoopSignalDetector } from './loop-signal-detector.js';
 import type { SubconsciousWatcher } from './subconscious.js';
 import type { GitWatcher } from './git-watcher.js';
 import type { MemoryExtractor } from './memory-extractor.js';
@@ -26,6 +27,8 @@ import type { SelfModelUpdater } from './self-model-updater.js';
 import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
 import type { LivingStateRuntime } from './living-state-runtime.js';
 import type { LivingStateAdvisor } from './living-state-advisor.js';
+import type { VcmManager } from './vcm-manager.js';
+import type { ContextCapSensor } from './context-cap-sensor.js';
 import type { AutoCheckpointTrigger } from './helpers/auto-checkpoint.js';
 import type { CompileResult } from './context-compiler.js';
 import type { Redactor } from './redactor.js';
@@ -44,6 +47,8 @@ export interface PluginState {
   recentUserMessages: Map<string, string>;
   stateChangeTracker?: Record<string, unknown>;
   _docsInitialized?: boolean;
+  pendingFileContext?: import('./file-context-primer.js').FileContextBlock | null;
+  pendingMilestonePrompt?: import('./milestone-tracker.js').MilestonePromptBlock | null;
 }
 
 export interface PluginContext {
@@ -58,6 +63,7 @@ export interface PluginContext {
   contextCompactor: ContextCompactor;
   toolDistiller: ToolCallDistiller;
   loopDetector: LoopDetector;
+  loopSignalDetector: LoopSignalDetector;
   subconscious: SubconsciousWatcher;
   gitWatcher: GitWatcher;
   memoryExtractor: MemoryExtractor;
@@ -77,6 +83,14 @@ export interface PluginContext {
   beliefKnowledge: BeliefKnowledgeConsolidator;
   livingState: LivingStateRuntime;
   livingStateAdvisor: LivingStateAdvisor;
+  decisionRegistry?: import('./decision-registry.js').DecisionRegistry;
+  knownDebtRegistry?: import('./known-debt-registry.js').KnownDebtRegistry;
+  lintDeltaTracker?: import('./lint-delta-tracker.js').LintDeltaTracker;
+  milestoneTracker?: import('./milestone-tracker.js').MilestoneTracker;
+  fileContextPrimer?: import('./file-context-primer.js').FileContextPrimer;
+  lifecycleOrchestrator?: import('./lifecycle-orchestrator.js').LifecycleOrchestrator;
+  vcmManager: VcmManager;
+  contextCapSensor: ContextCapSensor;
   redactor: Redactor;
   statsWriter: StatsWriter;
   state: PluginState;

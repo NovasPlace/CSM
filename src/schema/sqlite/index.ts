@@ -119,11 +119,11 @@ export async function initializeMinimalSqliteSchema(pool: DatabasePool): Promise
   await pool.query(`
     CREATE TABLE IF NOT EXISTS memory_recall_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      memory_id INTEGER NOT NULL,
+      memory_id INTEGER,
       session_id TEXT,
       project_id TEXT,
       query_hash TEXT NOT NULL,
-      source TEXT NOT NULL CHECK (source IN ('search', 'list', 'context_recall')),
+      source TEXT NOT NULL CHECK (source IN ('search', 'list', 'context_recall', 'graph', 'vector_only', 'text_only', 'text_fallback', 'empty_result')),
       rank INTEGER NOT NULL,
       score REAL,
       recalled_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -139,7 +139,7 @@ export async function initializeMinimalSqliteSchema(pool: DatabasePool): Promise
       project_id TEXT,
       entry_type TEXT NOT NULL CHECK (entry_type IN (
         'tool_execution', 'error', 'milestone', 'decision',
-        'session_start', 'session_end', 'distill_group', 'loop_signal'
+        'session_start', 'session_checkpoint', 'session_end', 'distill_group', 'loop_signal'
       )),
       entry_id TEXT,
       internal_state TEXT NOT NULL DEFAULT '{}',

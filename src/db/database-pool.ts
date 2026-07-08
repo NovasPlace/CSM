@@ -1,6 +1,5 @@
 import type { DatabasePool, DatabaseProvider } from '../types.js';
 import { createPostgresPool } from './postgres-pool.js';
-import { createSqlitePool } from './sqlite-pool.js';
 
 export type { DatabaseProvider } from '../types.js';
 
@@ -14,8 +13,10 @@ export async function createDatabasePool(options: PoolFactoryOptions): Promise<D
   switch (options.provider) {
     case 'postgres':
       return createPostgresPool(options.databaseUrl);
-    case 'sqlite':
+    case 'sqlite': {
+      const { createSqlitePool } = await import('./sqlite-pool.js');
       return createSqlitePool(options.sqlitePath);
+    }
     default:
       throw new Error(`Unknown database provider: ${options.provider as string}`);
   }

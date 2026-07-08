@@ -11,6 +11,7 @@ import { CANONICAL_PHASES, CANONICAL_LINKS } from '../self-continuity-narrative-
 import { CANONICAL_STITCHES } from '../self-continuity-narrative-canonical.js';
 import { MemoryGovernance } from '../memory_governance.js';
 import { buildResumeInjection, type WorkJournalInjectDeps } from '../work-journal-inject.js';
+import { shouldInjectAdvisory, shouldInjectVcm, advisoryCharBudget, shouldInjectFullMemoryBrief, type InjectionTrimLevel } from '../context-cap-sensor.js';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
@@ -203,20 +204,61 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         }
       } catch { /* governance injection non-critical */ }
 
+      // --- Context cap sensor: measure pressure and decide trim level ---
+      let capTrimLevel: InjectionTrimLevel = 'full';
+      if (ctx.contextCapSensor) {
+        const cap = ctx.contextCapSensor.sense(output.system);
+        capTrimLevel = cap.trimLevel;
+        getLogger().debug(`context cap: ${cap.action}`);
+      }
+
       // --- Context recall injection ---
-      const contextBrief = await ctx.contextRecall.getContextBrief();
+      const contextBrief = shouldInjectFullMemoryBrief(capTrimLevel) && ctx.contextRecall
+        ? await ctx.contextRecall.getContextBrief()
+        : null;
       if (contextBrief) {
         output.system.push(contextBrief.compressed);
       }
 
       // --- Phase 4F: Advisory Living State block ---
-      if (ctx.livingStateAdvisor) {
+      if (shouldInjectAdvisory(capTrimLevel) && ctx.livingStateAdvisor) {
         try {
           const block = await ctx.livingStateAdvisor.assembleBlock();
           if (block) {
-            output.system.push(block);
+            const budget = ctx.config.livingState?.maxAdvisoryBlockChars ?? 600;
+            const trimmed = block.slice(0, advisoryCharBudget(capTrimLevel, budget));
+            if (trimmed.length > 0) {
+              output.system.push(trimmed);
+            }
           }
         } catch { /* advisory block non-critical */ }
+      }
+
+      // --- File context primer (context-on-touch) ---
+      const fileCtx = ctx.state.pendingFileContext;
+      if (fileCtx && capTrimLevel !== 'minimal') {
+        output.system.push(fileCtx.formatted);
+        ctx.state.pendingFileContext = null;
+      }
+
+      // --- Milestone save prompt (one-shot) ---
+      const msPrompt = ctx.state.pendingMilestonePrompt;
+      if (msPrompt && capTrimLevel !== 'minimal') {
+        output.system.push(msPrompt.formatted);
+        ctx.state.pendingMilestonePrompt = null;
+      }
+
+      // --- VCM working set injection ---
+      if (shouldInjectVcm(capTrimLevel) && ctx.vcmManager) {
+        try {
+          const vcmBlock = await ctx.vcmManager.buildContextBlock(
+            ctx.state.currentSessionId ?? 'unknown',
+            ctx.directory ?? 'unknown',
+          );
+          if (vcmBlock) {
+            output.system.push(vcmBlock);
+          }
+        } catch { /* VCM non-critical */ }
       }
 
       // ... rest of the existing hooks continue below ...

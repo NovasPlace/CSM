@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { PluginContext } from '../plugin-context.js';
 import { cacheToolErrorSignal } from '../context-cache-signals.js';
 import type { ToolCallRecord } from '../types.js';
@@ -188,6 +189,68 @@ function recordExperiencePacket(
   sid: string | null,
 ): void {
   if (!sid) return;
+
+  // --- hashing helpers ---
+  const hash = (val: unknown): string =>
+    createHash('sha256').update(JSON.stringify(val ?? '')).digest('hex').slice(0, 16);
+
+  const argsHash = hash(input.args);
+  const outputHash = hash(output.output);
+  const errorHash = hash(output.metadata?.error);
+  const filePath = (input.args?.filePath as string) ?? (input.args?.path as string) ?? null;
+  const isError = !!(output.metadata?.error || output.metadata?.exitCode);
+
+  // --- milestone detection ---
+  const editTools = new Set(['edit', 'write', 'multiedit']);
+  const isEditTool = editTools.has(input.tool);
+  const isMilestone = isEditTool && !isError && !!filePath;
+
+  // --- free-text decision classifier ---
+  const isFreeTextDecision =
+    input.tool === 'question' &&
+    typeof output.output === 'string' &&
+    output.output.length > 0;
+
+  // --- record to loop signal detector ---
+  try {
+    ctx.loopSignalDetector.record({
+      toolName: input.tool,
+      inputHash: argsHash,
+      outputHash,
+      errorHash,
+      filePath,
+      isError,
+      isMilestone,
+    });
+  } catch {
+    /* non-critical */
+  }
+
+  // --- check loop signal ---
+  let loopSignal: ReturnType<typeof ctx.loopSignalDetector.check> = null;
+  try {
+    loopSignal = ctx.loopSignalDetector.check();
+  } catch {
+    /* non-critical */
+  }
+
+  // --- emit the tool_execution packet (always) ---
+  const signals: Record<string, unknown> = {
+    _schemaVersion: 2,
+    _sourceHook: 'tool-execute',
+    _correlationId: loopSignal?.correlationId,
+    _evidenceRefs: loopSignal?.evidenceRefs,
+    milestone: isMilestone,
+    freeTextDecision: isFreeTextDecision,
+    loopSignal: loopSignal ? {
+      toolName: loopSignal.toolName,
+      callCount: loopSignal.callCount,
+      gateD1: loopSignal.gateD1,
+      gateD2: loopSignal.gateD2,
+      gateD2Reason: loopSignal.gateD2Reason,
+    } : undefined,
+  };
+
   ctx.experiencePackets.recordToolPacket({
     sessionId: sid,
     projectId: ctx.directory,
@@ -195,9 +258,93 @@ function recordExperiencePacket(
     exitCode: output.metadata?.exitCode,
     error: output.metadata?.error,
     args: input.args ?? {},
+    signals,
   }).catch((_err: unknown) => {
     /* experience packet recording non-critical */
   });
+
+  // --- fire dedicated milestone packet ---
+  if (isMilestone) {
+    const intent = `file modified: ${filePath}`;
+    ctx.experiencePackets.recordMilestonePacket({
+      sessionId: sid,
+      projectId: ctx.directory,
+      intent,
+      signalsMetadata: { toolName: input.tool, filePath },
+    }).catch((_err: unknown) => {
+      /* non-critical */
+    });
+  }
+
+  // --- fire dedicated loop_signal packet ---
+  if (loopSignal) {
+    ctx.experiencePackets.recordLoopSignalPacket({
+      sessionId: sid,
+      projectId: ctx.directory,
+      toolName: loopSignal.toolName,
+      callCount: loopSignal.callCount,
+      evidence: {
+        gateD1: loopSignal.gateD1,
+        gateD2: loopSignal.gateD2,
+        gateD2Reason: loopSignal.gateD2Reason,
+        evidenceRefs: loopSignal.evidenceRefs,
+      },
+    }).catch((_err: unknown) => {
+      /* non-critical */
+    });
+  }
+
+  // --- debounce-trigger maintenance pipeline ---
+  ctx.lifecycleOrchestrator?.triggerDebounced('self-model', 5000);
+  ctx.lifecycleOrchestrator?.triggerDebounced('belief-consolidation', 8000);
+
+  // --- file-touch context primer ---
+  const FILE_TOOLS = new Set(['read', 'edit', 'write', 'multiedit']);
+  if (FILE_TOOLS.has(input.tool)) {
+    const touchPath = (input.args?.filePath ?? input.args?.path) as string | undefined;
+    if (touchPath) {
+      ctx.state.pendingFileContext = null;
+      ctx.fileContextPrimer?.tickCall();
+      ctx.fileContextPrimer?.buildBlock(touchPath, ctx.directory)
+        .then(block => {
+          if (block) ctx.state.pendingFileContext = block;
+        })
+        .catch((_err: unknown) => { /* non-critical */ });
+    }
+  }
+
+  // --- lint output parsing ---
+  if (input.tool === 'bash' && ctx.lintDeltaTracker) {
+    const cmd = (input.args?.command as string) ?? '';
+    const outputStr = typeof output.output === 'string' ? output.output : '';
+    if (/lint|eslint/i.test(cmd)) {
+      const match = outputStr.match(/(\d+)\s+problems?\s*\((\d+)\s+errors?,\s*(\d+)\s+warnings?\)/i);
+      if (match) {
+        ctx.lintDeltaTracker.recordSnapshot({
+          errors: +match[2],
+          warnings: +match[3],
+          maxWarnings: 0,
+          changedFiles: [],
+          toolName: cmd.includes(':src') ? 'lint:src' : 'lint',
+        }).catch(() => { /* non-critical */ });
+      }
+    }
+  }
+
+  // --- milestone detection ---
+  if (ctx.milestoneTracker) {
+    if (input.tool === 'bash') {
+      const cmd = (input.args?.command as string) ?? '';
+      const outputStr = typeof output.output === 'string' ? output.output : '';
+      const block = ctx.milestoneTracker.detectFromBashOutput(cmd, outputStr);
+      if (block) ctx.state.pendingMilestonePrompt = block;
+    }
+    if (input.tool === 'todowrite') {
+      const lastUserText = [...ctx.state.recentUserMessages.values()].pop() ?? '';
+      const block = ctx.milestoneTracker.detectFromTodoUpdate(input.args, lastUserText);
+      if (block) ctx.state.pendingMilestonePrompt = block;
+    }
+  }
 }
 
 async function recordContinuitySignals(

@@ -15,6 +15,13 @@ import { ContextRecallDaemon } from './context-recall.js';
 import { SubconsciousWatcher } from './subconscious.js';
 import { GitWatcher } from './git-watcher.js';
 import { LoopDetector } from './loop-detector.js';
+import { LoopSignalDetector } from './loop-signal-detector.js';
+import { LifecycleOrchestrator } from './lifecycle-orchestrator.js';
+import { DecisionRegistry } from './decision-registry.js';
+import { KnownDebtRegistry } from './known-debt-registry.js';
+import { LintDeltaTracker } from './lint-delta-tracker.js';
+import { MilestoneTracker } from './milestone-tracker.js';
+import { FileContextPrimer } from './file-context-primer.js';
 import { ContextPressure } from './context-pressure.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
@@ -28,6 +35,8 @@ import { SelfModelUpdater } from './self-model-updater.js';
 import { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
 import { LivingStateRuntime } from './living-state-runtime.js';
 import { LivingStateAdvisor } from './living-state-advisor.js';
+import { VcmManager } from './vcm-manager.js';
+import { ContextCapSensor } from './context-cap-sensor.js';
 import { BeliefPromotionScanner } from './belief-promotion-scanner.js';
 import { BeliefPromotionEngine } from './belief-promotion.js';
 import { StatsWriter } from './stats-writer.js';
@@ -38,6 +47,7 @@ import type { AutoCheckpointTrigger } from './helpers/auto-checkpoint.js';
 import { createAutoCheckpoint } from './helpers/auto-checkpoint.js';
 import { createSystemTransformHook } from './hooks/system-transform.js';
 import { createSessionCompactingHook, createAutocontinueHook } from './hooks/session-compaction.js';
+import { createMessagesTransformHook } from './hooks/messages-transform.js';
 import { createToolExecuteBeforeHook, createToolExecuteAfterHook } from './hooks/tool-execute.js';
 import { createEventHook } from './hooks/event-hooks.js';
 import { registerTools } from './hooks/tool-hooks.js';
@@ -78,6 +88,7 @@ export async function registerHooks(
   const subconscious = new SubconsciousWatcher(memoryManager, config.subconsciousWatchInterval, config.filterBuildArtifacts);
   const gitWatcher = new GitWatcher(memoryManager, config.gitPollInterval);
   const loopDetector = new LoopDetector(config.loopDetectionThreshold);
+  const loopSignalDetector = new LoopSignalDetector();
   const contextPressure = new ContextPressure(config.contextPressureRecommend, config.contextPressureDemand);
   const toolDistiller = new ToolCallDistiller(config.distiller);
   const contextCompactor = new ContextCompactor(config.compactor);
@@ -133,6 +144,8 @@ export async function registerHooks(
     beliefPromotion,
   );
   const livingStateAdvisor = new LivingStateAdvisor(livingState, config.livingState);
+  const vcmManager = new VcmManager(memoryManager, database);
+  const contextCapSensor = new ContextCapSensor(config.targetContextCap);
   const lessonTriggers = new LessonTriggerCache(database.getPool());
 
   contextRecall.start();
@@ -144,9 +157,13 @@ export async function registerHooks(
   const statsWriter = new StatsWriter(database.getPool());
   statsWriter.start();
 
+  if (config.targetContextCap > 0) {
+    logging.info(`Context cap target: ${config.targetContextCap} tokens. Set compaction.reserved in opencode.json to (model_input_limit - ${config.targetContextCap}) to enforce. Also enable compaction.prune=true for free context pruning.`);
+  }
+
   const pluginCtx: PluginContext = {
     config, database, memoryManager, contextRecall, contextPressure,
-    contextCompactor, toolDistiller, loopDetector, subconscious, gitWatcher,
+    contextCompactor, toolDistiller, loopDetector, loopSignalDetector, subconscious, gitWatcher,
     memoryExtractor, primingEngine, embeddings, checkpointStore, checkpointToolDeps,
     checkpointInjectDeps, redactor, statsWriter,
     client: ctx.client, directory: ctx.directory, worktree: ctx.worktree,
@@ -155,12 +172,30 @@ export async function registerHooks(
     refreshActiveContext, syncActiveSession,
     lastCompileResult: null,
     workJournal, experiencePackets, lessonTriggers, selfModel, beliefKnowledge, livingState, livingStateAdvisor,
+    vcmManager,
+    contextCapSensor,
     state: sessionState,
   };
+
+  const decisionRegistry = new DecisionRegistry(memoryManager);
+  pluginCtx.decisionRegistry = decisionRegistry;
+  const knownDebtRegistry = new KnownDebtRegistry(memoryManager);
+  pluginCtx.knownDebtRegistry = knownDebtRegistry;
+  const lintDeltaTracker = new LintDeltaTracker(memoryManager);
+  pluginCtx.lintDeltaTracker = lintDeltaTracker;
+  const milestoneTracker = new MilestoneTracker(memoryManager);
+  pluginCtx.milestoneTracker = milestoneTracker;
+  const fileContextPrimer = new FileContextPrimer(decisionRegistry, memoryManager, knownDebtRegistry);
+  pluginCtx.fileContextPrimer = fileContextPrimer;
+
+  const lifecycleOrchestrator = new LifecycleOrchestrator(pluginCtx);
+  pluginCtx.lifecycleOrchestrator = lifecycleOrchestrator;
+  lifecycleOrchestrator.start();
 
   return {
     event: createEventHook(ctx, pluginCtx),
     'experimental.chat.system.transform': createSystemTransformHook(pluginCtx),
+    'experimental.chat.messages.transform': createMessagesTransformHook(pluginCtx),
     'experimental.session.compacting': createSessionCompactingHook(pluginCtx),
     'experimental.compaction.autocontinue': createAutocontinueHook(pluginCtx),
     'tool.execute.before': createToolExecuteBeforeHook(pluginCtx),

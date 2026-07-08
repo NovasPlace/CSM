@@ -11,7 +11,7 @@ import { estimateTokens } from '../token-bucket-analyzer.js';
  *   Phase 2: Detects hard rollover flag, creates continuation brief checkpoint, halts.
  */
 export function createSessionCompactingHook(ctx: PluginContext) {
-  return async (input: { sessionID: string }, output: { context: string[] }) => {
+  return async (input: { sessionID: string }, output: { context: string[]; prompt?: string }) => {
     try {
       ctx.syncActiveSession(input.sessionID);
       const sid = ctx.state.currentSessionId;
@@ -26,12 +26,11 @@ export function createSessionCompactingHook(ctx: PluginContext) {
       if (!ctx.config.checkpoint.enabled) return;
       try {
         const latest = await ctx.checkpointStore.getActiveCheckpoint(sid);
-        if (!latest) return;
-        output.context.push(
-          `[Checkpoint Context — preserve this in the summary]\n${latest.summaryMarkdown}`
-        );
-        // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
-        console.log('[CrossSessionMemory] Injected checkpoint context into compaction prompt');
+        if (latest) {
+          output.prompt = buildDenseCompactionPrompt(latest.summaryMarkdown, latest.nextSteps, latest.risks);
+          // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
+          console.log('[CrossSessionMemory] Injected dense compaction prompt + checkpoint context');
+        }
       } catch (e) {
         console.error('[CrossSessionMemory] Failed to inject checkpoint context:', e);
       }
@@ -39,6 +38,39 @@ export function createSessionCompactingHook(ctx: PluginContext) {
       console.error('[CrossSessionMemory] session.compacting hook error:', e);
     }
   };
+}
+
+/**
+ * Dense compaction prompt — ~200 tokens vs OpenCode's default ~400 tokens.
+ * Replaces the default prompt entirely (output.prompt supersedes output.context).
+ * Pre-fills Work State from CSM checkpoint to reduce LLM summarization work.
+ */
+function buildDenseCompactionPrompt(checkpointSummary: string, nextSteps: string[], risks: string[]): string {
+  const nextStepsText = nextSteps.length > 0 ? nextSteps.map((s, i) => `${i + 1}. ${s}`).join('\n') : '(none)';
+  const risksText = risks.length > 0 ? risks.map(r => `- ${r}`).join('\n') : '(none)';
+  return `Output exactly this Markdown structure. Keep section order. Do not include <template> tags.
+
+## Objective
+- [one or two sentences on what the user is trying to do]
+
+## Important Details
+- [constraints, decisions + reasoning, exact context to continue, or "(none)"]
+
+## Work State
+- Completed: [done work, verified facts, changes made; or "(none)"]
+- Active: [current work, partial changes, investigation; or "(none)"]
+- Blocked: [blockers, failing commands, unknowns; or "(none)"]
+
+## Next Move
+${nextStepsText}
+
+## Risks
+${risksText}
+
+## Checkpoint Context
+${checkpointSummary}
+
+Rules: terse bullets only. Preserve exact file paths, symbols, commands, error strings. Do not mention summarization or compaction.`;
 }
 
 export function createAutocontinueHook(ctx: PluginContext) {

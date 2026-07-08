@@ -1,9 +1,11 @@
 import type { PluginContext } from '../plugin-context.js';
 import { flushDocUpdates, getPendingUpdates, queueDocUpdate } from './auto-docs.js';
 import { packageCommandEvidence, packageToolEvidence } from './tool-execute-budget.js';
+import { ToolExecuteRuntimeDedup } from '../tool-execute-runtime-dedup.js';
 
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const FLUSH_DELAY_MS = 2000;
+const toolDedup = new ToolExecuteRuntimeDedup(60_000);
 
 function scheduleDocFlush(ctx: PluginContext): void {
   if (flushTimer) clearTimeout(flushTimer);
@@ -33,6 +35,17 @@ export async function autoDistill(ctx: PluginContext, sid: string): Promise<void
   if (ctx.config.distiller.autoSaveAsMemory) {
     await ctx.memoryExtractor.extractFromDistilledSummaries(sid, sid, summary);
   }
+
+  ctx.experiencePackets.recordDistillGroupPacket({
+    sessionId: sid,
+    projectId: ctx.directory,
+    groupCount: summary.groups.length,
+    totalCallsSummarized: summary.totalCallsSummarized,
+    compressedPreview: summary.compressed,
+  }).catch((_err: unknown) => {
+    /* non-critical */
+  });
+
   await ctx.refreshActiveContext(sid);
 }
 
@@ -53,6 +66,9 @@ export async function logToolUsage(
   const packagedToolMetadata = await packageToolEvidence(ctx, input, output);
 
   if (shouldLogTool(input.tool)) {
+    if (toolDedup.shouldSuppress(input.tool, input.args)) {
+      return;
+    }
     await ctx.memoryManager.saveMemory({
       content: `Tool used: ${input.tool}`,
       type: 'episodic',

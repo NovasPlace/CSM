@@ -12,6 +12,7 @@ export interface AuditResult {
   mathErrors: AuditAnomaly[];
   zeroBeforeOrAfter: AuditAnomaly[];
   savedExceedsBefore: AuditAnomaly[];
+  afterExceedsBefore: AuditAnomaly[];
   recomputedTotals: {
     totalBeforeTokens: number;
     totalAfterTokens: number;
@@ -122,6 +123,23 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
     });
   }
 
+  const anomalies_after_exceed = await pool.query(`
+    SELECT id, session_id, before_tokens, after_tokens
+    FROM compaction_metrics
+    WHERE after_tokens > before_tokens
+  `);
+
+  const afterExceedsBefore: AuditAnomaly[] = [];
+  for (const row of anomalies_after_exceed.rows as Array<{ id: number; session_id: string; before_tokens: number; after_tokens: number }>) {
+    afterExceedsBefore.push({
+      id: row.id,
+      sessionId: row.session_id,
+      field: 'after_tokens > before_tokens',
+      expected: `after_tokens <= ${row.before_tokens}`,
+      actual: `after_tokens=${row.after_tokens} (expansion by ${row.after_tokens - row.before_tokens})`,
+    });
+  }
+
   const dedupCheck = await pool.query(`
     SELECT id FROM (
       SELECT id, ROW_NUMBER() OVER (PARTITION BY session_id, before_tokens, after_tokens, tokens_saved, created_at) as rn
@@ -208,6 +226,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
     && mathErrors.length === 0
     && zeroBeforeOrAfter.length === 0
     && savedExceedsBefore.length === 0
+    && afterExceedsBefore.length === 0
     && duplicateIds.length === 0
     && totalsMatch;
 
@@ -218,7 +237,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
 
   const summary = allClean
     ? `AUDIT PASSED. ${totalRows} compactions verified. ${k(recomputedTotals.totalTokensSaved)} tokens saved (${recomputedTotals.overallReductionPercent}% reduction). No duplicates, negative values, or math errors found. Stored totals match recomputed.`
-    : `AUDIT ISSUES FOUND. ${negativeValues.length} negative values, ${mathErrors.length} math errors, ${zeroBeforeOrAfter.length} zero fields, ${savedExceedsBefore.length} saved>before, ${duplicateIds.length} possible duplicates. Totals ${totalsMatch ? 'match' : 'MISMATCH'}.`;
+    : `AUDIT ISSUES FOUND. ${negativeValues.length} negative values, ${mathErrors.length} math errors, ${zeroBeforeOrAfter.length} zero fields, ${savedExceedsBefore.length} saved>before, ${afterExceedsBefore.length} after>before, ${duplicateIds.length} possible duplicates. Totals ${totalsMatch ? 'match' : 'MISMATCH'}.`;
 
   return {
     totalRows,
@@ -228,6 +247,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
     mathErrors,
     zeroBeforeOrAfter,
     savedExceedsBefore,
+    afterExceedsBefore,
     recomputedTotals,
     storedTotals,
     totalsMatch,
@@ -270,6 +290,7 @@ export function formatAuditReport(result: AuditResult): string {
   lines.push(`  Math errors (saved != before - after): ${result.mathErrors.length}`);
   lines.push(`  Zero before/after tokens: ${result.zeroBeforeOrAfter.length}`);
   lines.push(`  Saved exceeds before: ${result.savedExceedsBefore.length}`);
+  lines.push(`  After exceeds before (expansion): ${result.afterExceedsBefore.length}`);
   lines.push(`  Possible duplicate rows: ${result.duplicateIds.length}`);
   lines.push('');
 
@@ -297,6 +318,15 @@ export function formatAuditReport(result: AuditResult): string {
       lines.push(`  Row ${a.id} (session ${a.sessionId.slice(0, 8)}): ${a.field} — expected ${a.expected}, got ${a.actual}`);
     }
     if (result.zeroBeforeOrAfter.length > 10) lines.push(`  ... and ${result.zeroBeforeOrAfter.length - 10} more`);
+    lines.push('');
+  }
+
+  if (result.afterExceedsBefore.length > 0) {
+    lines.push('--- After Exceeds Before (Compaction Expansion) ---');
+    for (const a of result.afterExceedsBefore.slice(0, 10)) {
+      lines.push(`  Row ${a.id} (session ${a.sessionId.slice(0, 8)}): ${a.field} — expected ${a.expected}, got ${a.actual}`);
+    }
+    if (result.afterExceedsBefore.length > 10) lines.push(`  ... and ${result.afterExceedsBefore.length - 10} more`);
     lines.push('');
   }
 

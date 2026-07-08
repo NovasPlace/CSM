@@ -12,6 +12,7 @@ export const ALL_CANDIDATE_TYPES = [
   'candidate_worldview',
   'candidate_drift_warning',
   'candidate_opinion',
+  'candidate_capability',
 ] as const;
 
 export type CandidateType = (typeof ALL_CANDIDATE_TYPES)[number];
@@ -22,6 +23,7 @@ export const BELIEF_CANDIDATE_TYPES = [
   'candidate_worldview',
   'candidate_drift_warning',
   'candidate_opinion',
+  'candidate_capability',
 ] as const;
 
 export type BeliefCandidateType = (typeof BELIEF_CANDIDATE_TYPES)[number];

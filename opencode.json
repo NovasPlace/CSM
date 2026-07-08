@@ -1,3 +1,11 @@
 {
-  "$schema": "https://opencode.ai/config.json"
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["./dist/index.js"],
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 81072,
+    "tail_turns": 2,
+    "preserve_recent_tokens": 6000
+  }
 }

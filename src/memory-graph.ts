@@ -3,6 +3,7 @@ import type { ExtractedConcept } from "./concept-extractor.js";
 import type { Memory } from "./types.js";
 import { getLogger } from "./logger.js";
 import { jsonExtractValue } from "./db/query-dialect.js";
+import { recordRecallBatch } from "./recall-telemetry.js";
 
 export type MemoryLink = {
   id: number;
@@ -189,7 +190,8 @@ export async function buildLinksForMemory(
 export async function getRelatedMemories(
   db: Database,
   memoryId: number,
-  limit: number = 10
+  limit: number = 10,
+  telemetry?: { sessionId?: string; projectId?: string }
 ): Promise<RelatedMemory[]> {
   const pool = db.getPool();
 
@@ -207,7 +209,7 @@ export async function getRelatedMemories(
     [memoryId, limit]
   );
 
-  return (linkRows.rows as RelatedRow[]).map(row => ({
+  const related = (linkRows.rows as RelatedRow[]).map(row => ({
     memory: {
       id: row.mem_id,
       sessionId: row.session_id,
@@ -236,6 +238,25 @@ export async function getRelatedMemories(
       created_at: row.created_at,
     } as MemoryLink,
   }));
+
+  try {
+    await recordRecallBatch(
+      pool,
+      related.map((r, index) => ({
+        memoryId: r.memory.id,
+        sessionId: telemetry?.sessionId ?? null,
+        projectId: telemetry?.projectId ?? r.memory.projectId ?? null,
+        query: `graph:${memoryId}`,
+        source: 'graph',
+        rank: index + 1,
+        score: r.link.strength,
+      })),
+    );
+  } catch (error) {
+    getLogger().error('Graph recall telemetry write failed', error instanceof Error ? error : undefined);
+  }
+
+  return related;
 }
 
 export async function findSharedEntities(
