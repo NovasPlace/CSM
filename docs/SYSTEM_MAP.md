@@ -6,6 +6,7 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `test/phase-8a-impl-reentry-ux-tool.test.ts` | none | test | Tool registration |
 | `test/phase-7b-system-transform.test.js` | none | test | Test suite |
 | `test/phase-7b-system-transform.test.ts` | none | test | Test suite |
 | `test/re-entry-protocol.test.ts` | none | test | Test suite |
@@ -116,7 +117,7 @@
 | `src/trace-vault-store.ts` | initializeTraceVaultSchema, captureTraceVault, loadTraceVaultEntries, seedTeacherTracesFromVault, formatTraceVaultForInjection | src | Module |
 | `src/trace-vault-ops.ts` | captureTraceVaultOp, previewTraceVaultOp, seedTeacherTracesFromVaultOp | src | Module |
 | `src/trace-vault-core.ts` | buildTraceVaultCapture, formatTraceVaultCapture | src | Module |
-| `src/tools.ts` | memorySaveTool, memorySearchTool, memoryDeleteTool, memoryContextTool, memoryLessonTool, memoryListTool, memoryTranscriptTool, memoryCandidateListTool, memoryCandidateApproveTool, memoryCandidateRejectTool, memoryProjectListTool, memoryCleanupTool, memoryDistillTool, memoryDistilledViewTool, memoryCompactTool, runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool | src | Tool registration |
+| `src/tools.ts` | memorySaveTool, memorySearchTool, memoryDeleteTool, memoryContextTool, reentryPreviewTool, memoryLessonTool, memoryListTool, memoryTranscriptTool, memoryCandidateListTool, memoryCandidateApproveTool, memoryCandidateRejectTool, memoryProjectListTool, memoryCleanupTool, memoryDistillTool, memoryDistilledViewTool, memoryCompactTool, runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool | src | Tool registration |
 | `src/tool-output-distiller.ts` | ShellOutputInput, DistilledShellOutput, ToolOutputDistiller | src | Tool registration |
 | `src/tool-names.ts` | CSM_TOOL_NAMES, CsmToolName | src | Tool registration |
 | `src/tool-execute-runtime-dedup.ts` | ToolExecuteRuntimeDedup | src | Tool registration |

@@ -29,7 +29,7 @@
 - **Phase 7 Complete**: Full test suite passes (808/808), typecheck clean, build clean, lint 7 warnings, live preview-only restart confirms no behavior change. Committed `aa352f2`.
 
 ### In Progress
-- **Phase 8A — Re-entry UX / Control Surface**: `docs/PHASE8A_REENTRY_UX.md` spec created. Add read-only `csm_reentry_preview` tool, status/report section, config controls. Hard constraints: no default behavior change, no mutation, no synthetic message injection. Committed `deb52dc`.
+- **Phase 8A-R — Re-entry UX Interface Repair**: `docs/PHASE8A_REPAIR.md` created documenting actual ReEntryProtocol interface, adapter plan, and tool registry consistency fix. All 808 tests pass. Next: implement adapter + tool. Committed `b77dd6e`.
 
 ### Done
 - **Phase 1A (Config Contract)**: `.env.example` (19 env vars), `src/config.ts` with `getEnvString/getEnvBoolean/getEnvNumber`, provider-specific env vars, mode-based DB URL, `validateAndReturnConfig()`

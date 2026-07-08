@@ -34,6 +34,7 @@ export const CSM_TOOL_NAMES = [
    'csm_recall_quality_report',
    'csm_memory_related',
    'csm_continuity_report',
+   'csm_reentry_preview',
  ] as const;
 
 export type CsmToolName = typeof CSM_TOOL_NAMES[number];

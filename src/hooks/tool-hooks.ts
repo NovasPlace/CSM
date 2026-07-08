@@ -80,6 +80,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     csm_recall_quality_report: recallQualityReportTool(database),
     csm_memory_related: memoryRelatedTool(database),
     csm_continuity_report: continuityReportTool(database),
+    csm_reentry_preview: reentryPreviewTool(createReentryPreviewAdapter(database)),
     create_checkpoint: createCheckpointTool(checkpointToolDeps),
     expand_checkpoint_ref: expandCheckpointRefTool(checkpointToolDeps),
     list_checkpoints: listCheckpointsTool(checkpointToolDeps),
