@@ -1,4 +1,4 @@
-import type { ReEntryProtocol } from './re-entry-protocol.js';
+import type { ReEntryProtocol, ReEntryConfig } from './re-entry-protocol.js';
 
 export interface ReEntryPreviewReport {
   previewOnly: boolean;
@@ -32,9 +32,11 @@ export interface ReentryPreviewInput {
  */
 export class ReEntryPreviewAdapter {
   private reEntryProtocol: ReEntryProtocol;
+  private liveConfig: ReEntryConfig;
 
-  constructor(reEntryProtocol: ReEntryProtocol) {
+  constructor(reEntryProtocol: ReEntryProtocol, config: ReEntryConfig) {
     this.reEntryProtocol = reEntryProtocol;
+    this.liveConfig = config;
   }
 
   async buildPreviewReport(input: ReentryPreviewInput = {}): Promise<ReEntryPreviewReport> {
@@ -47,10 +49,15 @@ export class ReEntryPreviewAdapter {
     ]);
 
     const byteLength = block !== null ? block.length : 0;
-    const wouldInject = block !== null && diagnostic.enabled;
+    // previewOnly/enabled come from the live config (same source system-transform.ts uses),
+    // so the preview tool always agrees with actual injection behaviour.
+    const enabled = this.liveConfig.enabled;
+    const previewOnly = this.liveConfig.previewOnly;
+    const wouldInject = block !== null;
 
     const diagnostics: string[] = [
-      `Enabled: ${diagnostic.enabled}`,
+      `Enabled: ${enabled}`,
+      `Preview-only: ${previewOnly}`,
       `Would inject: ${wouldInject}`,
       `Block built: ${block !== null}`,
       `Total chars: ${diagnostic.totalChars}`,
@@ -74,7 +81,7 @@ export class ReEntryPreviewAdapter {
     }
 
     return {
-      previewOnly: !wouldInject && diagnostic.enabled,
+      previewOnly,
       wouldInject,
       blockBuilt: block !== null,
       blockText: block,
@@ -85,7 +92,7 @@ export class ReEntryPreviewAdapter {
       totalChars: diagnostic.totalChars,
       budgetChars: diagnostic.budgetChars,
       trimLevel: diagnostic.trimLevel,
-      enabled: diagnostic.enabled,
+      enabled,
       sources: diagnostic.sources,
       diagnostics,
     };

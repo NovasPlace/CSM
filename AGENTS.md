@@ -34,9 +34,9 @@
 ### Done
 - **Phase 8A-Impl — Re-entry Preview Adapter + Tool**: `src/reentry-ux-tool.ts` — `ReEntryPreviewAdapter` wrapping real `ReEntryProtocol` (built against actual `ReEntryDiagnostic` interface, not an imagined one). `csm_reentry_preview` tool registered in `src/hooks/tool-hooks.ts`; `ReEntryPreviewAdapter` instantiated from `pluginCtx.reEntryProtocol`. Read-only: calls `buildBlock()`/`diagnose()` only, no writes. 5 new tests. Tool count 31→32. Committed `4b7c2f1`.
 - **Phase 8A Complete**: `csm_reentry_preview` live, read-only, tool count 32, 813/813 tests, default behavior unchanged. Preview-only default preserved; no injection unless explicitly enabled.
+- **Phase 8B — Re-entry Live Enablement Controls**: Wired existing `ReEntryProtocol` switch to operator config. `PluginConfig.reentry: ReEntryConfig` parsed from `CSM_REENTRY_ENABLED`/`CSM_REENTRY_PREVIEW_ONLY`/`CSM_REENTRY_MAX_CHARS`/`CSM_REENTRY_MIN_LAYER_CHARS` env vars (defaults: true/true/2100/50). `hooks-registration.ts` passes `config.reentry` into `ReEntryProtocol`. `ReEntryPreviewAdapter` now takes the live config and reports `previewOnly`/`enabled`/`wouldInject` from it — guaranteeing `csm_reentry_preview` agrees with `system-transform.ts`. `.env.example` documents the vars. 9 new tests. No new injection logic: used the existing `buildBlock()`-returns-null-when-previewOnly switch.
 
 ### Next (not started — awaiting explicit go-ahead)
-- **Phase 8B — Re-entry Live Enablement Controls**: `docs/PHASE8B_REENTRY_ENABLEMENT.md` spec captured. Explicit operator flag to enable injection (default stays preview-only). Gated on operator request.
 - **Phase 8C — Smart Trimming**: Adaptive token budgeting (after 8B).
 
 ### Done

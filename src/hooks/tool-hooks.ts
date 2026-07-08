@@ -99,7 +99,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
   if (pluginCtx.reEntryProtocol) {
     const proto = pluginCtx.reEntryProtocol;
     toolList['csm_reentry_preview'] = reentryPreviewTool(
-      new ReEntryPreviewAdapter(proto),
+      new ReEntryPreviewAdapter(proto, pluginCtx.config.reentry),
     );
   }
 

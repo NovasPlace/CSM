@@ -253,6 +253,13 @@ export const DEFAULT_CONFIG: PluginConfig = {
     maxScanPerType: getEnvNumber('CSM_LIVING_STATE_MAX_PER_TYPE', 10),
     updateIntervalMs: getEnvNumber('CSM_LIVING_STATE_INTERVAL', 60000),
   },
+  reentry: {
+    enabled: getEnvBoolean('CSM_REENTRY_ENABLED', true),
+    maxChars: getEnvNumber('CSM_REENTRY_MAX_CHARS', 2100),
+    previewOnly: getEnvBoolean('CSM_REENTRY_PREVIEW_ONLY', true),
+    minLayerChars: getEnvNumber('CSM_REENTRY_MIN_LAYER_CHARS', 50),
+    layers: ['identity', 'activeGoals', 'inProgressWork', 'preferences', 'capabilities', 'beliefs', 'recentContext', 'constraints'],
+  },
   selfContinuity: {
     enabled: true,
     maxRecordsPerSession: 3,

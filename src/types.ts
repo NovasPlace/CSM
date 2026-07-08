@@ -7,6 +7,7 @@ import type { RolloverConfig } from './context-rollover-config.js';
 import type { ExtractedConcept } from './concept-extractor.js';
 import type { RedactorConfig } from './redactor.js';
 import type { WorkJournalConfig } from './work-journal-types.js';
+import type { ReEntryConfig } from './re-entry-protocol.js';
 
 export type MemoryType =
   | 'conversation'    // Key decisions, problems solved, user preferences
@@ -332,6 +333,8 @@ export interface PluginConfig {
   beliefPromotion: BeliefPromotionConfig;
   // Phase 4F — Living state runtime loop
   livingState: LivingStateConfig;
+  // Phase 8B — Re-entry live enablement (preview-only default)
+  reentry: ReEntryConfig;
 }
 
 export type { BucketBreakdown } from './token-bucket-analyzer.js';

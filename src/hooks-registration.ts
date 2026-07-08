@@ -152,6 +152,7 @@ export async function registerHooks(
     selfModel,
     beliefStore: beliefKnowledge,
     workJournal,
+    config: config.reentry,
   });
   const vcmManager = new VcmManager(memoryManager, database);
   const contextCapSensor = new ContextCapSensor(config.targetContextCap);

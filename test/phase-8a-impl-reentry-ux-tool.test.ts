@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import { strictEqual, ok } from 'node:assert';
 
 import { ReEntryPreviewAdapter } from '../dist/reentry-ux-tool.js';
-import { ReEntryProtocol } from '../dist/re-entry-protocol.js';
+import { ReEntryProtocol, DEFAULT_REENTRY_CONFIG } from '../dist/re-entry-protocol.js';
 import type { DatabasePool } from '../dist/database-pool.js';
 
 function makeAdapter(): ReEntryPreviewAdapter {
@@ -10,7 +10,7 @@ function makeAdapter(): ReEntryPreviewAdapter {
     getPool: () => ({ query: async () => ({ rows: [] }) }),
   } as unknown as DatabasePool;
   const protocol = new ReEntryProtocol(pool);
-  return new ReEntryPreviewAdapter(protocol);
+  return new ReEntryPreviewAdapter(protocol, { ...DEFAULT_REENTRY_CONFIG });
 }
 
 describe('Phase 8A-Impl: Re-entry Preview Adapter + Tool', () => {
