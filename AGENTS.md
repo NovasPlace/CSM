@@ -26,6 +26,10 @@
 - **Phase 7A — Re-entry Context Builder**: `src/re-entry-protocol.ts` orchestrates 8 layers with priority-based trimming, builds contextual block, preview-only mode.
 - **Phase 7B — Session Start Integration**: `src/hooks/system-transform.ts` injects re-entry block on first turn (preview-only default, first-turn tracking via `reentryInjected` Set). 4 new tests (all pass).
 - **Phase 7C — Re-entry Protocol Documentation**: `docs/PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md` created with purpose, injection mode, layer order, trimming behavior, safety model, diagnostics, validation checklist.
+- **Phase 7 Complete**: Full test suite passes (808/808), typecheck clean, build clean, lint 7 warnings, live preview-only restart confirms no behavior change. Committed `aa352f2`.
+
+### In Progress
+- **Phase 8A — Re-entry UX / Control Surface**: `docs/PHASE8A_REENTRY_UX.md` spec created. Add read-only `csm_reentry_preview` tool, status/report section, config controls. Hard constraints: no default behavior change, no mutation, no synthetic message injection. Committed `deb52dc`.
 
 ### Done
 - **Phase 1A (Config Contract)**: `.env.example` (19 env vars), `src/config.ts` with `getEnvString/getEnvBoolean/getEnvNumber`, provider-specific env vars, mode-based DB URL, `validateAndReturnConfig()`
