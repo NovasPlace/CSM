@@ -1,9 +1,18 @@
+export interface SanitizedPart {
+  type?: string;
+  text?: string;
+  id?: string;
+  sessionID?: string;
+  messageID?: string;
+  [key: string]: unknown;
+}
+
 export interface PromptMessageLike {
   info?: Record<string, unknown> & {
     role?: string;
     sessionID?: string;
   };
-  parts?: any[];
+  parts?: SanitizedPart[];
 }
 
 export interface PromptNormalizationOptions {
@@ -35,8 +44,8 @@ function isAllowedPartType(role: string, type: string): boolean {
   return false;
 }
 
-function normalizeParts(parts: any[], role: string, sessionID: string, messageID: string): any[] {
-  const normalized: any[] = [];
+function normalizeParts(parts: SanitizedPart[], role: string, sessionID: string, messageID: string): SanitizedPart[] {
+  const normalized: SanitizedPart[] = [];
 
   for (let index = 0; index < parts.length; index++) {
     const part = parts[index];
