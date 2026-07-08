@@ -932,6 +932,7 @@ export function memoryRelatedTool(database: Database) {
 /**
  * csm_continuity_report - Read-only resilience dashboard over the full CSM stack.
  * Phase 6E: Reports health of memory, recall, graph, pipeline, living state, docs, tools.
+ * Phase 6F: Adds compact/full modes, JSON format, snapshot save/load, and run comparison.
  * No mutations. No repairs. No auto-action.
  */
 export function continuityReportTool(database: Database) {
@@ -942,22 +943,47 @@ export function continuityReportTool(database: Database) {
       windowHours: tool.schema.number().optional().describe(
         'Time window in hours for recall health metrics (default 24)',
       ),
+      mode: tool.schema.enum(['compact', 'full']).optional().describe(
+        'Output mode: compact (exec summary + key metrics) or full (all sections). Default: full',
+      ),
+      format: tool.schema.enum(['text', 'json']).optional().describe(
+        'Output format: text (human-readable) or json (for dashboards). Default: text',
+      ),
+      snapshot: tool.schema.boolean().optional().describe(
+        'Save a snapshot of this report to .csm/continuity-snapshot.json for comparison on next run. Default: false',
+      ),
+      compare: tool.schema.boolean().optional().describe(
+        'Compare against the previous snapshot if one exists. Shows deltas for score, memory total, recall events, graph coverage, pipeline activity, and section grades. Default: false',
+      ),
     },
     async execute(args, context) {
-      const { buildContinuityResilienceReport } = await import('./continuity-resilience-report.js');
+      const { buildContinuityResilienceReport, buildContinuityReportWithOptions } = await import('./continuity-resilience-report.js');
       const workspaceDir = (context as { worktree?: string }).worktree || process.cwd();
       const toolMap: Record<string, unknown> = {};
       for (const name of CSM_TOOL_NAMES) toolMap[name] = true;
-      const report = await buildContinuityResilienceReport(
-        database,
-        workspaceDir,
-        toolMap,
-        args.windowHours ?? 24,
-      );
+      const windowHours = args.windowHours ?? 24;
+      const mode = args.mode ?? 'full';
+      const format = args.format ?? 'text';
+      const snapshot = args.snapshot ?? false;
+      const compare = args.compare ?? false;
+
+      // Use legacy path if no Phase 6F options are specified (backward compat)
+      if (!args.mode && !args.format && !args.snapshot && !args.compare) {
+        const report = await buildContinuityResilienceReport(database, workspaceDir, toolMap, windowHours);
+        return {
+          title: 'Continuity Resilience Report',
+          output: report,
+          metadata: { windowHours },
+        };
+      }
+
+      const report = await buildContinuityReportWithOptions(database, workspaceDir, toolMap, windowHours, {
+        mode, format, snapshot, compare, workspaceDir,
+      });
       return {
         title: 'Continuity Resilience Report',
         output: report,
-        metadata: { windowHours: args.windowHours ?? 24 },
+        metadata: { windowHours, mode, format, snapshot, compare },
       };
     },
   });

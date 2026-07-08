@@ -758,7 +758,7 @@ export function computeContinuityConfidence(
 // Format Report
 // ============================================================================
 
-function formatReport(report: ContinuityReport): string {
+export function formatReport(report: ContinuityReport): string {
   const lines: string[] = [];
   const bar = '━'.repeat(59);
 
@@ -916,12 +916,12 @@ function formatReport(report: ContinuityReport): string {
 // Main Entry Point
 // ============================================================================
 
-export async function buildContinuityResilienceReport(
+export async function buildContinuityResilienceReportData(
   database: Database,
   workspaceDir: string,
   toolMap: Record<string, unknown>,
   windowHours: number = 24,
-): Promise<string> {
+): Promise<ContinuityReport> {
   const pool = database.getPool();
   const dialect = dialectFromPool(pool);
 
@@ -939,12 +939,363 @@ export async function buildContinuityResilienceReport(
   const knowledgeSignals = await collectKnowledgeSignals(pool);
   const continuityConfidence = computeContinuityConfidence(partial);
 
-  const report: ContinuityReport = {
+  return {
     ...partial,
     systemAdvisories,
     knowledgeSignals,
     continuityConfidence,
   };
+}
 
+/** Legacy entry point — builds report and returns full text format. */
+export async function buildContinuityResilienceReport(
+  database: Database,
+  workspaceDir: string,
+  toolMap: Record<string, unknown>,
+  windowHours: number = 24,
+): Promise<string> {
+  const report = await buildContinuityResilienceReportData(database, workspaceDir, toolMap, windowHours);
   return formatReport(report);
+}
+
+// ============================================================================
+// Phase 6F: Compact Format + JSON Format + Exec Summary + Snapshots
+// ============================================================================
+
+export type ReportMode = 'compact' | 'full';
+export type ReportFormat = 'text' | 'json';
+
+export interface ContinuityReportOptions {
+  mode?: ReportMode;
+  format?: ReportFormat;
+  snapshot?: boolean;
+  compare?: boolean;
+  workspaceDir?: string;
+}
+
+export interface ReportSnapshot {
+  timestamp: string;
+  grade: ContinuityGrade;
+  score: number;
+  normalizedWeight: number;
+  sectionGrades: Record<string, ContinuityGrade>;
+  memoryTotal: number;
+  recallEvents: number;
+  graphLinks: number;
+  graphCoveragePct: number;
+  pipelinePackets: number;
+  pipelinePackets24h: number;
+  pendingCandidates: number;
+  promotedBeliefs: number;
+  advisoryCount: number;
+  topAdvisoryPriorities: number[];
+}
+
+export interface ContinuityComparison {
+  previousSnapshot: ReportSnapshot | null;
+  changes: ContinuityDelta[];
+  changed: boolean;
+}
+
+export interface ContinuityDelta {
+  field: string;
+  previous: string | number;
+  current: string | number;
+  direction: 'up' | 'down' | 'changed';
+}
+
+const SNAPSHOT_DIR = '.csm';
+const SNAPSHOT_FILE = 'continuity-snapshot.json';
+
+export function snapshotFromReport(report: ContinuityReport): ReportSnapshot {
+  const cc = report.continuityConfidence;
+  const sectionGrades: Record<string, ContinuityGrade> = {};
+  for (const [key, sg] of Object.entries(cc.sectionGrades)) {
+    sectionGrades[key] = sg.grade;
+  }
+
+  return {
+    timestamp: new Date().toISOString(),
+    grade: cc.grade,
+    score: cc.score,
+    normalizedWeight: cc.normalizedWeight,
+    sectionGrades,
+    memoryTotal: report.memoryInventory.data?.total ?? 0,
+    recallEvents: report.recallHealth.data?.totalEvents ?? 0,
+    graphLinks: report.graphReadiness.data?.totalLinks ?? 0,
+    graphCoveragePct: report.graphReadiness.data?.linkCoveragePct ?? 0,
+    pipelinePackets: report.pipelineStatus.data?.totalPackets ?? 0,
+    pipelinePackets24h: report.pipelineStatus.data?.packetsLast24h ?? 0,
+    pendingCandidates: report.pipelineStatus.data?.candidatesByStatus.pending ?? 0,
+    promotedBeliefs: report.pipelineStatus.data?.promotedBeliefCount ?? 0,
+    advisoryCount: report.systemAdvisories.length,
+    topAdvisoryPriorities: report.systemAdvisories.slice(0, 3).map(a => a.priority),
+  };
+}
+
+function getSnapshotPath(workspaceDir: string): string {
+  return path.join(workspaceDir, SNAPSHOT_DIR, SNAPSHOT_FILE);
+}
+
+export function saveSnapshot(snapshot: ReportSnapshot, workspaceDir: string): void {
+  const dir = path.join(workspaceDir, SNAPSHOT_DIR);
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* already exists */ }
+  fs.writeFileSync(getSnapshotPath(workspaceDir), JSON.stringify(snapshot, null, 2), 'utf-8');
+}
+
+export function loadSnapshot(workspaceDir: string): ReportSnapshot | null {
+  const p = getSnapshotPath(workspaceDir);
+  try {
+    if (!fs.existsSync(p)) return null;
+    const raw = fs.readFileSync(p, 'utf-8');
+    return JSON.parse(raw) as ReportSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+export function compareSnapshots(
+  previous: ReportSnapshot | null,
+  current: ReportSnapshot,
+): ContinuityComparison {
+  if (!previous) {
+    return { previousSnapshot: null, changes: [], changed: false };
+  }
+
+  const changes: ContinuityDelta[] = [];
+  const fields: Array<[keyof ReportSnapshot, string]> = [
+    ['score', 'score'],
+    ['grade', 'grade'],
+    ['memoryTotal', 'memory_total'],
+    ['recallEvents', 'recall_events'],
+    ['graphLinks', 'graph_links'],
+    ['graphCoveragePct', 'graph_coverage_pct'],
+    ['pipelinePackets', 'pipeline_packets'],
+    ['pipelinePackets24h', 'pipeline_packets_24h'],
+    ['pendingCandidates', 'pending_candidates'],
+    ['promotedBeliefs', 'promoted_beliefs'],
+    ['advisoryCount', 'advisory_count'],
+  ];
+
+  for (const [key, label] of fields) {
+    const prev = previous[key] as string | number;
+    const curr = current[key] as string | number;
+    if (prev !== curr) {
+      const direction =
+        typeof prev === 'number' && typeof curr === 'number'
+          ? curr > prev ? 'up' : 'down'
+          : 'changed';
+      changes.push({ field: label, previous: prev, current: curr, direction });
+    }
+  }
+
+  // Section grade changes
+  for (const [section, prevGrade] of Object.entries(previous.sectionGrades)) {
+    const currGrade = current.sectionGrades[section];
+    if (prevGrade !== currGrade) {
+      changes.push({ field: `section.${section}`, previous: prevGrade, current: currGrade, direction: 'changed' });
+    }
+  }
+
+  return { previousSnapshot: previous, changes, changed: changes.length > 0 };
+}
+
+// ============================================================================
+// Exec Summary
+// ============================================================================
+
+export function buildExecSummary(report: ContinuityReport, comparison?: ContinuityComparison): string[] {
+  const lines: string[] = [];
+  const cc = report.continuityConfidence;
+
+  lines.push('Executive Summary');
+  lines.push('───────────────────────────');
+  lines.push(`   Grade: ${cc.grade.toUpperCase()}`);
+  lines.push(`   Score: ${cc.score}/100`);
+  lines.push(`   Confidence: ${(cc.normalizedWeight * 100).toFixed(0)}% weight available`);
+
+  // Top advisories
+  if (report.systemAdvisories.length > 0) {
+    const top = report.systemAdvisories.slice(0, 3);
+    lines.push(`   Top advisories (${report.systemAdvisories.length} total):`);
+    for (const a of top) {
+      lines.push(`     [P${a.priority}] (${a.source}) ${a.message.slice(0, 120)}`);
+    }
+  } else {
+    lines.push('   No advisories. All sections healthy.');
+  }
+
+  // Changed since last run
+  if (comparison) {
+    if (comparison.previousSnapshot) {
+      if (comparison.changed) {
+        lines.push(`   Changed since last run (${comparison.previousSnapshot.timestamp}):`);
+        for (const d of comparison.changes.slice(0, 8)) {
+          const arrow = d.direction === 'up' ? '↑' : d.direction === 'down' ? '↓' : '→';
+          lines.push(`     ${arrow} ${d.field}: ${d.previous} → ${d.current}`);
+        }
+      } else {
+        lines.push(`   No changes since last run (${comparison.previousSnapshot.timestamp})`);
+      }
+    } else {
+      lines.push('   No prior snapshot to compare');
+    }
+  }
+
+  return lines;
+}
+
+// ============================================================================
+// Compact Format
+// ============================================================================
+
+export function formatReportCompact(report: ContinuityReport, comparison?: ContinuityComparison): string {
+  const lines: string[] = [];
+  const bar = '━'.repeat(59);
+
+  lines.push('Continuity Resilience Report (compact)', bar);
+
+  // Exec summary
+  lines.push(...buildExecSummary(report, comparison));
+
+  // Section grades one-liner
+  const cc = report.continuityConfidence;
+  const sectionSummary = Object.entries(cc.sectionGrades)
+    .map(([k, sg]) => `${k}: ${sg.grade.toUpperCase()}`)
+    .join(' | ');
+  lines.push('', 'Section Grades', '───────────────────────────');
+  lines.push(`   ${sectionSummary}`);
+
+  // Key metrics
+  lines.push('', 'Key Metrics', '───────────────────────────');
+  if (report.memoryInventory.data) lines.push(`   Memories: ${report.memoryInventory.data.total}`);
+  if (report.recallHealth.data) lines.push(`   Recall events: ${report.recallHealth.data.totalEvents}`);
+  if (report.graphReadiness.data) lines.push(`   Graph: ${report.graphReadiness.data.totalLinks} links, ${report.graphReadiness.data.linkCoveragePct.toFixed(0)}% coverage`);
+  if (report.pipelineStatus.data) lines.push(`   Pipeline: ${report.pipelineStatus.data.totalPackets} packets, ${report.pipelineStatus.data.packetsLast24h} last 24h`);
+  if (report.livingState.data) lines.push(`   Living state: ${report.livingState.data.packetCount ?? 'N/A'} packets, ${report.livingState.data.capabilityCount ?? 'N/A'} capabilities`);
+  if (report.toolRegistry.data) lines.push(`   Tools: ${report.toolRegistry.data.declaredTools.length} declared, ${report.toolRegistry.data.mismatchCount} mismatches`);
+
+  lines.push('', bar);
+  lines.push('Advisory report (Phase 6F). No mutations. Read-only.');
+  return lines.join('\n');
+}
+
+// ============================================================================
+// JSON Format
+// ============================================================================
+
+export function formatReportJson(report: ContinuityReport, comparison?: ContinuityComparison): string {
+  const json: Record<string, unknown> = {
+    timestamp: new Date().toISOString(),
+    continuityConfidence: report.continuityConfidence,
+    sections: {
+      memoryInventory: {
+        grade: report.memoryInventory.grade,
+        available: report.memoryInventory.available,
+        data: report.memoryInventory.data,
+      },
+      recallHealth: {
+        grade: report.recallHealth.grade,
+        available: report.recallHealth.available,
+        data: report.recallHealth.data,
+      },
+      graphReadiness: {
+        grade: report.graphReadiness.grade,
+        available: report.graphReadiness.available,
+        data: report.graphReadiness.data,
+      },
+      pipelineStatus: {
+        grade: report.pipelineStatus.grade,
+        available: report.pipelineStatus.available,
+        data: report.pipelineStatus.data,
+      },
+      livingState: {
+        grade: report.livingState.grade,
+        available: report.livingState.available,
+        data: report.livingState.data,
+      },
+      docsFreshness: {
+        grade: report.docsFreshness.grade,
+        available: report.docsFreshness.available,
+        data: report.docsFreshness.data,
+      },
+      toolRegistry: {
+        grade: report.toolRegistry.grade,
+        available: report.toolRegistry.available,
+        data: report.toolRegistry.data,
+      },
+    },
+    systemAdvisories: report.systemAdvisories,
+    knowledgeSignals: report.knowledgeSignals,
+    comparison: comparison ?? null,
+  };
+  return JSON.stringify(json, null, 2);
+}
+
+// ============================================================================
+// Full Format (enhanced with exec summary + optional comparison)
+// ============================================================================
+
+export function formatReportFull(report: ContinuityReport, comparison?: ContinuityComparison): string {
+  const base = formatReport(report);
+  if (!comparison) return base;
+
+  // Insert exec summary after header, before sections
+  const lines = base.split('\n');
+  const bar = '━'.repeat(59);
+  const execLines = buildExecSummary(report, comparison);
+
+  // Find the second bar line (end of header) — insert exec summary after it
+  let barCount = 0;
+  let insertIdx = 3;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] === bar) { barCount++; if (barCount === 2) { insertIdx = i + 1; break; } }
+  }
+
+  lines.splice(insertIdx, 0, '', ...execLines);
+  return lines.join('\n');
+}
+
+// ============================================================================
+// Main Phase 6F Entry Point
+// ============================================================================
+
+export async function buildContinuityReportWithOptions(
+  database: Database,
+  workspaceDir: string,
+  toolMap: Record<string, unknown>,
+  windowHours: number,
+  options: ContinuityReportOptions,
+): Promise<string> {
+  const report = await buildContinuityResilienceReportData(database, workspaceDir, toolMap, windowHours);
+
+  const mode = options.mode ?? 'full';
+  const format = options.format ?? 'text';
+
+  // Handle snapshot save
+  let comparison: ContinuityComparison | undefined;
+  let currentSnapshot: ReportSnapshot | undefined;
+
+  if (options.compare || options.snapshot) {
+    currentSnapshot = snapshotFromReport(report);
+  }
+
+  if (options.compare) {
+    const previous = loadSnapshot(workspaceDir);
+    comparison = compareSnapshots(previous, currentSnapshot ?? snapshotFromReport(report));
+  }
+
+  if (options.snapshot && currentSnapshot) {
+    saveSnapshot(currentSnapshot, workspaceDir);
+  }
+
+  if (format === 'json') {
+    return formatReportJson(report, comparison);
+  }
+
+  if (mode === 'compact') {
+    return formatReportCompact(report, comparison);
+  }
+
+  return formatReportFull(report, comparison);
 }
