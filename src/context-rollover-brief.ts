@@ -11,12 +11,19 @@
 import { estimateTokens } from './token-bucket-analyzer.js';
 import { RolloverConfig } from './context-rollover-config.js';
 
-interface MessageLike {
-  info?: { role?: string; sessionID?: string };
-  parts?: any[];
+interface RolloverBriefPart {
+  type?: string;
+  text?: string;
+  output?: string;
+  args?: Record<string, unknown>;
 }
 
-function extractText(parts: any[] | undefined): string {
+interface MessageLike {
+  info?: { role?: string; sessionID?: string };
+  parts?: RolloverBriefPart[];
+}
+
+function extractText(parts: RolloverBriefPart[] | undefined): string {
   if (!parts) return '';
   return parts
     .filter((p) => p?.type === 'text' && typeof p.text === 'string')
@@ -24,7 +31,7 @@ function extractText(parts: any[] | undefined): string {
     .join('\n');
 }
 
-function extractFilePaths(parts: any[] | undefined): string[] {
+function extractFilePaths(parts: RolloverBriefPart[] | undefined): string[] {
   if (!parts) return [];
   const paths: string[] = [];
   for (const p of parts) {
@@ -39,7 +46,7 @@ function extractFilePaths(parts: any[] | undefined): string[] {
   return paths;
 }
 
-function extractErrors(parts: any[] | undefined): string[] {
+function extractErrors(parts: RolloverBriefPart[] | undefined): string[] {
   if (!parts) return [];
   const errors: string[] = [];
   for (const p of parts) {
