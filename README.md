@@ -1,4 +1,4 @@
-# CSM — Cross-Session Memory
+ CSM — Cross-Session Memory
 
 **Give your AI assistant long-term memory.**
 
@@ -31,7 +31,7 @@ npm run build
 npm run verify
 ```
 
-That's it. 731 tests will run against a local Postgres instance.
+That's it. 750 tests will run against a local Postgres instance.
 
 ---
 
@@ -78,17 +78,17 @@ npm run verify
 
 ## What it can do
 
-CSM gives your assistant **27 tools** organized by category:
+CSM gives your assistant **29 tools** organized by category:
 
 | Category | Tools | Description |
 |----------|-------|-------------|
-| **Memory** | save, search, list, delete, context, lesson, transcript, distill, distilled_view, compact | Store, find, and manage memories |
-| **Governance** | candidate_generate, candidate_report, backfill_embeddings, dedup_detect, merge, archive_candidate_report | Keep the memory store clean and healthy |
-| **Beliefs** | belief_scan, belief_scan_report, belief_promote, belief_knowledge, governance_report | Extract patterns, build durable knowledge |
+| **Memory** | save, search, list, delete, context, lesson, transcript, distill, distilled_view, compact, related | Store, find, and manage memories (related = graph-linked recall) |
+| **Governance** | backfill_embeddings, dedup_detect, merge, candidate_generate, candidate_report, archive_candidate_report, governance_report | Keep the memory store clean and healthy |
+| **Beliefs** | belief_scan, belief_scan_report, belief_promote, belief_knowledge | Extract patterns, build durable knowledge |
 | **Living state** | living_state_preview, living_state_debug | See what the system knows right now |
 | **Self-model** | self_model | Track capability confidence and drift |
 | **Experience** | packets | Browse the observation log |
-| **Diagnostics** | runtime_status, compaction_audit | Check health and performance |
+| **Diagnostics** | runtime_status, compaction_audit, recall_quality_report | Check health, performance, and recall quality |
 
 ---
 
@@ -102,6 +102,8 @@ CSM processes events through a pipeline — each stage builds on the last:
 4. **Scan** — Recurring patterns across packets become belief candidates
 5. **Promote** — High-confidence candidates become durable memories
 6. **Advise** — The living state block tells the assistant what it knows
+7. **Telemetry** — Recall events are recorded across 8 surfaces (search, list, context_recall, graph, vector_only, text_only, text_fallback, empty_result)
+8. **Audit** — Recall quality is scored with advisory grades (healthy / sparse_data / needs_attention / degraded / unknown) — no automatic action taken
 
 Every promotion has safety gates: confidence thresholds, dedup checks, contradiction detection. Nothing gets saved without evidence.
 
@@ -111,16 +113,17 @@ Every promotion has safety gates: confidence thresholds, dedup checks, contradic
 
 | Metric | Value |
 |--------|-------|
-| Tests | 731/731 |
-| Tools | 27 |
-| Tables | 25 |
+| Tests | 750/750 |
+| Tools | 29 |
+| Tables | 26 |
 | Memory types | 12 |
 | Candidate types | 10 |
+| Recall surfaces | 8 |
 | Tokens saved | 2B+ |
 | Compaction rate | 90.8% |
 | Lint | 96 warnings (zero errors) |
 
-Used in production with 46,000+ active memories.
+Used in production with 54,000+ active memories.
 
 ---
 
@@ -128,7 +131,8 @@ Used in production with 46,000+ active memories.
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Module flow and dependencies
 - [docs/PHASE3G_SQLITE_MVP.md](docs/PHASE3G_SQLITE_MVP.md) — SQLite adapter details
-- [docs/PHASE4FA_LIVING_STATE_PREVIEW.md](docs/PHASE4FA_LIVING_STATE_PREVIEW.md) — Advisory pipeline
+- [docs/PHASE4FC_STAGED_ENABLEMENT.md](docs/PHASE4FC_STAGED_ENABLEMENT.md) — Living state advisory pipeline
+- [docs/PHASE6D_RECALL_QUALITY_SCORING.md](docs/PHASE6D_RECALL_QUALITY_SCORING.md) — Recall quality scoring semantics
 
 ---
 
