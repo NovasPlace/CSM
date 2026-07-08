@@ -32,6 +32,9 @@
 - **Phase 8A-R — Re-entry UX Interface Repair**: `docs/PHASE8A_REPAIR.md` created documenting actual ReEntryProtocol interface, adapter plan, and tool registry consistency fix. All 808 tests pass. Next: implement adapter + tool. Committed `b77dd6e`.
 
 ### Done
+- **Phase 8A-Impl — Re-entry Preview Adapter + Tool**: `src/reentry-ux-tool.ts` — `ReEntryPreviewAdapter` wrapping real `ReEntryProtocol` (built against actual `ReEntryDiagnostic` interface, not an imagined one). `csm_reentry_preview` tool registered in `src/hooks/tool-hooks.ts`; `ReEntryPreviewAdapter` instantiated from `pluginCtx.reEntryProtocol`. Read-only: calls `buildBlock()`/`diagnose()` only, no writes. 5 new tests. Tool count 31→32. Committed `4b7c2f1`.
+
+### Done
 - **Phase 1A (Config Contract)**: `.env.example` (19 env vars), `src/config.ts` with `getEnvString/getEnvBoolean/getEnvNumber`, provider-specific env vars, mode-based DB URL, `validateAndReturnConfig()`
 - **Phase 1B (Logger Foundation)**: `src/logger.ts` with levels (debug/info/warn/error) and context (session/project/turn/memoryId), `src/stats-writer.ts` updated, `src/index.ts` startup/dispose paths use logger
 - **Phase 1C (Index Split)**: `src/hooks-registration.ts` (466 lines) with verbatim hooks/tools/dispose; `src/index.ts` simplified to re-exports; `src/plugin-entry.ts` removed

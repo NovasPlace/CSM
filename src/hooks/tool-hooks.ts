@@ -2,10 +2,11 @@ import {
   memorySaveTool, memorySearchTool, memoryListTool, memoryDeleteTool,
   memoryContextTool, memoryLessonTool, memoryTranscriptTool,
   memoryDistillTool, memoryDistilledViewTool, memoryCompactTool,
-  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool,
+  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool, reentryPreviewTool,
 } from '../tools.js';
 import { memoryBackfillEmbeddingsTool, memoryDedupDetectTool, memoryMergeDuplicatesTool, memoryCandidateGenerateTool, memoryCandidateReportTool } from '../maintenance-tools.js';
 import { archiveCandidateReportTool } from '../archive-candidate-report-tool.js';
+import { ReEntryPreviewAdapter } from '../reentry-ux-tool.js';
 import { memoryGovernanceReportTool } from '../memory-governance-report-tool.js';
 import { memoryPacketsTool } from '../experience-packet-tool.js';
 import { beliefScanTool, beliefScanReportTool } from '../belief-scan-tool.js';
@@ -48,7 +49,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
   const archiveCandidateReportBuilder = new ArchiveCandidateReportBuilder(database);
   const governanceReportBuilder = new MemoryGovernanceReportBuilder(database);
 
-  return {
+  const toolList: Record<string, unknown> = {
     csm_memory_save: memorySaveTool(memoryManager),
     csm_memory_search: memorySearchTool(memoryManager, primingEngine),
     csm_memory_list: memoryListTool(memoryManager),
@@ -80,7 +81,6 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     csm_recall_quality_report: recallQualityReportTool(database),
     csm_memory_related: memoryRelatedTool(database),
     csm_continuity_report: continuityReportTool(database),
-    csm_reentry_preview: reentryPreviewTool(createReentryPreviewAdapter(database)),
     create_checkpoint: createCheckpointTool(checkpointToolDeps),
     expand_checkpoint_ref: expandCheckpointRefTool(checkpointToolDeps),
     list_checkpoints: listCheckpointsTool(checkpointToolDeps),
@@ -95,4 +95,13 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     goal_update: goalUpdateTool({ pool: database.getPool() }),
     goal_list: goalListTool({ pool: database.getPool() }),
   };
+
+  if (pluginCtx.reEntryProtocol) {
+    const proto = pluginCtx.reEntryProtocol;
+    toolList['csm_reentry_preview'] = reentryPreviewTool(
+      new ReEntryPreviewAdapter(proto),
+    );
+  }
+
+  return toolList;
 }

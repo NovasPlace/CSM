@@ -543,8 +543,8 @@ describe('Phase 4G: tool registration', () => {
     assert.ok(CSM_TOOL_NAMES.includes('csm_belief_promote'), 'csm_belief_promote should be in CSM_TOOL_NAMES');
   });
 
-  it('tool count is 31 (30 + 1 new scan tool)', async () => {
+  it('tool count is 32 (31 + 1 reentry preview tool)', async () => {
     const { CSM_TOOL_NAMES } = await import('../dist/tool-names.js');
-    assert.equal(CSM_TOOL_NAMES.length, 31, `expected 31 tools, got ${CSM_TOOL_NAMES.length}`);
+    assert.equal(CSM_TOOL_NAMES.length, 32, `expected 32 tools, got ${CSM_TOOL_NAMES.length}`);
   });
 });

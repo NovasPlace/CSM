@@ -14,7 +14,7 @@ import type { Redactor } from './redactor.js';
 import { listMemoriesOp, saveMemoryOp, searchMemoriesOp } from './bridge-ops.js';
 import { RecallQualityAuditReportBuilder, validateRecallQualityAuditParams } from './recall-quality-tool.js';
 import { CSM_TOOL_NAMES } from './tool-names.js';
-import { ReEntryPreviewAdapter } from './reentry-ux-tool.js';
+import type { ReEntryPreviewAdapter } from './reentry-ux-tool.js';
 
 /**
  * memory_save - Save information to cross-session memory
@@ -237,7 +237,7 @@ export function reentryPreviewTool(adapter: ReEntryPreviewAdapter) {
   return {
     description: 'Get the current re-entry block for a session/project without injecting it into the system prompt. Shows layers, trimming diagnostics, and token estimate. Does not modify any state.',
     args: {},
-    async execute(_args, context) {
+    async execute(_args: Record<string, unknown>, context: { sessionID?: string; directory?: string }) {
       const sessionId = context.sessionID || 'unknown';
       const projectId = context.directory || 'default';
 

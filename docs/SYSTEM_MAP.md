@@ -6,6 +6,7 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/reentry-ux-tool.ts` | ReEntryPreviewReport, ReentryPreviewInput, ReEntryPreviewAdapter | src | Tool registration |
 | `test/phase-8a-impl-reentry-ux-tool.test.ts` | none | test | Tool registration |
 | `test/phase-7b-system-transform.test.js` | none | test | Test suite |
 | `test/phase-7b-system-transform.test.ts` | none | test | Test suite |
