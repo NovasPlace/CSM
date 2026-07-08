@@ -61,7 +61,7 @@
     "verify": "npm run build && npm run typecheck && npx tsx --test test/*.test.ts",
     "benchmark:long-session": "npx tsx src/benchmark.ts",
     "lint": "npm run lint:src",
-    "lint:src": "eslint src --max-warnings=67",
+    "lint:src": "eslint src --max-warnings=62",
     "lint:all": "eslint .",
     "lint:fix": "eslint src --fix",
     "csm": "npx tsx scripts/csm-query.ts"
