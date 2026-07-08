@@ -50,6 +50,61 @@ export interface SessionBreakdown {
   lastCompaction: string;
 }
 
+// --- Typed DB row DTOs (Phase L4-B) ---
+
+interface NegativeAnomalyRow {
+  id: number;
+  session_id: string;
+  detail: string;
+}
+
+interface MathErrorRow {
+  id: number;
+  session_id: string;
+  before_tokens: number;
+  after_tokens: number;
+  tokens_saved: number;
+  recomputed_saved: number;
+}
+
+interface ZeroAnomalyRow {
+  id: number;
+  session_id: string;
+  before_tokens: number;
+  after_tokens: number;
+}
+
+interface SavedExceedsRow {
+  id: number;
+  session_id: string;
+  before_tokens: number;
+  tokens_saved: number;
+}
+
+interface IdRow {
+  id: number;
+}
+
+interface CountRow {
+  cnt: string | number;
+}
+
+interface TotalsRow {
+  total_before: string | number;
+  total_after: string | number;
+  total_saved: string | number;
+}
+
+interface SessionBreakdownRow {
+  session_id: string;
+  count: string | number;
+  saved: string | number;
+  before: string | number;
+  after: string | number;
+  first: string;
+  last: string;
+}
+
 export async function auditCompactionTelemetry(pool: DatabasePool): Promise<AuditResult> {
   const anomalies_neg = await pool.query(`
     SELECT id, session_id,
@@ -59,7 +114,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
   `);
 
   const negativeValues: AuditAnomaly[] = [];
-  for (const row of anomalies_neg.rows as any[]) {
+  for (const row of anomalies_neg.rows as NegativeAnomalyRow[]) {
     negativeValues.push({
       id: row.id,
       sessionId: row.session_id,
@@ -78,7 +133,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
   `);
 
   const mathErrors: AuditAnomaly[] = [];
-  for (const row of anomalies_math.rows as any[]) {
+  for (const row of anomalies_math.rows as MathErrorRow[]) {
     mathErrors.push({
       id: row.id,
       sessionId: row.session_id,
@@ -95,7 +150,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
   `);
 
   const zeroBeforeOrAfter: AuditAnomaly[] = [];
-  for (const row of anomalies_zero.rows as any[]) {
+  for (const row of anomalies_zero.rows as ZeroAnomalyRow[]) {
     const field = row.before_tokens === 0 ? 'before_tokens' : 'after_tokens';
     zeroBeforeOrAfter.push({
       id: row.id,
@@ -113,7 +168,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
   `);
 
   const savedExceedsBefore: AuditAnomaly[] = [];
-  for (const row of anomalies_exceed.rows as any[]) {
+  for (const row of anomalies_exceed.rows as SavedExceedsRow[]) {
     savedExceedsBefore.push({
       id: row.id,
       sessionId: row.session_id,
@@ -146,10 +201,10 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
       FROM compaction_metrics
     ) sub WHERE rn > 1
   `);
-  const duplicateIds = (dedupCheck.rows as any[]).map((r) => Number(r.id));
+  const duplicateIds = (dedupCheck.rows as IdRow[]).map((r) => Number(r.id));
 
   const countResult = await pool.query('SELECT COUNT(*) as cnt FROM compaction_metrics');
-  const totalRows = parseInt((countResult.rows[0] as any).cnt, 10);
+  const totalRows = parseInt(String((countResult.rows[0] as CountRow).cnt), 10);
 
   const statusResult = await pool.query(`
     SELECT status, COUNT(*) as cnt FROM compaction_metrics GROUP BY status
@@ -168,11 +223,11 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
       SUM(tokens_saved) as total_saved
     FROM compaction_metrics
   `);
-  const storedRow = storedResult.rows[0] as any;
+  const storedRow = storedResult.rows[0] as TotalsRow;
   const storedTotals = {
-    totalBeforeTokens: parseInt(storedRow.total_before, 10),
-    totalAfterTokens: parseInt(storedRow.total_after, 10),
-    totalTokensSaved: parseInt(storedRow.total_saved, 10),
+    totalBeforeTokens: parseInt(String(storedRow.total_before), 10),
+    totalAfterTokens: parseInt(String(storedRow.total_after), 10),
+    totalTokensSaved: parseInt(String(storedRow.total_saved), 10),
   };
 
   const recomputeResult = await pool.query(`
@@ -182,17 +237,17 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
       SUM(before_tokens - after_tokens) as total_saved
     FROM compaction_metrics
   `);
-  const recompRow = recomputeResult.rows[0] as any;
+  const recompRow = recomputeResult.rows[0] as TotalsRow;
   const recomputedTotals = {
-    totalBeforeTokens: parseInt(recompRow.total_before, 10),
-    totalAfterTokens: parseInt(recompRow.total_after, 10),
-    totalTokensSaved: parseInt(recompRow.total_saved, 10),
+    totalBeforeTokens: parseInt(String(recompRow.total_before), 10),
+    totalAfterTokens: parseInt(String(recompRow.total_after), 10),
+    totalTokensSaved: parseInt(String(recompRow.total_saved), 10),
     totalCompactions: totalRows,
     avgTokensSavedPerCompaction: totalRows > 0
-      ? Math.round(parseInt(recompRow.total_saved, 10) / totalRows)
+      ? Math.round(parseInt(String(recompRow.total_saved), 10) / totalRows)
       : 0,
-    overallReductionPercent: parseInt(recompRow.total_before, 10) > 0
-      ? Math.round((parseInt(recompRow.total_saved, 10) / parseInt(recompRow.total_before, 10)) * 100)
+    overallReductionPercent: parseInt(String(recompRow.total_before), 10) > 0
+      ? Math.round((parseInt(String(recompRow.total_saved), 10) / parseInt(String(recompRow.total_before), 10)) * 100)
       : 0,
   };
 
@@ -212,12 +267,12 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
     LIMIT 20
   `);
 
-  const sessionBreakdown: SessionBreakdown[] = (sessionResult.rows as any[]).map((row) => ({
+  const sessionBreakdown: SessionBreakdown[] = (sessionResult.rows as SessionBreakdownRow[]).map((row) => ({
     sessionId: row.session_id,
-    compactionCount: parseInt(row.count, 10),
-    tokensSaved: parseInt(row.saved, 10),
-    beforeTokens: parseInt(row.before, 10),
-    afterTokens: parseInt(row.after, 10),
+    compactionCount: parseInt(String(row.count), 10),
+    tokensSaved: parseInt(String(row.saved), 10),
+    beforeTokens: parseInt(String(row.before), 10),
+    afterTokens: parseInt(String(row.after), 10),
     firstCompaction: row.first,
     lastCompaction: row.last,
   }));
