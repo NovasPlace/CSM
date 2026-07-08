@@ -1,11 +1,18 @@
 import { estimateTokens } from './token-bucket-analyzer.js';
 
-interface MessageLike {
-  info?: { role?: string };
-  parts?: any[];
+interface GovernorPart {
+  type?: string;
+  text?: string;
+  tool?: string;
+  state?: { output?: string };
 }
 
-function textOf(part: any): string {
+interface MessageLike {
+  info?: { role?: string };
+  parts?: GovernorPart[];
+}
+
+function textOf(part: GovernorPart): string {
   return String(part.text ?? part.state?.output ?? '');
 }
 
@@ -39,7 +46,7 @@ function signalLines(text: string): string[] {
     .slice(0, 3);
 }
 
-function distilledToolText(part: any): string {
+function distilledToolText(part: GovernorPart): string {
   const output = textOf(part);
   const tool = String(part.tool ?? 'tool');
   const path = primaryPath(output);
@@ -55,7 +62,7 @@ function dedupeRef(text: string): string {
   return `[DEDUP_REF] ${text.slice(0, 120)}`;
 }
 
-function toolSignature(part: any): string {
+function toolSignature(part: GovernorPart): string {
   const output = textOf(part);
   const tool = String(part.tool ?? 'tool');
   const path = primaryPath(output);
@@ -63,7 +70,7 @@ function toolSignature(part: any): string {
   return normalize(`${tool}|${path}|${error}`);
 }
 
-function shouldSkipPart(part: any): boolean {
+function shouldSkipPart(part: GovernorPart): boolean {
   const text = textOf(part);
   return text.length === 0
     || /^\[(MEMORY_BRIEF|CHECKPOINT_REF|DISTILLED_STATE|TOOL_DISTILLED|DEDUP_REF)/.test(text);
@@ -81,7 +88,7 @@ export function optimizeGovernorContext(messages: MessageLike[], recentWindow: n
       const key = normalize(text);
       const firstSeen = seen.get(key);
       if (firstSeen !== undefined && msgIndex < keepFrom) {
-        if (part.type === 'tool') part.state.output = dedupeRef(text);
+        if (part.type === 'tool') part.state!.output = dedupeRef(text);
         else part.text = dedupeRef(text);
         continue;
       }
@@ -90,12 +97,12 @@ export function optimizeGovernorContext(messages: MessageLike[], recentWindow: n
       const signature = toolSignature(part);
       const priorTool = seenTools.get(signature);
       if (priorTool !== undefined) {
-        part.state.output = `[TOOL_DEDUP_REF:${String(part.tool ?? 'tool')}] ${primaryPath(text) || 'repeat'}`;
+        part.state!.output = `[TOOL_DEDUP_REF:${String(part.tool ?? 'tool')}] ${primaryPath(text) || 'repeat'}`;
         continue;
       }
       seenTools.set(signature, msgIndex);
       if (estimateTokens(text) < 80) continue;
-      part.state.output = distilledToolText(part);
+      part.state!.output = distilledToolText(part);
     }
   }
 }

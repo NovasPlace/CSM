@@ -20,6 +20,71 @@ const PROMPT_INJECTION_DISABLE_ENV = 'CSM_DISABLE_PROMPT_INJECTION';
 const GREETING_TURN_RE = /^(hi|hello|hey|yo|sup|what'?s up|howdy|hiya|good morning|good afternoon|good evening)\b[!.? ]*$/i;
 const WORKSPACE_FACT_TURN_RE = /\b(phase\s+\d+|changelog|system map|readme|docs?|workspace|repo|repository|file|files|search the repo|search the workspace)\b/i;
 
+// --- Typed DTOs for DB rows and external payloads (Phase L4-A) ---
+
+interface MemorySnapshotRow {
+  id: number;
+  content: string;
+  memory_type: string;
+  importance: number | null;
+  created_at: string;
+  session_id: string | null;
+  tags: string[] | null;
+}
+
+interface RecentSessionRow {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  mem_count: string | number;
+}
+
+interface LessonRow {
+  id: number;
+  content: string;
+  importance: number | null;
+  created_at: string;
+  session_id: string | null;
+}
+
+interface CountRow {
+  cnt: string | number;
+}
+
+interface LivingMindCortex {
+  cognitive_stance?: string;
+  urgency?: number;
+  creative_pressure?: number;
+  phase_gate?: {
+    current_phase?: string;
+    blocked?: string[];
+  };
+  hormones?: {
+    dominant_emotion?: string;
+  };
+  system_load?: {
+    energy_budget?: number;
+    pain?: number;
+    cognitive_load?: number;
+    status?: string;
+  };
+}
+
+interface CompressedDetail {
+  source: string;
+  risk: string;
+}
+
+interface SystemTransformInput {
+  sessionID?: string;
+  model?: unknown;
+  messages?: Array<{ content?: string }>;
+}
+
+interface SystemTransformOutput {
+  system: string[];
+}
+
 function logTelemetry(entry: Record<string, unknown>): void {
   try {
     mkdirSync(dirname(TELEMETRY_LOG), { recursive: true });
@@ -63,7 +128,7 @@ async function fetchMemorySnapshot(ctx: PluginContext, limit: number): Promise<s
     [limit]
   );
   const lines: string[] = [];
-  for (const row of result.rows as any[]) {
+  for (const row of result.rows as MemorySnapshotRow[]) {
     const preview = row.content?.substring(0, 180)?.replace(/\n/g, ' ') ?? '(empty)';
     const tags = row.tags?.length ? ` tags=[${row.tags.join(',')}]` : '';
     const sess = row.session_id ? ` session=${row.session_id.slice(0, 8)}` : '';
@@ -83,8 +148,8 @@ async function fetchRecentSessions(ctx: PluginContext, limit: number): Promise<s
     [limit]
   );
   const lines: string[] = [];
-  for (const row of result.rows as any[]) {
-    lines.push(`  Session ${row.id.slice(0, 8)} — ${row.mem_count} memories — updated ${new Date(row.updated_at).toLocaleString()}`);
+  for (const row of result.rows as RecentSessionRow[]) {
+    lines.push(`  Session ${row.id.slice(0, 8)} — ${String(row.mem_count)} memories — updated ${new Date(row.updated_at).toLocaleString()}`);
   }
   return lines;
 }
@@ -100,7 +165,7 @@ async function fetchLessons(ctx: PluginContext, limit: number): Promise<string[]
     [limit]
   );
   const lines: string[] = [];
-  for (const row of result.rows as any[]) {
+  for (const row of result.rows as LessonRow[]) {
     const preview = row.content?.substring(0, 200)?.replace(/\n/g, ' ') ?? '(empty)';
     lines.push(`  #${row.id} imp=${row.importance?.toFixed(2) ?? '?'} session=${row.session_id?.slice(0, 8) ?? '?'} — ${preview}`);
   }
@@ -108,15 +173,15 @@ async function fetchLessons(ctx: PluginContext, limit: number): Promise<string[]
 }
 
 export function createSystemTransformHook(ctx: PluginContext) {
-  return async (input: any, output: any): Promise<typeof output> => {
+  return async (input: SystemTransformInput, output: SystemTransformOutput): Promise<void> => {
     try {
       output.system = normalizeSystemEntries(output.system);
       if (process.env[PROMPT_INJECTION_DISABLE_ENV] === '1') {
         getLogger().warn('[CrossSessionMemory] Prompt injection disabled via CSM_DISABLE_PROMPT_INJECTION=1');
-        return output;
+        return;
       }
 
-      ctx.syncActiveSession(input.sessionID);
+      ctx.syncActiveSession(input.sessionID ?? '');
       const latestUserTurn = input.sessionID ? ctx.state.recentUserMessages.get(input.sessionID) : undefined;
 
       output.system.unshift(
@@ -151,7 +216,7 @@ export function createSystemTransformHook(ctx: PluginContext) {
       try {
         const pool = ctx.database.getPool();
         const countResult = await pool.query('SELECT COUNT(*) as cnt FROM memories');
-        totalRecords = parseInt((countResult.rows[0] as any)?.cnt ?? '0', 10);
+        totalRecords = parseInt(String((countResult.rows[0] as CountRow)?.cnt ?? '0'), 10);
         dbStatus = 'connected';
 
         // Fetch the hard evidence: actual records the model can see and cite
@@ -160,8 +225,9 @@ export function createSystemTransformHook(ctx: PluginContext) {
           fetchRecentSessions(ctx, 3),         // 3 most recent sessions
           fetchLessons(ctx, 3),                // top 3 lessons
         ]);
-      } catch (e: any) {
-        dbStatus = `error: ${e.message ?? String(e)}`;
+      } catch (_e: unknown) {
+        const msg = _e instanceof Error ? _e.message : String(_e);
+        dbStatus = `error: ${msg}`;
       }
 
       const evidenceBlock = `
@@ -293,7 +359,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             getLogger().info(`[WorkJournal] Injected resume payload for session ${input.sessionID.slice(0, 8)} (${payload.totalEntries} entries)`);
           }
         } catch (wjErr) {
-          console.error('[WorkJournal] Inject hook error:', wjErr);
+          getLogger().error('[WorkJournal] Inject hook error:', wjErr instanceof Error ? wjErr : new Error(String(wjErr)));
         }
       }
 
@@ -632,7 +698,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
       try {
         const res = await fetch('http://localhost:8008/api/agent/context');
         if (res.ok) {
-          const cortex = await res.json() as any;
+          const cortex = await res.json() as LivingMindCortex;
           const lines = ['<living_mind_context>'];
           lines.push(`Cognitive stance: ${cortex.cognitive_stance}`);
           lines.push(`Urgency: ${(cortex.urgency ?? 0).toFixed(2)} | Creative pressure: ${(cortex.creative_pressure ?? 0).toFixed(2)}`);
@@ -642,7 +708,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             const load = cortex.system_load;
             lines.push(`Energy: ${(load.energy_budget ?? 0).toFixed(2)} | Pain: ${(load.pain ?? 0).toFixed(2)} | Load: ${(load.cognitive_load ?? 0).toFixed(2)} | Status: ${load.status}`);
           }
-          if (cortex.phase_gate?.blocked?.length > 0) lines.push(`Phase blocked: ${cortex.phase_gate.blocked.join(', ')}`);
+          if ((cortex.phase_gate?.blocked?.length ?? 0) > 0) lines.push(`Phase blocked: ${cortex.phase_gate!.blocked!.join(', ')}`);
           lines.push('</living_mind_context>');
           output.system.push(lines.join('\n'));
         }
@@ -656,10 +722,10 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
           `[Context Compiler] ${r.mode} ${k(r.beforeTokens)}→${k(r.afterTokens)} | compressed=${r.partsCompressed} pinned=${r.partsPinned} under_budget=${r.afterTokens <= r.budget}`,
         );
         // High-risk compression warnings
-        const highRisk = r.compressedDetails.filter((d: any) => d.risk === 'high');
+        const highRisk = r.compressedDetails.filter((d: CompressedDetail) => d.risk === 'high');
         if (highRisk.length > 0) {
           output.system.push(
-            `⚠ High-risk compressions: ${highRisk.length} — ${highRisk.map((d: any) => d.source).join(', ')}`,
+            `⚠ High-risk compressions: ${highRisk.length} — ${highRisk.map((d: CompressedDetail) => d.source).join(', ')}`,
           );
         }
       }
@@ -672,7 +738,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             input.sessionID,
             ctx.config.contextCache.manifestMaxTokens ?? 2000,
           );
-          if (manifest) output.system.push(manifest);
+          if (manifest) output.system.push(manifest.text);
         } catch { /* cache manifest offline */ }
       }
 
@@ -689,11 +755,11 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
       };
       getLogger().debug(`[TokenBuckets] system: ${formatBreakdown(sysBuckets)}`);
 
-      return output;
+      return;
     } catch (error) {
-      console.error('[CrossSessionMemory] Context injection error:', error);
+      getLogger().error('Context injection error', error instanceof Error ? error : new Error(String(error)));
       output.system = normalizeSystemEntries(output.system);
-      return output;
+      return;
     }
   };
 }

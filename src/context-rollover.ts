@@ -19,9 +19,21 @@ import {
   setHardRolloverFlag,
 } from './context-rollover-schema.js';
 
+interface RolloverPart {
+  type?: string;
+  text?: string;
+  output?: string;
+  state?: { output?: string };
+  id?: string;
+  sessionID?: string;
+  messageID?: string;
+  synthetic?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 interface MessageLike {
   info?: Record<string, unknown> & { role?: string; sessionID?: string };
-  parts?: any[];
+  parts?: RolloverPart[];
 }
 
 export interface RolloverResult {
@@ -44,7 +56,7 @@ const NO_ROLLOVER: Pick<RolloverResult, 'rolloverTriggered' | 'auditLine' | 'bri
   failClosed: false,
 };
 
-function extractAllText(parts: any[] | undefined): string {
+function extractAllText(parts: RolloverPart[] | undefined): string {
   if (!parts) return '';
   const chunks: string[] = [];
   for (const p of parts) {
@@ -106,7 +118,7 @@ async function archiveOldMessages(
   return archivedTokens;
 }
 
-function cloneSyntheticPart(template: any, briefText: string, sessionId: string, messageId: string): any {
+function cloneSyntheticPart(template: RolloverPart | undefined, briefText: string, sessionId: string, messageId: string): RolloverPart {
   if (template?.type === 'text') {
     return {
       type: 'text',
@@ -227,7 +239,7 @@ async function executeRollover(
 export async function performRollover(
   pool: DatabasePool,
   sessionId: string,
-  messages: any[],
+  messages: MessageLike[],
   rawTotalTokens: number,
   cfg: RolloverConfig,
   redactor?: Redactor,

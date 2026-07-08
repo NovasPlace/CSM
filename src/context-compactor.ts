@@ -1,6 +1,24 @@
 ﻿import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics } from './types.js';
 import { extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeQualityScore } from './compaction-quality.js';
 
+// --- Typed DTOs for message mutation and extended tool call state (Phase L4-C) ---
+
+interface CompactableMessagePart {
+  type?: string;
+  state?: { output?: string; status?: string };
+  compacted?: boolean;
+}
+
+interface CompactableMessage {
+  info?: { role?: string };
+  parts?: CompactableMessagePart[];
+}
+
+interface ToolCallWithState extends ToolCallRecord {
+  state?: { status?: string };
+  status?: string;
+}
+
 const DEFAULT_QUALITY_CONFIG = {
   entityRetentionWeight: 0.35,
   decisionRetentionWeight: 0.25,
@@ -51,7 +69,7 @@ export class ContextCompactor {
   compact(
     toolCalls: ToolCallRecord[],
     inputStr?: string,
-    messages?: any[]
+    messages?: CompactableMessage[]
   ): { compacted: string; result: CompactionResult; compactedCount: number } {
     if (!this.config.enabled || toolCalls.length === 0) {
       const raw = toolCalls.map(tc => this.formatRawToolCall(tc)).join('\n') + '\n' + (inputStr ?? '');
@@ -111,10 +129,11 @@ export class ContextCompactor {
         const role = msg.info?.role ?? 'unknown';
         if (role === 'assistant') {
           for (let partIdx = 0; partIdx < (msg.parts?.length ?? 0); partIdx++) {
-            const part = msg.parts[partIdx];
+            const part = msg.parts![partIdx];
             if (part.type === 'tool') {
               if (callIdx < compactable.length) {
                 // This tool part should be compacted
+                if (!part.state) part.state = {};
                 part.state.output = this.formatCompactRef(compactable[callIdx]);
                 part.compacted = true; // Mark as compacted
               }
@@ -261,8 +280,9 @@ export class ContextCompactor {
   }
 
   private getToolCallStatus(tc: ToolCallRecord): string | undefined {
-    if ((tc as any).state?.status) return (tc as any).state.status;
-    if ((tc as any).status) return (tc as any).status;
+    const ext = tc as ToolCallWithState;
+    if (ext.state?.status) return ext.state.status;
+    if (ext.status) return ext.status;
     if (tc.error) return 'completed';
     if (tc.exitCode !== undefined) return 'completed';
     return undefined;
