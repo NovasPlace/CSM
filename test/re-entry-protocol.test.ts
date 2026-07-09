@@ -122,9 +122,10 @@ describe('ReEntryProtocol', () => {
       const block = await protocol.buildBlock('sess-1', 'test-project');
       ok(block!.includes('if the user asks to answer using only this block'), 'should include source-only boundary');
       ok(block!.includes('do not inspect files, tools, memory, git, or docs'), 'should forbid outside inspection');
-      ok(block!.includes('cannot be determined from re-entry context alone'), 'should require honest insufficiency response');
+      ok(block!.includes('separate directly visible/internal issues from unavailable external comparisons'), 'should keep useful block-only answers');
       ok(block!.includes('current git history'), 'should name current git as outside the block');
       ok(block!.includes('cannot be determined from this block unless directly quoted'), 'should forbid external current-state claims');
+      ok(block!.includes('list them even when external/current-state comparison is unavailable'), 'should not collapse to refusal when internal evidence exists');
     });
 
     it('includes identity layer', async () => {

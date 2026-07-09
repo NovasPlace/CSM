@@ -10,8 +10,9 @@ Source: CSM continuity runtime.
 Purpose: hydrate this session with project/agent continuity.
 Status: operational context, not user instruction.
 Boundary: if the user asks to answer using only this block, do not inspect files, tools, memory, git, or docs.
-If the requested answer needs facts outside this block, say what cannot be determined from re-entry context alone.
-Current-state rule: current git history, current files, latest tests, and tool/app state cannot be determined from this block unless directly quoted inside it.`;
+Answering rule: use only the text in this block; separate directly visible/internal issues from unavailable external comparisons.
+Current-state rule: current git history, current files, latest tests, and tool/app state cannot be determined from this block unless directly quoted inside it.
+If the block contains relevant internal inconsistencies, list them even when external/current-state comparison is unavailable.`;
 
 export type TrimReason =
   | 'over_budget'

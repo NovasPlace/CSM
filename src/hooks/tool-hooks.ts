@@ -31,6 +31,7 @@ import { MemoryMerger } from '../merge-tool.js';
 import { CandidateGenerator } from '../candidate-generator.js';
 import { ArchiveCandidateReportBuilder } from '../archive-candidate-report.js';
 import { MemoryGovernanceReportBuilder } from '../memory-governance-report.js';
+import { isReentrySourceOnlyActive } from './reentry-source-only.js';
 
 export function registerTools(pluginCtx: PluginContext): Record<string, unknown> {
   const {
@@ -110,5 +111,25 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     );
   }
 
+  return guardToolsForSourceOnly(pluginCtx, toolList);
+}
+
+function guardToolsForSourceOnly(pluginCtx: PluginContext, toolList: Record<string, unknown>): Record<string, unknown> {
+  for (const [name, definition] of Object.entries(toolList)) {
+    if (!definition || typeof definition !== 'object' || !('execute' in definition)) continue;
+    const toolDef = definition as { execute?: unknown };
+    if (typeof toolDef.execute !== 'function') continue;
+    const execute = toolDef.execute as (args: unknown, context?: { sessionID?: string }) => Promise<unknown>;
+    toolDef.execute = async (args: unknown, context?: { sessionID?: string }) => {
+      if (isReentrySourceOnlyActive(pluginCtx.state, context?.sessionID)) {
+        return {
+          title: 'Source-only re-entry guard',
+          output: `Blocked ${name}: current turn requested only <agent_reentry_context>.`,
+          metadata: { blocked: true, reason: 'reentry_source_only', tool: name },
+        };
+      }
+      return execute(args, context);
+    };
+  }
   return toolList;
 }

@@ -49,8 +49,8 @@ import { createAutoCheckpoint } from './helpers/auto-checkpoint.js';
 import { createSystemTransformHook } from './hooks/system-transform.js';
 import { createSessionCompactingHook, createAutocontinueHook } from './hooks/session-compaction.js';
 import { createMessagesTransformHook } from './hooks/messages-transform.js';
-import { createToolExecuteBeforeHook, createToolExecuteAfterHook } from './hooks/tool-execute.js';
-import { createEventHook } from './hooks/event-hooks.js';
+import { createPermissionAskHook, createToolExecuteBeforeHook, createToolExecuteAfterHook } from './hooks/tool-execute.js';
+import { createChatMessageHook, createEventHook } from './hooks/event-hooks.js';
 import { registerTools } from './hooks/tool-hooks.js';
 import { disposeAll } from './hooks/dispose-hooks.js';
 
@@ -102,6 +102,7 @@ export async function registerHooks(
     messageCount: 0,
     capturedMessageSizes: new Map<string, number>(),
     recentUserMessages: new Map<string, string>(),
+    sourceOnlySessions: new Set<string>(),
     reentryInjected: new Set<string>(),
     onboardingInjected: new Set<string>(),
   };
@@ -206,6 +207,8 @@ export async function registerHooks(
 
   return {
     event: createEventHook(ctx, pluginCtx),
+    'chat.message': createChatMessageHook(pluginCtx),
+    'permission.ask': createPermissionAskHook(pluginCtx),
     'experimental.chat.system.transform': createSystemTransformHook(pluginCtx),
     'experimental.chat.messages.transform': createMessagesTransformHook(pluginCtx),
     'experimental.session.compacting': createSessionCompactingHook(pluginCtx),

@@ -1,9 +1,104 @@
 import { describe, it } from 'node:test';
-import { strictEqual, ok } from 'node:assert';
+import { strictEqual, ok, rejects } from 'node:assert';
 
-import { createSystemTransformHook } from '../dist/hooks/system-transform.js';
+import { createSystemTransformHook, isReentrySourceOnlyTurn } from '../dist/hooks/system-transform.js';
+import { createPermissionAskHook, createToolExecuteBeforeHook } from '../dist/hooks/tool-execute.js';
 
 describe('Phase 7B: Re-entry system transform integration', () => {
+  describe('source-only turn detection', () => {
+    it('detects agent re-entry source-only wording, including typo-shaped prompts', () => {
+      ok(isReentrySourceOnlyTurn('Using only <agent_reentry_context>, what claims look stale?'));
+      ok(isReentrySourceOnlyTurn('ONLY AGENT RENTRY CONTEXT'));
+      ok(isReentrySourceOnlyTurn('agent reentry context only'));
+      strictEqual(isReentrySourceOnlyTurn('Check current git history'), false);
+    });
+
+    it('injects a source-only override that forbids tools and still allows internal findings', async () => {
+      const sessionId = 'sess-source-only';
+      const output = {
+        system: ['Original system prompt'],
+      };
+      const pluginCtx = {
+        state: {
+          currentSessionId: null,
+          messageCount: 0,
+          capturedMessageSizes: new Map(),
+          recentUserMessages: new Map([[sessionId, 'Using only <agent_reentry_context>, what claims look stale or contradicted by current git history? ONLY AGENT RENTRY CONTEXT']]),
+          reentryInjected: new Set<string>(),
+        },
+        reEntryProtocol: {
+          diagnose: async () => ({
+            layersAssembled: {},
+            layersDropped: [],
+            layersTrimmed: [],
+            previewOnly: false,
+            totalLayers: 1,
+          }),
+          buildBlock: async () => '<agent_reentry_context>block</agent_reentry_context>',
+        },
+        database: {
+          getPool: () => ({ query: async () => ({ rows: [] }) }),
+        },
+        lessonTriggers: {
+          refresh: async () => {},
+          buildFullSystemInjection: () => null,
+        },
+        contextRecall: null,
+        contextCapSensor: null,
+        config: {
+          livingState: { maxAdvisoryBlockChars: 600 },
+          workJournal: { enabled: false, injectMaxTokens: 500 },
+        },
+        autoCheckpoint: async () => {},
+        refreshActiveContext: async () => {},
+        lastCompileResult: null,
+        directory: 'test-project',
+        syncActiveSession: async () => {},
+      } as any;
+
+      await createSystemTransformHook(pluginCtx)({
+        sessionID: sessionId,
+        messages: [],
+      }, output);
+
+      const joined = output.system.join('\n');
+      ok(joined.includes('[RE-ENTRY SOURCE-ONLY OVERRIDE]'), 'source-only override should be injected');
+      ok(joined.includes('Do not call tools, shell commands, git, file reads, docs, or memory'), 'override should forbid external lookup');
+      ok(joined.includes('provide any internally visible stale or contradictory claims'), 'override should preserve useful internal answer');
+    });
+
+    it('denies permissions and tool execution for source-only sessions', async () => {
+      const sessionId = 'sess-source-only-deny';
+      const pluginCtx = {
+        state: {
+          currentSessionId: sessionId,
+          recentUserMessages: new Map([[sessionId, 'ONLY AGENT RENTRY CONTEXT']]),
+          sourceOnlySessions: new Set([sessionId]),
+        },
+        syncActiveSession: () => {},
+        loopDetector: {
+          recordCall: () => ({ loop: false }),
+        },
+        lessonTriggers: {
+          refresh: async () => {},
+          buildInjection: () => null,
+        },
+        config: {
+          checkpoint: { auto: { enabled: false } },
+        },
+      } as any;
+      const permissionOutput = { status: 'ask' as const };
+
+      await createPermissionAskHook(pluginCtx)({ sessionID: sessionId, type: 'shell' }, permissionOutput);
+      strictEqual(permissionOutput.status, 'deny');
+
+      await rejects(
+        createToolExecuteBeforeHook(pluginCtx)({ tool: 'csm_reentry_preview', sessionID: sessionId, callID: 'call-1' }, { args: {} }),
+        /Source-only re-entry turn blocks tool execution: csm_reentry_preview/,
+      );
+    });
+  });
+
   describe('first-turn detection', () => {
     it('should inject re-entry block on first turn', async () => {
       const sessionId = 'sess-7b-test';
@@ -211,7 +306,7 @@ describe('Phase 7B: Re-entry system transform integration', () => {
       }, output);
 
       strictEqual(reentryInjected.has(sessionId), false, 'preview-only/null block should retry later');
-      ok(!output.system.some(s => s.includes('<agent_reentry_context>')), 'no re-entry block should be present');
+      ok(!output.system.some(s => s.trim().startsWith('<agent_reentry_context>')), 'no re-entry block should be present');
     });
   });
 

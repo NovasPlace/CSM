@@ -3,6 +3,7 @@ import type { PluginContext } from '../plugin-context.js';
 import { getLogger } from '../logger.js';
 import { randomUUID } from 'node:crypto';
 import { classifyFreeTextDecision } from '../free-text-decision-classifier.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
 
 export function createEventHook(
   ctx: PluginInput,
@@ -120,6 +121,7 @@ export function createEventHook(
                   }
                 }
                 if (userText.trim()) {
+                  rememberUserTurn(state, String(info.sessionID ?? state.currentSessionId), userText);
                   const classification = classifyFreeTextDecision(userText);
                   if (classification) {
                     await experiencePackets.recordDecisionPacket({
@@ -223,5 +225,14 @@ export function createEventHook(
     } catch (error) {
       getLogger().error('Event handler failed', error as Error);
     }
+  };
+}
+
+export function createChatMessageHook(
+  pluginCtx: PluginContext,
+): (input: { sessionID: string }, output: { parts: unknown[] }) => Promise<void> {
+  return async (input, output) => {
+    const userText = extractTextParts(output.parts);
+    if (userText) rememberUserTurn(pluginCtx.state, input.sessionID, userText);
   };
 }

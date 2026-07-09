@@ -46,6 +46,7 @@ export interface PluginState {
   messageCount: number;
   capturedMessageSizes: Map<string, number>;
   recentUserMessages: Map<string, string>;
+  sourceOnlySessions?: Set<string>;
   stateChangeTracker?: Record<string, unknown>;
   _docsInitialized?: boolean;
   pendingFileContext?: import('./file-context-primer.js').FileContextBlock | null;

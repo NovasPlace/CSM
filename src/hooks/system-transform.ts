@@ -15,6 +15,7 @@ import { shouldInjectAdvisory, shouldInjectVcm, advisoryCharBudget, shouldInject
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { buildOnboardingPacket, formatOnboardingBlock } from '../agent-onboarding.js';
 import { join, dirname } from 'node:path';
+import { isReentrySourceOnlyTurn, rememberUserTurn } from './reentry-source-only.js';
 
 const TELEMETRY_LOG = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.cross-session-memory', 'self-continuity-telemetry.jsonl');
 const PROMPT_INJECTION_DISABLE_ENV = 'CSM_DISABLE_PROMPT_INJECTION';
@@ -119,6 +120,8 @@ export function isWorkspaceFactTurn(text: string | undefined): boolean {
   return WORKSPACE_FACT_TURN_RE.test(text);
 }
 
+export { isReentrySourceOnlyTurn } from './reentry-source-only.js';
+
 async function fetchMemorySnapshot(ctx: PluginContext, limit: number): Promise<string[]> {
   const pool = ctx.database.getPool();
   const result = await pool.query(
@@ -210,20 +213,33 @@ export function createSystemTransformHook(ctx: PluginContext) {
       }
 
       ctx.syncActiveSession(input.sessionID ?? '');
-      const latestUserTurn = input.sessionID ? ctx.state.recentUserMessages.get(input.sessionID) : undefined;
+      const latestInputTurn = input.messages?.map((message) => message.content).filter(Boolean).at(-1);
+      const latestUserTurn = (input.sessionID ? ctx.state.recentUserMessages.get(input.sessionID) : undefined) ?? latestInputTurn;
+      if (latestUserTurn) rememberUserTurn(ctx.state, sessionId, latestUserTurn);
 
       output.system.unshift(
         [
           '[CROSS-SESSION MEMORY TOOL USE CONTRACT]',
           '- Memory tools are optional support tools, not the default response path.',
           '- Do not call memory tools for greetings, acknowledgements, pleasantries, or other low-context turns.',
+          '- If the user says to use only <agent_reentry_context> or only agent re-entry context, do not call any tools, shell commands, git, files, docs, or memory. Answer only from the re-entry block text: list internal stale/contradictory signals if visible, and mark external/current-git comparison unavailable.',
           '- When the user asks about repo facts, phases, docs, changelog items, or files in the current workspace, inspect the workspace first. Use memory tools only as a fallback when the answer is not in the repo.',
           '- Do not narrate hidden reasoning, tool selection, or internal plans to the user.',
           '- After any memory tool call, answer directly and naturally. Do not produce canned option menus unless the user explicitly asks for memory help or choices.',
           '[/CROSS-SESSION MEMORY TOOL USE CONTRACT]',
         ].join('\n'),
       );
-      if (isGreetingLikeTurn(latestUserTurn)) {
+      if (isReentrySourceOnlyTurn(latestUserTurn)) {
+        output.system.unshift(
+          [
+            '[RE-ENTRY SOURCE-ONLY OVERRIDE]',
+            'The current user turn requests only agent re-entry context.',
+            'Do not call tools, shell commands, git, file reads, docs, or memory for this turn.',
+            'Answer from <agent_reentry_context> only. If asked about current git history or current files, state that comparison is unavailable from the block, then provide any internally visible stale or contradictory claims from the block text.',
+            '[/RE-ENTRY SOURCE-ONLY OVERRIDE]',
+          ].join('\n'),
+        );
+      } else if (isGreetingLikeTurn(latestUserTurn)) {
         output.system.unshift(
           'Current user turn is a simple greeting. Reply briefly and warmly in plain language. Do not call memory tools for this turn.',
         );
