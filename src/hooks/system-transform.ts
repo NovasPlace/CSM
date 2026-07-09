@@ -311,6 +311,27 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         } catch { /* re-entry injection non-critical */ }
       }
 
+      // --- Phase 9A: Onboarding packet (first turn only) ---
+      if (sessionId && !ctx.state.onboardingInjected?.has(sessionId)) {
+        if (!ctx.state.onboardingInjected) ctx.state.onboardingInjected = new Set();
+        ctx.state.onboardingInjected.add(sessionId);
+        try {
+          const { buildOnboardingPacket, formatOnboardingBlock } = await import('../agent-onboarding.js');
+          const packet = await buildOnboardingPacket({
+            projectId: ctx.directory ?? 'unknown',
+            sessionId,
+            workspacePath: process.cwd(),
+            pool: ctx.database.getPool(),
+            config: ctx.config,
+          });
+          const block = formatOnboardingBlock(packet);
+          if (capTrimLevel !== 'minimal') {
+            output.system.push(block);
+            getLogger().info('Onboarding packet injected', { sessionId });
+          }
+        } catch { /* onboarding injection non-critical */ }
+      }
+
       // --- Phase 4F: Advisory Living State block ---
       if (shouldInjectAdvisory(capTrimLevel) && ctx.livingStateAdvisor) {
         try {

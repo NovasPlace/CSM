@@ -40,6 +40,7 @@ function makePartial(overrides: Partial<ContinuityReport> = {}): Omit<Continuity
     livingState: makeSection('healthy', { enabled: true, injectAdvisoryBlock: false, blockProduced: false, sectionsPresent: ['internalState'], sectionsOmitted: [], packetCount: 100, candidateCount: 5, capabilityCount: 3 }),
     docsFreshness: makeSection('healthy', null),
     toolRegistry: makeSection('healthy', { declaredTools: [...CSM_TOOL_NAMES], registeredTools: [...CSM_TOOL_NAMES], mismatchCount: 0, undeclared: [], unregistered: [] }),
+    reEntryHealth: { available: false, enabled: false, previewOnly: true, wouldInject: false, injectedSessions: 0, budgetChars: 2100, minLayerChars: 50, originalChars: 0, finalChars: 0, approxTokens: 0, layersIncluded: [], layersTrimmed: [], layersDropped: [], layerDetails: [], trimLevel: 'none' },
     ...overrides,
   };
 }
@@ -168,7 +169,7 @@ describe('Phase 6E: Continuity Resilience Report', () => {
   });
 
   it('tool count is 32 after Phase 6E+6F+4G+8A-Impl', () => {
-    assert.equal(CSM_TOOL_NAMES.length, 32);
+    assert.equal(CSM_TOOL_NAMES.length, 33);
   });
 
   it('CSM_TOOL_NAMES includes csm_continuity_report', () => {

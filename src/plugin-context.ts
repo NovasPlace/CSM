@@ -51,6 +51,7 @@ export interface PluginState {
   pendingFileContext?: import('./file-context-primer.js').FileContextBlock | null;
   pendingMilestonePrompt?: import('./milestone-tracker.js').MilestonePromptBlock | null;
   reentryInjected: Set<string>;
+  onboardingInjected: Set<string>;
 }
 
 export interface PluginContext {

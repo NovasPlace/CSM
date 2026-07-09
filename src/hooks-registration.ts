@@ -103,6 +103,7 @@ export async function registerHooks(
     capturedMessageSizes: new Map<string, number>(),
     recentUserMessages: new Map<string, string>(),
     reentryInjected: new Set<string>(),
+    onboardingInjected: new Set<string>(),
   };
 
   const syncActiveSession = (sessionId?: string): string | null => {

@@ -17,6 +17,7 @@ import { selfModelTool } from '../self-model-tool.js';
 import { beliefKnowledgeTool } from '../belief-knowledge-tool.js';
 import { livingStatePreviewTool, livingStateDebugTool } from '../living-state-tool.js';
 import { goalSetTool, goalUpdateTool, goalListTool } from '../goal-tools.js';
+import { onboardAgentTool } from '../agent-onboarding-tool.js';
 import { createCheckpointTool, expandCheckpointRefTool, listCheckpointsTool } from '../checkpoint-tool.js';
 import { contextReviewTool } from '../context-review-tool.js';
 import {
@@ -80,7 +81,12 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     csm_compaction_audit: compactionAuditTool(database),
     csm_recall_quality_report: recallQualityReportTool(database),
     csm_memory_related: memoryRelatedTool(database),
-    csm_continuity_report: continuityReportTool(database),
+    csm_continuity_report: continuityReportTool(database, {
+      protocol: pluginCtx.reEntryProtocol,
+      config: config.reentry,
+      reentryInjected: pluginCtx.state.reentryInjected,
+      projectId: pluginCtx.directory,
+    }),
     create_checkpoint: createCheckpointTool(checkpointToolDeps),
     expand_checkpoint_ref: expandCheckpointRefTool(checkpointToolDeps),
     list_checkpoints: listCheckpointsTool(checkpointToolDeps),
@@ -94,6 +100,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     goal_set: goalSetTool({ pool: database.getPool() }),
     goal_update: goalUpdateTool({ pool: database.getPool() }),
     goal_list: goalListTool({ pool: database.getPool() }),
+    csm_onboard_agent: onboardAgentTool(pluginCtx),
   };
 
   if (pluginCtx.reEntryProtocol) {

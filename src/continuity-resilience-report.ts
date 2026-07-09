@@ -13,6 +13,7 @@
 import type { DatabasePool } from './types.js';
 import type { Database } from './database.js';
 import type { RecallMetrics, RecallQualityScore } from './recall-quality-tool.js';
+import type { ReEntryProtocol, ReEntryConfig, ReEntryDiagnostic } from './re-entry-protocol.js';
 import { scoreMetrics } from './recall-quality-tool.js';
 import { CSM_TOOL_NAMES } from './tool-names.js';
 import { dialectFromPool } from './db/query-dialect.js';
@@ -45,6 +46,34 @@ export interface ContinuityReport {
   systemAdvisories: SystemAdvisory[];
   knowledgeSignals: KnowledgeSignals;
   continuityConfidence: ContinuityConfidence;
+  reEntryHealth: ReEntryHealthData;
+}
+
+export interface ReEntryHealthData {
+  available: boolean;
+  enabled: boolean;
+  previewOnly: boolean;
+  wouldInject: boolean;
+  injectedSessions: number;
+  budgetChars: number;
+  minLayerChars: number;
+  originalChars: number;
+  finalChars: number;
+  approxTokens: number;
+  layersIncluded: string[];
+  layersTrimmed: string[];
+  layersDropped: string[];
+  layerDetails: ReEntryDiagnostic['layerDetails'];
+  trimLevel: 'none' | 'soft' | 'aggressive';
+  degradedReason?: string;
+}
+
+export interface ReEntryInfo {
+  protocol?: ReEntryProtocol;
+  config?: ReEntryConfig;
+  reentryInjected?: Set<string>;
+  onboardingInjected?: Set<string>;
+  projectId?: string;
 }
 
 export interface MemoryInventory {
@@ -576,7 +605,7 @@ export function collectToolRegistryHealth(registeredToolMap: Record<string, unkn
 // Section 9a: System Health Advisories (derived from sections, 0% weight)
 // ============================================================================
 
-export function collectSystemHealthAdvisories(report: Omit<ContinuityReport, 'systemAdvisories' | 'knowledgeSignals' | 'continuityConfidence'>): SystemAdvisory[] {
+export function collectSystemHealthAdvisories(report: Omit<ContinuityReport, 'systemAdvisories' | 'knowledgeSignals' | 'continuityConfidence' | 'reEntryHealth'>): SystemAdvisory[] {
   const advisories: SystemAdvisory[] = [];
 
   // Priority 1: Tool registry mismatch
@@ -907,6 +936,38 @@ export function formatReport(report: ContinuityReport): string {
     lines.push(`   ${key}: ${sg.grade.toUpperCase()} (${(sg.normalizedWeight * 100).toFixed(0)}%)`);
   }
 
+  // Section 11: Re-entry Health
+  const re = report.reEntryHealth;
+  lines.push('', '11. Re-entry Health', '───────────────────────────');
+  if (!re.available) {
+    lines.push(`   Status: unavailable${re.degradedReason ? ` — ${re.degradedReason}` : ''}`);
+  } else {
+    lines.push(`   Status: ${re.wouldInject ? 'ACTIVE (would inject)' : re.previewOnly ? 'preview-only (safe)' : 'safe'}`);
+  }
+  lines.push(`   Enabled: ${re.enabled}`);
+  lines.push(`   Preview-only: ${re.previewOnly}`);
+  lines.push(`   Would inject: ${re.wouldInject}`);
+  lines.push(`   Injected sessions: ${re.injectedSessions}`);
+  lines.push(`   Budget: ${re.budgetChars} chars (min layer: ${re.minLayerChars})`);
+  if (re.available) {
+    lines.push(`   Block size: ${re.finalChars} / original ${re.originalChars} chars (~${re.approxTokens} tokens)`);
+    lines.push(`   Trim level: ${re.trimLevel}`);
+    if (re.layersIncluded.length > 0) {
+      lines.push(`   Included: ${re.layersIncluded.join(', ')}`);
+    }
+    if (re.layersTrimmed.length > 0) {
+      lines.push(`   Trimmed: ${re.layersTrimmed.join(', ')}`);
+    }
+    if (re.layersDropped.length > 0) {
+      lines.push(`   Dropped: ${re.layersDropped.join(', ')}`);
+    }
+    for (const d of re.layerDetails) {
+      if (d.status !== 'included') {
+        lines.push(`     ${d.name}: ${d.status} [${d.trimReason ?? 'unknown'}] ${d.originalChars}→${d.finalChars}`);
+      }
+    }
+  }
+
   lines.push('', bar);
   lines.push('This is an advisory report (Phase 6E). No mutations. No repairs. No auto-action.');
   return lines.join('\n');
@@ -921,6 +982,7 @@ export async function buildContinuityResilienceReportData(
   workspaceDir: string,
   toolMap: Record<string, unknown>,
   windowHours: number = 24,
+  reEntryInfo?: ReEntryInfo,
 ): Promise<ContinuityReport> {
   const pool = database.getPool();
   const dialect = dialectFromPool(pool);
@@ -938,13 +1000,69 @@ export async function buildContinuityResilienceReportData(
   const systemAdvisories = collectSystemHealthAdvisories(partial);
   const knowledgeSignals = await collectKnowledgeSignals(pool);
   const continuityConfidence = computeContinuityConfidence(partial);
+  const reEntryHealth = await collectReEntryHealth(reEntryInfo);
 
   return {
     ...partial,
     systemAdvisories,
     knowledgeSignals,
     continuityConfidence,
+    reEntryHealth,
   };
+}
+
+export async function collectReEntryHealth(
+  info?: ReEntryInfo,
+): Promise<ReEntryHealthData> {
+  const config = info?.config;
+  const base: ReEntryHealthData = {
+    available: false,
+    enabled: config?.enabled ?? false,
+    previewOnly: config?.previewOnly ?? true,
+    wouldInject: false,
+    injectedSessions: info?.reentryInjected?.size ?? 0,
+    budgetChars: config?.maxChars ?? 0,
+    minLayerChars: config?.minLayerChars ?? 0,
+    originalChars: 0,
+    finalChars: 0,
+    approxTokens: 0,
+    layersIncluded: [],
+    layersTrimmed: [],
+    layersDropped: [],
+    layerDetails: [],
+    trimLevel: 'none',
+  };
+
+  if (!info?.protocol) {
+    return { ...base, degradedReason: 'Re-entry protocol not initialized' };
+  }
+
+  try {
+    const sessionId = 'continuity-report';
+    const projectId = info.projectId ?? 'default';
+    const diag = await info.protocol.diagnose(sessionId, projectId);
+    return {
+      ...base,
+      available: true,
+      enabled: diag.enabled,
+      wouldInject: diag.enabled && !(config?.previewOnly ?? true),
+      budgetChars: diag.budgetChars,
+      minLayerChars: config?.minLayerChars ?? 50,
+      originalChars: diag.originalChars,
+      finalChars: diag.totalChars,
+      approxTokens: diag.approxTokens,
+      layersIncluded: diag.layersBuilt,
+      layersTrimmed: diag.layersTrimmed,
+      layersDropped: diag.layersDropped,
+      layerDetails: diag.layerDetails,
+      trimLevel: diag.trimLevel,
+    };
+  } catch (error) {
+    return {
+      ...base,
+      degradedReason: `Diagnose failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
 /** Legacy entry point — builds report and returns full text format. */
@@ -953,8 +1071,9 @@ export async function buildContinuityResilienceReport(
   workspaceDir: string,
   toolMap: Record<string, unknown>,
   windowHours: number = 24,
+  reEntryInfo?: ReEntryInfo,
 ): Promise<string> {
-  const report = await buildContinuityResilienceReportData(database, workspaceDir, toolMap, windowHours);
+  const report = await buildContinuityResilienceReportData(database, workspaceDir, toolMap, windowHours, reEntryInfo);
   return formatReport(report);
 }
 
@@ -1175,6 +1294,10 @@ export function formatReportCompact(report: ContinuityReport, comparison?: Conti
   if (report.livingState.data) lines.push(`   Living state: ${report.livingState.data.packetCount ?? 'N/A'} packets, ${report.livingState.data.capabilityCount ?? 'N/A'} capabilities`);
   if (report.toolRegistry.data) lines.push(`   Tools: ${report.toolRegistry.data.declaredTools.length} declared, ${report.toolRegistry.data.mismatchCount} mismatches`);
 
+  const re = report.reEntryHealth;
+  const reStatus = !re.available ? 'unavailable' : re.wouldInject ? 'ACTIVE' : re.previewOnly ? 'preview-only' : 'safe';
+  lines.push(`   Re-entry: ${reStatus}${re.injectedSessions > 0 ? `, ${re.injectedSessions} injected` : ''}${re.layersDropped.length > 0 ? `, ${re.layersDropped.length} dropped` : ''}`);
+
   lines.push('', bar);
   lines.push('Advisory report (Phase 6F). No mutations. Read-only.');
   return lines.join('\n');
@@ -1227,6 +1350,7 @@ export function formatReportJson(report: ContinuityReport, comparison?: Continui
     },
     systemAdvisories: report.systemAdvisories,
     knowledgeSignals: report.knowledgeSignals,
+    reEntryHealth: report.reEntryHealth,
     comparison: comparison ?? null,
   };
   return JSON.stringify(json, null, 2);
@@ -1266,8 +1390,9 @@ export async function buildContinuityReportWithOptions(
   toolMap: Record<string, unknown>,
   windowHours: number,
   options: ContinuityReportOptions,
+  reEntryInfo?: ReEntryInfo,
 ): Promise<string> {
-  const report = await buildContinuityResilienceReportData(database, workspaceDir, toolMap, windowHours);
+  const report = await buildContinuityResilienceReportData(database, workspaceDir, toolMap, windowHours, reEntryInfo);
 
   const mode = options.mode ?? 'full';
   const format = options.format ?? 'text';

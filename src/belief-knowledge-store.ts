@@ -34,8 +34,16 @@ interface BeliefRow {
   updated_at: string | Date;
 }
 
-function clamp01(v: number): number {
-  return Math.max(0, Math.min(1, v));
+function sanitizeFloat(v: number): number {
+  // Non-finite (NaN, Infinity, -Infinity) cannot be stored and indicate a math bug.
+  if (!Number.isFinite(v)) return 0;
+  // Domain constraint: confidence/uncertainty are [0, 1]. Clamp out-of-range
+  // values to satisfy the CHECK constraint, but do NOT floor tiny valid values
+  // (e.g. 6.56e-46 from exponential decay) — those are correct belief-state math
+  // and are storable in DOUBLE PRECISION columns.
+  if (v < 0) return 0;
+  if (v > 1) return 1;
+  return v;
 }
 
 function parseEvidenceRefs(dialect: string, val: unknown): EvidenceRef[] {
@@ -158,8 +166,8 @@ export class BeliefKnowledgeConsolidator {
           existingBelief.confidence -= existingBelief.confidence * 0.05;
         }
 
-        existingBelief.confidence = clamp01(existingBelief.confidence);
-        existingBelief.uncertainty = clamp01(existingBelief.uncertainty);
+        existingBelief.confidence = sanitizeFloat(existingBelief.confidence);
+        existingBelief.uncertainty = sanitizeFloat(existingBelief.uncertainty);
 
         if (existingBelief.uncertainty >= 0.7 && existingBelief.contradictedCount > 2) {
           existingBelief.status = 'stale';
@@ -221,13 +229,28 @@ export class BeliefKnowledgeConsolidator {
         }
 
         beliefMap.set(key, entry);
-        await this.upsertBelief(entry);
-        created++;
+        try {
+          await this.upsertBelief(entry);
+          created++;
+        } catch (error) {
+          getLogger().error(
+            `Belief consolidation upsert failed (new): ${entry.subject} / ${entry.claim} / ${entry.beliefKind}: ${error instanceof Error ? error.message : String(error)}`,
+            error instanceof Error ? error : undefined,
+          );
+        }
       }
     }
 
     for (const [, entry] of beliefMap) {
-      if (entry.id) await this.upsertBelief(entry);
+      if (!entry.id) continue;
+      try {
+        await this.upsertBelief(entry);
+      } catch (error) {
+        getLogger().error(
+          `Belief consolidation upsert failed (update): id=${entry.id} ${entry.subject} / ${entry.claim}: ${error instanceof Error ? error.message : String(error)}`,
+          error instanceof Error ? error : undefined,
+        );
+      }
     }
 
     const allBeliefs = [...beliefMap.values()];
@@ -273,36 +296,37 @@ export class BeliefKnowledgeConsolidator {
     const evidenceJson = JSON.stringify(entry.evidenceRefs);
     const driftVal = entry.lastReinforcedAt ?? null;
 
-    try {
-      await this.pool.query(
-        `INSERT INTO belief_knowledge_store (belief_kind, subject, claim, stance, confidence, uncertainty,
-         evidence_refs, contradicted_count, last_reinforced_at, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ${now}, ${now})
-         ON CONFLICT (belief_kind, subject, claim) DO UPDATE SET
-           stance = EXCLUDED.stance,
-           confidence = EXCLUDED.confidence,
-           uncertainty = EXCLUDED.uncertainty,
-           evidence_refs = EXCLUDED.evidence_refs,
-           contradicted_count = EXCLUDED.contradicted_count,
-           last_reinforced_at = EXCLUDED.last_reinforced_at,
-           status = EXCLUDED.status,
-           updated_at = ${now}`,
-        [
-          entry.beliefKind,
-          entry.subject,
-          entry.claim,
-          entry.stance,
-          entry.confidence,
-          entry.uncertainty,
-          evidenceJson,
-          entry.contradictedCount,
-          driftVal,
-          entry.status,
-        ],
-      );
-    } catch (error) {
-      getLogger().error('Failed to upsert belief entry', error instanceof Error ? error : undefined);
-    }
+    // Non-finite guard: NaN/Infinity cannot be stored and indicate a math bug.
+    // Valid finite values (including subnormals like 6.56e-46) pass through unchanged.
+    const confidence = sanitizeFloat(entry.confidence);
+    const uncertainty = sanitizeFloat(entry.uncertainty);
+
+    await this.pool.query(
+      `INSERT INTO belief_knowledge_store (belief_kind, subject, claim, stance, confidence, uncertainty,
+       evidence_refs, contradicted_count, last_reinforced_at, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ${now}, ${now})
+       ON CONFLICT (belief_kind, subject, claim) DO UPDATE SET
+         stance = EXCLUDED.stance,
+         confidence = EXCLUDED.confidence,
+         uncertainty = EXCLUDED.uncertainty,
+         evidence_refs = EXCLUDED.evidence_refs,
+         contradicted_count = EXCLUDED.contradicted_count,
+         last_reinforced_at = EXCLUDED.last_reinforced_at,
+         status = EXCLUDED.status,
+         updated_at = ${now}`,
+      [
+        entry.beliefKind,
+        entry.subject,
+        entry.claim,
+        entry.stance,
+        confidence,
+        uncertainty,
+        evidenceJson,
+        entry.contradictedCount,
+        driftVal,
+        entry.status,
+      ],
+    );
   }
 
   private async loadCandidates(): Promise<CandidateRow[]> {
