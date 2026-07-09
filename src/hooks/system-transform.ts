@@ -313,8 +313,6 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
 
       // --- Phase 9A: Onboarding packet (first turn only) ---
       if (sessionId && !ctx.state.onboardingInjected?.has(sessionId)) {
-        if (!ctx.state.onboardingInjected) ctx.state.onboardingInjected = new Set();
-        ctx.state.onboardingInjected.add(sessionId);
         try {
           const { buildOnboardingPacket, formatOnboardingBlock } = await import('../agent-onboarding.js');
           const packet = await buildOnboardingPacket({
@@ -327,9 +325,12 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
           const block = formatOnboardingBlock(packet);
           if (capTrimLevel !== 'minimal') {
             output.system.push(block);
-            getLogger().info('Onboarding packet injected', { sessionId });
           }
-        } catch { /* onboarding injection non-critical */ }
+          ctx.state.onboardingInjected.add(sessionId);
+          getLogger().info('Onboarding packet injected');
+        } catch (err) {
+          getLogger().error('Onboarding injection failed', err instanceof Error ? err : new Error(String(err)));
+        }
       }
 
       // --- Phase 4F: Advisory Living State block ---
