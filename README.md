@@ -98,7 +98,7 @@ npm run verify
 | **Self-Model** | `self_model` | Capability confidence, drift warnings, evidence counts |
 | **Continuity** | `reentry_preview`, `onboard_agent`, `memory_context` | Re-entry context builder, agent onboarding startup packet, session context |
 | **Experience** | `packets` | Browse the structured observation log (tool calls, errors, decisions, milestones) |
-| **Diagnostics** | `runtime_status`, `compaction_audit`, `recall_quality_report`, `continuity_report`, `compaction_audit` | Health checks, performance audits, recall quality scoring |
+| **Diagnostics** | `runtime_status`, `compaction_audit`, `recall_quality_report`, `continuity_report` | Health checks, performance audits, recall quality scoring |
 
 ---
 
