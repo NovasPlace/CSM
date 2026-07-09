@@ -317,7 +317,6 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
       // --- Phase 7B: Re-entry context injection (first turn only) ---
       // sessionID is optional in OpenCode API — use same fallback as onboarding.
       if (ctx.reEntryProtocol && !ctx.state.reentryInjected.has(sessionId)) {
-        ctx.state.reentryInjected.add(sessionId);
         try {
           const projectId = ctx.directory ?? 'unknown';
           const diag = await ctx.reEntryProtocol.diagnose(sessionId, projectId);
@@ -333,6 +332,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
           const block = await ctx.reEntryProtocol.buildBlock(sessionId, projectId);
           if (block && capTrimLevel !== 'minimal') {
             output.system.push(block);
+            ctx.state.reentryInjected.add(sessionId);
             getLogger().info('Re-entry block injected', { sessionId });
           }
         } catch (err) {

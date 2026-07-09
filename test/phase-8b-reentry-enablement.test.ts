@@ -1,11 +1,14 @@
 import { describe, it } from 'node:test';
 import { strictEqual, ok } from 'node:assert';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { ReEntryPreviewAdapter } from '../dist/reentry-ux-tool.js';
 import { ReEntryProtocol, DEFAULT_REENTRY_CONFIG } from '../dist/re-entry-protocol.js';
 import type { ReEntryConfig } from '../dist/re-entry-protocol.js';
 import type { DatabasePool } from '../dist/database-pool.js';
-import { validateAndReturnConfig } from '../dist/config.js';
 
 function mockPool(): DatabasePool {
   return {
@@ -26,8 +29,26 @@ describe('Phase 8B: Re-entry Live Enablement Controls', () => {
       strictEqual(cfg.previewOnly, true, 'previewOnly defaults true');
     });
 
-    it('default behavior unchanged: PluginConfig.reentry is preview-only', () => {
-      const cfg = validateAndReturnConfig();
+    it('default behavior unchanged: PluginConfig.reentry is preview-only', async () => {
+      const originalCwd = process.cwd();
+      const originalPreview = process.env.CSM_REENTRY_PREVIEW_ONLY;
+      const tempCwd = mkdtempSync(join(tmpdir(), 'csm-reentry-default-'));
+      delete process.env.CSM_REENTRY_PREVIEW_ONLY;
+      let cfg: Awaited<ReturnType<typeof import('../dist/config.js')['validateAndReturnConfig']>>;
+      try {
+        process.chdir(tempCwd);
+        const moduleUrl = `${pathToFileURL(join(originalCwd, 'dist', 'config.js')).href}?default=${Date.now()}`;
+        const { validateAndReturnConfig } = await import(moduleUrl);
+        cfg = validateAndReturnConfig();
+      } finally {
+        process.chdir(originalCwd);
+        if (originalPreview === undefined) {
+          delete process.env.CSM_REENTRY_PREVIEW_ONLY;
+        } else {
+          process.env.CSM_REENTRY_PREVIEW_ONLY = originalPreview;
+        }
+      }
+
       strictEqual(cfg.reentry.enabled, true, 'config.reentry.enabled defaults true');
       strictEqual(cfg.reentry.previewOnly, true, 'config.reentry.previewOnly defaults true');
       ok(Array.isArray(cfg.reentry.layers), 'layers array present');
@@ -103,4 +124,3 @@ describe('Phase 8B: Re-entry Live Enablement Controls', () => {
     });
   });
 });
-

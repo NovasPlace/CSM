@@ -159,6 +159,60 @@ describe('Phase 7B: Re-entry system transform integration', () => {
       const diag = await reEntryProtocol.diagnose(sessionId);
       ok(diag.previewOnly, 'subsequent turns should be previewOnly');
     });
+
+    it('does not mark re-entry injected when preview-only returns no block', async () => {
+      const sessionId = 'sess-preview-null';
+      const reentryInjected = new Set<string>();
+      const reEntryProtocol = {
+        diagnose: async () => ({
+          layersDropped: [],
+          layersTrimmed: [],
+          previewOnly: true,
+        }),
+        buildBlock: async () => null,
+      };
+
+      const output = {
+        system: ['Original system prompt'],
+      };
+
+      const pluginCtx = {
+        contextRecall: null as any,
+        state: {
+          currentSessionId: null,
+          messageCount: 0,
+          capturedMessageSizes: new Map(),
+          recentUserMessages: new Map(),
+          reentryInjected,
+        },
+        reEntryProtocol,
+        database: {
+          getPool: () => ({ query: async () => ({ rows: [] }) }),
+        },
+        lessonTriggers: {
+          refresh: async () => {},
+          buildFullSystemInjection: () => null,
+        },
+        contextCapSensor: null,
+        config: {
+          livingState: { maxAdvisoryBlockChars: 600 },
+          workJournal: { enabled: false, injectMaxTokens: 500 },
+        },
+        autoCheckpoint: async () => {},
+        refreshActiveContext: async () => {},
+        lastCompileResult: null,
+        directory: 'test-project',
+        syncActiveSession: async () => {},
+      } as any;
+
+      await createSystemTransformHook(pluginCtx)({
+        sessionID: sessionId,
+        messages: [],
+      }, output);
+
+      strictEqual(reentryInjected.has(sessionId), false, 'preview-only/null block should retry later');
+      ok(!output.system.some(s => s.includes('<agent_reentry_context>')), 'no re-entry block should be present');
+    });
   });
 
   describe('diagnostic logging', () => {
