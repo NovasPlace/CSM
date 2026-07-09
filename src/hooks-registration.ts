@@ -103,6 +103,7 @@ export async function registerHooks(
     capturedMessageSizes: new Map<string, number>(),
     recentUserMessages: new Map<string, string>(),
     sourceOnlySessions: new Set<string>(),
+    sourceOnlyUntilMs: undefined as number | undefined,
     reentryInjected: new Set<string>(),
     onboardingInjected: new Set<string>(),
   };

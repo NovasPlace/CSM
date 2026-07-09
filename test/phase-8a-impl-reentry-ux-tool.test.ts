@@ -15,7 +15,7 @@ function makeAdapter(): ReEntryPreviewAdapter {
 
 describe('Phase 8A-Impl: Re-entry Preview Adapter + Tool', () => {
   describe('ReEntryPreviewAdapter — read-only behavior', () => {
-    it('builds a report without injecting (preview-only default)', async () => {
+    it('builds a read-only preview report while live injection is the default', async () => {
       const adapter = makeAdapter();
       const report = await adapter.buildPreviewReport({
         sessionId: 'test-session',

@@ -238,7 +238,7 @@ if (!state.reentryInjected.has(sessionId)) {
 | `CSM_REENTRY_MAX_CHARS` | `2100` | Total character budget |
 | `CSM_REENTRY_LAYERS` | (all 8) | Comma-separated layer names to include |
 | `CSM_REENTRY_MIN_LAYER_CHARS` | `50` | Minimum chars before dropping a layer entirely |
-| `CSM_REENTRY_PREVIEW_ONLY` | `true` | If true, build block but don't inject (for testing) |
+| `CSM_REENTRY_PREVIEW_ONLY` | `false` | If true, build block but don't inject (for testing) |
 
 ## Sub-Phases
 
@@ -310,10 +310,10 @@ Document Phase 7A/7B so future agents understand how onboarding/re-entry works a
    - No first-turn synthetic message.
    - No dual-mode switching yet.
 
-3. **Preview-only default**
-   - `CSM_REENTRY_PREVIEW_ONLY=true`
+3. **Live injection default**
+   - `CSM_REENTRY_PREVIEW_ONLY=false`
    - Builds block and logs diagnostics.
-   - Does not inject unless explicitly enabled.
+   - Injects once on the first turn unless preview-only mode is explicitly enabled.
 
 4. **Layer order**
    - Identity
@@ -354,7 +354,7 @@ Document Phase 7A/7B so future agents understand how onboarding/re-entry works a
 - [x] Typecheck clean
 - [x] Build clean
 - [x] Lint remains 7 (opentui.d.ts only)
-- [ ] Live preview-only restart confirms no default behavior change
+- [ ] Live first-turn injection restart confirms re-entry is visible to the agent
 - [ ] Enabled injection test passes
 
 ### Phase 7D — Diagnostic Tools
@@ -373,7 +373,7 @@ Document Phase 7A/7B so future agents understand how onboarding/re-entry works a
 
 3. **Priority-based trimming, not equal cuts** — Identity and governance vetoes are never trimmed. Goals survive longer than beliefs. This preserves the most continuity-critical layers.
 
-4. **Preview-only default** — `CSM_REENTRY_PREVIEW_ONLY=true` initially. The block is built but not injected until validated, matching the Phase 4F-C staged enablement pattern.
+4. **Live default after validation** — `CSM_REENTRY_PREVIEW_ONLY=false` is the current default. Preview-only was the initial staged-enable safety mode and is now opt-in for explicit testing.
 
 5. **Orchestration, not new data** — Phase 7 reads from existing subsystems. No new tables, no new memory types, no new schema. The re-entry protocol is a **composition layer**.
 

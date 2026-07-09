@@ -288,7 +288,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
   reentry: {
     enabled: getEnvBoolean('CSM_REENTRY_ENABLED', true),
     maxChars: getEnvNumber('CSM_REENTRY_MAX_CHARS', 2100),
-    previewOnly: getEnvBoolean('CSM_REENTRY_PREVIEW_ONLY', true),
+    previewOnly: getEnvBoolean('CSM_REENTRY_PREVIEW_ONLY', false),
     minLayerChars: getEnvNumber('CSM_REENTRY_MIN_LAYER_CHARS', 50),
     layers: ['identity', 'activeGoals', 'inProgressWork', 'preferences', 'capabilities', 'beliefs', 'recentContext', 'constraints'],
   },

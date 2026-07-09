@@ -4,8 +4,8 @@
 
 ## System Shape
 - Project root: `C:\Users\Donovan\Desktop\cross-session-memory`
-- Code files indexed: 3145
-- Dependency edges indexed: 7159
+- Code files indexed: 3146
+- Dependency edges indexed: 7167
 - README owns onboarding and setup.
 - ARCHITECTURE owns module flow and impact mapping.
 

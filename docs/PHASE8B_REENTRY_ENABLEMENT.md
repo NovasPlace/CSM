@@ -4,10 +4,10 @@
 
 ### Goal
 Allow explicit operator-controlled activation of re-entry injection while preserving
-preview-only as the default.
+live injection as the default.
 
 ### Hard constraints
-- Default remains preview-only.
+- Default is live first-turn injection.
 - No synthetic first-turn injection.
 - System prompt augmentation only.
 - Explicit enable flag required.
@@ -27,7 +27,7 @@ preview-only as the default.
 
 ### Likely implementation surface (for planning, not committed)
 1. Config / env control
-   - `CSM_REENTRY_PREVIEW_ONLY` (default `true`); `false` enables injection.
+   - `CSM_REENTRY_PREVIEW_ONLY` (default `false`); `true` enables preview-only mode.
    - Resolve from `PluginConfig` so restart picks it up.
 2. One-time injection guarantee
    - `ctx.state.reentryInjected: Set<string>` already tracks this (set in
@@ -40,7 +40,7 @@ preview-only as the default.
      (same source of truth: `ReEntryProtocol.config`).
 
 ### Tests (from spec)
-- Default preview-only does not inject.
+- Default live mode injects once on first turn.
 - Enable flag injects once.
 - Re-entry block appears before living state advisory.
 - Repeated turns do not duplicate injection.
@@ -50,7 +50,7 @@ preview-only as the default.
 ### Acceptance line
 Phase 8B is successful when an operator can flip one explicit flag and see the re-entry
 block actually injected once per session, with `csm_reentry_preview` reporting the same
-intent beforehand — and everything still defaults to preview-only.
+intent beforehand — and preview-only available only when explicitly enabled.
 
 ---
 

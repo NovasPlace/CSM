@@ -6,7 +6,7 @@ const system_transform_js_1 = require("../dist/hooks/system-transform.js");
 (0, node_test_1.describe)('Phase 7B: Re-entry system transform integration', () => {
     const mockSessionId = 'sess-7b-test';
     (0, node_test_1.describe)('first-turn injection', () => {
-        (0, node_test_1.it)('should not inject on first turn when previewOnly=true (default)', async () => {
+        (0, node_test_1.it)('should inject on first turn when previewOnly=false (default)', async () => {
             const pluginCtx = {
                 pool: null,
                 memoryManager: null,
@@ -24,7 +24,7 @@ const system_transform_js_1 = require("../dist/hooks/system-transform.js");
             };
             const { system } = await (0, system_transform_js_1.createSystemTransformHook)(mockSessionId, 'test-project', 'user message', [], 0, 'normal', pluginCtx);
             const systemPrompt = system.join('\n');
-            (0, node_assert_1.ok)(!systemPrompt.includes('<agent_reentry_context>'), 're-entry block should not be injected on first turn (preview-only default)');
+            (0, node_assert_1.ok)(systemPrompt.includes('<agent_reentry_context>'), 're-entry block should be injected on first turn by default');
         });
     });
     (0, node_test_1.describe)('prompt ordering', () => {

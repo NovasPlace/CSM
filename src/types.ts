@@ -333,7 +333,7 @@ export interface PluginConfig {
   beliefPromotion: BeliefPromotionConfig;
   // Phase 4F — Living state runtime loop
   livingState: LivingStateConfig;
-  // Phase 8B — Re-entry live enablement (preview-only default)
+  // Phase 8B — Re-entry live enablement
   reentry: ReEntryConfig;
 }
 

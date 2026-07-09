@@ -4,7 +4,7 @@ import { cacheToolErrorSignal } from '../context-cache-signals.js';
 import type { ToolCallRecord } from '../types.js';
 import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
-import { isReentrySourceOnlyActive } from './reentry-source-only.js';
+import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
 
 /** Before-hook input shape (matches OpenCode plugin API). */
 interface ToolExecuteBeforeInput {
@@ -61,7 +61,7 @@ export function createToolExecuteBeforeHook(ctx: PluginContext) {
   return async (input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput) => {
     ctx.syncActiveSession(input.sessionID);
     if (isReentrySourceOnlyActive(ctx.state, input.sessionID)) {
-      throw new Error(`Source-only re-entry turn blocks tool execution: ${input.tool}`);
+      throw new Error(REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE);
     }
     try {
       const result = ctx.loopDetector.recordCall(input.tool, output.args);

@@ -3,7 +3,7 @@
 **File:** `src/reentry-ux-tool.ts`
 
 **Goal:**
-Make the re-entry protocol visible, inspectable, and controllable without changing default behavior.
+Make the re-entry protocol visible, inspectable, and controllable with live first-turn injection as the default.
 
 ---
 
@@ -78,7 +78,7 @@ interface ReentryPreviewOutput {
 **Environment Variables:**
 ```bash
 CSM_REENTRY_ENABLED=true          # Enable/disable re-entry
-CSM_REENTRY_PREVIEW_ONLY=true     # Default preview-only mode
+CSM_REENTRY_PREVIEW_ONLY=false    # Default live first-turn injection
 CSM_REENTRY_MAX_CHARS=2100        # Max block size for budgeting
 CSM_REENTRY_MIN_LAYER_CHARS=50    # Min characters per layer
 ```
@@ -88,7 +88,7 @@ CSM_REENTRY_MIN_LAYER_CHARS=50    # Min characters per layer
 interface ReEntryConfig {
   enabled: boolean;       # Enable/disable re-entry
   maxChars: number;       # Max block size
-  previewOnly: boolean;   # Preview-only mode (default: true)
+  previewOnly: boolean;   # Preview-only mode (default: false)
   minLayerChars: number;  # Min chars per layer
   layers: string[];       # Layer order
 }
@@ -101,7 +101,7 @@ interface ReEntryConfig {
 - **Injection toggle**: Enables/disables block injection (NOT for Phase 8A)
 
 **Hard Constraints:**
-- **No default behavior change**: `CSM_REENTRY_PREVIEW_ONLY=true` by default
+- **Live default**: `CSM_REENTRY_PREVIEW_ONLY=false` by default
 - **No synthetic first-turn injection**: Block only in system prompt
 - **No mutation**: Read-only tool, no writes to CSM tables
 - **No memory writes during preview**: `csm_reentry_preview` performs no writes
@@ -234,11 +234,11 @@ function formatStatus(status: ReentryPreviewOutput): string {
 
 **Manual Validation Steps:**
 
-1. **Preview-only mode (default):**
+1. **Live injection mode (default):**
    ```bash
    npm run dev
-   # Agent starts, no re-entry block in system prompt
-   # Verify logs show: "Re-entry block built (preview-only)"
+   # Agent starts with a re-entry block in the system prompt
+   # Verify logs show: "Re-entry block injected"
    ```
 
 2. **Disabled mode:**

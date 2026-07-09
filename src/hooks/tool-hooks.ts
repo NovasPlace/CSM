@@ -31,7 +31,7 @@ import { MemoryMerger } from '../merge-tool.js';
 import { CandidateGenerator } from '../candidate-generator.js';
 import { ArchiveCandidateReportBuilder } from '../archive-candidate-report.js';
 import { MemoryGovernanceReportBuilder } from '../memory-governance-report.js';
-import { isReentrySourceOnlyActive } from './reentry-source-only.js';
+import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
 
 export function registerTools(pluginCtx: PluginContext): Record<string, unknown> {
   const {
@@ -123,8 +123,8 @@ function guardToolsForSourceOnly(pluginCtx: PluginContext, toolList: Record<stri
     toolDef.execute = async (args: unknown, context?: { sessionID?: string }) => {
       if (isReentrySourceOnlyActive(pluginCtx.state, context?.sessionID)) {
         return {
-          title: 'Source-only re-entry guard',
-          output: `Blocked ${name}: current turn requested only <agent_reentry_context>.`,
+          title: 'Use re-entry context only',
+          output: REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE,
           metadata: { blocked: true, reason: 'reentry_source_only', tool: name },
         };
       }

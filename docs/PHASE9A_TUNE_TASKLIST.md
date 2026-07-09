@@ -8,7 +8,7 @@ A fresh agent session should wake up knowing what the prior agent was doing, wha
 - 10 sections: identity, project, phase, constraints, memories, beliefs, advisories, tools, handoff, readiness
 - AGENTS.md updated with Phase 9A progress
 - `.env` loader added to config.ts
-- Re-entry preview-only default restored to true
+- Re-entry live injection is the default (`CSM_REENTRY_PREVIEW_ONLY=false`)
 - 903/903 tests pass, build clean
 
 ## What Works
@@ -64,7 +64,7 @@ memories: id, content, memory_type, metadata (JSON), session_id, project_id, is_
 - `src/agent-onboarding-tool.ts` — csm_onboard_agent tool
 - `src/hooks/system-transform.ts` — injection point (onboarding FIRST)
 - `src/config.ts` — .env loader
-- `src/re-entry-protocol.ts` — DEFAULT_REENTRY_CONFIG (previewOnly: true)
+- `src/re-entry-protocol.ts` — DEFAULT_REENTRY_CONFIG (previewOnly: false)
 - `test/agent-onboarding.test.ts` — 34 tests
 - `AGENTS.md` — updated with Phase 9A progress
 

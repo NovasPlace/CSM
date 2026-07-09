@@ -41,7 +41,7 @@ function makeMockWorkJournal(entries: { intent: string; filesTouched: string[] }
 describe('ReEntryProtocol', () => {
   let protocol: ReEntryProtocol;
 
-  describe('buildBlock with previewOnly=true (default)', () => {
+  describe('buildBlock with previewOnly=false (default)', () => {
     beforeEach(() => {
       protocol = new ReEntryProtocol({
         pool: makeMockPool([{ cnt: 42 }, { updated_at: '2026-01-01T00:00:00Z' }]),
@@ -52,9 +52,17 @@ describe('ReEntryProtocol', () => {
       });
     });
 
-    it('returns null when previewOnly is true', async () => {
+    it('returns a block when previewOnly is false by default', async () => {
       const block = await protocol.buildBlock('sess-1', 'test-project');
-      strictEqual(block, null);
+      ok(block?.includes('<agent_reentry_context>'), 'default config should inject a re-entry block');
+    });
+
+    it('can render a block for source-only turns while previewOnly is false', async () => {
+      const block = await protocol.buildBlockForSourceOnlyTurn('sess-1', 'test-project');
+      ok(block?.includes('<agent_reentry_context>'), 'source-only render should provide the block');
+      ok(block?.includes('Source-label rule'), 'source-only render should include source-label boundary');
+      ok(block?.includes('Override rule'), 'source-only render should include source boundary override');
+      ok(block?.includes('First sentence rule'), 'source-only render should include safe opener rule');
     });
 
     it('returns null when disabled', async () => {
@@ -120,12 +128,13 @@ describe('ReEntryProtocol', () => {
 
     it('includes source boundary instructions for only-this-block prompts', async () => {
       const block = await protocol.buildBlock('sess-1', 'test-project');
-      ok(block!.includes('if the user asks to answer using only this block'), 'should include source-only boundary');
+      ok(block!.toLowerCase().includes('if the user asks to answer using only this block'), 'should include source-only boundary');
       ok(block!.includes('do not inspect files, tools, memory, git, or docs'), 'should forbid outside inspection');
       ok(block!.includes('separate directly visible/internal issues from unavailable external comparisons'), 'should keep useful block-only answers');
       ok(block!.includes('current git history'), 'should name current git as outside the block');
       ok(block!.includes('cannot be determined from this block unless directly quoted'), 'should forbid external current-state claims');
       ok(block!.includes('list them even when external/current-state comparison is unavailable'), 'should not collapse to refusal when internal evidence exists');
+      ok(block!.includes('refer to this source as <agent_reentry_context> or the re-entry block'), 'should forbid AGENTS.md source labeling');
     });
 
     it('includes identity layer', async () => {

@@ -14,8 +14,8 @@ When a new session starts (first message after idle timeout), the agent needs co
 1. **Detecting first-turn**: Identifies fresh sessions via `ctx.state.reentryInjected: Set<string>`
 2. **Building contextual block**: Assembles identity, goals, work, preferences, capabilities, beliefs, context, constraints
 3. **Diagnostics logging**: Tracks assembly, trimming, injection status
-4. **Preview-only mode**: Default safe mode (no behavior change)
-5. **Injectable mode**: Configurable via `CSM_REENTRY_PREVIEW_ONLY=false`
+4. **Live injection mode**: Default first-turn behavior
+5. **Preview-only mode**: Configurable via `CSM_REENTRY_PREVIEW_ONLY=true`
 
 ---
 
@@ -39,21 +39,21 @@ if (block && ctx.state.reentryInjected.has(sessionID) === false) {
 
 ---
 
-## 3. Preview-only Default
+## 3. Live Injection Default
 
-**`CSM_REENTRY_PREVIEW_ONLY=true` (default)**
+**`CSM_REENTRY_PREVIEW_ONLY=false` (default)**
 
 - Block built and diagnostics logged
-- Block NOT injected unless explicitly enabled
-- Safe default: no behavior change on upgrade
+- Default behavior: inject once on first turn
+- Block is NOT injected only when preview-only mode is explicitly enabled
 - User controls injection via environment variable or runtime config
 
 ```bash
-# Default: preview-only
-export CSM_REENTRY_PREVIEW_ONLY=true
-
-# Enable injection
+# Default: live first-turn injection; env var may be omitted
 export CSM_REENTRY_PREVIEW_ONLY=false
+
+# Explicit preview-only test mode
+export CSM_REENTRY_PREVIEW_ONLY=true
 ```
 
 **Injection control flow:**
@@ -168,7 +168,7 @@ interface TrimmingReport {
 - [ ] Typecheck clean
 - [ ] Build clean
 - [ ] Lint remains 7 (opentui.d.ts only)
-- [ ] Live preview-only restart confirms no default behavior change
+- [ ] Live restart confirms first-turn injection occurs by default
 - [ ] Enabled injection test passes
 
 ### Manual Validation Steps
@@ -206,7 +206,7 @@ interface TrimmingReport {
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `CSM_REENTRY_PREVIEW_ONLY` | `true` | Preview-only mode (default safe) |
+| `CSM_REENTRY_PREVIEW_ONLY` | `false` | Preview-only mode is opt-in for testing |
 | `CSM_REENTRY_MAX_TOKENS` | `1000` | Max block size for budget trimming |
 | `CSM_REENTRY_ENABLED` | `true` | Enable/disable re-entry entirely |
 
@@ -274,7 +274,7 @@ state: {
 
 ## 11. Known Limitations
 
-1. **No dual-mode switching yet**: Only preview-only mode exists
+1. **No runtime dual-mode switching yet**: Changing preview/live mode still requires restart
 2. **No first-turn synthetic message**: Block only in system prompt, not conversation
 3. **No user instruction**: Block is third-person, not "You have..."
 4. **No experimental features**: No adaptive token budgeting, no learning

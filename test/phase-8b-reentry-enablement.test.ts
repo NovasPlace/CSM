@@ -23,13 +23,13 @@ function makeAdapter(config: ReEntryConfig): ReEntryPreviewAdapter {
 
 describe('Phase 8B: Re-entry Live Enablement Controls', () => {
   describe('default config (env absent)', () => {
-    it('defaults to preview-only enabled', () => {
+    it('defaults to live injection enabled', () => {
       const cfg = { ...DEFAULT_REENTRY_CONFIG };
       strictEqual(cfg.enabled, true, 'enabled defaults true');
-      strictEqual(cfg.previewOnly, true, 'previewOnly defaults true');
+      strictEqual(cfg.previewOnly, false, 'previewOnly defaults false');
     });
 
-    it('default behavior unchanged: PluginConfig.reentry is preview-only', async () => {
+    it('PluginConfig.reentry defaults to live injection when env is absent', async () => {
       const originalCwd = process.cwd();
       const originalPreview = process.env.CSM_REENTRY_PREVIEW_ONLY;
       const tempCwd = mkdtempSync(join(tmpdir(), 'csm-reentry-default-'));
@@ -50,7 +50,7 @@ describe('Phase 8B: Re-entry Live Enablement Controls', () => {
       }
 
       strictEqual(cfg.reentry.enabled, true, 'config.reentry.enabled defaults true');
-      strictEqual(cfg.reentry.previewOnly, true, 'config.reentry.previewOnly defaults true');
+      strictEqual(cfg.reentry.previewOnly, false, 'config.reentry.previewOnly defaults false');
       ok(Array.isArray(cfg.reentry.layers), 'layers array present');
     });
   });

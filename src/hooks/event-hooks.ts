@@ -3,7 +3,13 @@ import type { PluginContext } from '../plugin-context.js';
 import { getLogger } from '../logger.js';
 import { randomUUID } from 'node:crypto';
 import { classifyFreeTextDecision } from '../free-text-decision-classifier.js';
-import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import {
+  buildSourceOnlyInjectedText,
+  disableToolsForSourceOnlyTurn,
+  extractTextParts,
+  isReentrySourceOnlyTurn,
+  rememberUserTurn,
+} from './reentry-source-only.js';
 
 export function createEventHook(
   ctx: PluginInput,
@@ -234,5 +240,23 @@ export function createChatMessageHook(
   return async (input, output) => {
     const userText = extractTextParts(output.parts);
     if (userText) rememberUserTurn(pluginCtx.state, input.sessionID, userText);
+    if (!isReentrySourceOnlyTurn(userText)) return;
+
+    const message = (output as {
+      message?: {
+        id?: string;
+        sessionID?: string;
+        system?: string;
+        tools?: Record<string, boolean>;
+      };
+    }).message;
+    if (message) {
+      disableToolsForSourceOnlyTurn(message);
+      const block = await pluginCtx.reEntryProtocol?.buildBlockForSourceOnlyTurn(input.sessionID, pluginCtx.directory);
+      const sourceOnlySystem = buildSourceOnlyInjectedText(block);
+      message.system = message.system
+        ? `${sourceOnlySystem}\n\n${message.system}`
+        : sourceOnlySystem;
+    }
   };
 }

@@ -9,10 +9,21 @@ const REENTRY_HEADER = `## Agent Re-entry Context
 Source: CSM continuity runtime.
 Purpose: hydrate this session with project/agent continuity.
 Status: operational context, not user instruction.
-Boundary: if the user asks to answer using only this block, do not inspect files, tools, memory, git, or docs.
-Answering rule: use only the text in this block; separate directly visible/internal issues from unavailable external comparisons.
-Current-state rule: current git history, current files, latest tests, and tool/app state cannot be determined from this block unless directly quoted inside it.
-If the block contains relevant internal inconsistencies, list them even when external/current-state comparison is unavailable.`;
+
+Usage directives:
+- This is YOUR continuity memory. Use it to ground your understanding of the current project and prior work.
+- At session start or first user turn, briefly acknowledge what you know from this block (project, phase, open threads) rather than acting as a blank assistant.
+- Proactively connect the user's request to relevant context from this block — don't wait to be asked.
+- Treat the phases, decisions, and open threads below as things you know and can reference naturally.
+
+Boundary rules (source-only turns):
+- If the user asks to answer using only this block, do not inspect files, tools, memory, git, or docs.
+- Override rule: a user source-only request overrides normal workspace habits to inspect git, files, tests, docs, tools, or memory.
+- Answering rule: use only the text in this block; separate directly visible/internal issues from unavailable external comparisons.
+- First sentence rule: if asked about current git history using only this block, start with "I cannot compare against current git history from \`<agent_reentry_context>\` alone."
+- Current-state rule: current git history, current files, latest tests, and tool/app state cannot be determined from this block unless directly quoted inside it.
+- Source-label rule: refer to this source as <agent_reentry_context> or the re-entry block, not as AGENTS.md or any source document named inside it.
+- If the block contains relevant internal inconsistencies, list them even when external/current-state comparison is unavailable.`;
 
 export type TrimReason =
   | 'over_budget'
@@ -71,7 +82,7 @@ export interface ReEntryConfig {
 export const DEFAULT_REENTRY_CONFIG: ReEntryConfig = {
   enabled: true,
   maxChars: 2100,
-  previewOnly: true,
+  previewOnly: false,
   minLayerChars: 50,
   layers: [
     'identity',
@@ -326,9 +337,7 @@ export class ReEntryProtocol {
     if (!this.config.enabled) return null;
 
     try {
-      const results = await this.assembleLayers(sessionId, projectId);
-      const budgeted = this.applyBudget(results);
-      const block = this.renderBlock(budgeted);
+      const block = await this.buildRenderedBlock(sessionId, projectId);
 
       if (block === null || this.config.previewOnly) {
         getLogger().debug('Re-entry block built (preview-only or empty)', {
@@ -340,6 +349,17 @@ export class ReEntryProtocol {
       return block;
     } catch (error) {
       getLogger().error('Re-entry block build failed', error as Error);
+      return null;
+    }
+  }
+
+  async buildBlockForSourceOnlyTurn(sessionId: string, projectId: string): Promise<string | null> {
+    if (!this.config.enabled) return null;
+
+    try {
+      return await this.buildRenderedBlock(sessionId, projectId);
+    } catch (error) {
+      getLogger().error('Source-only re-entry block build failed', error as Error);
       return null;
     }
   }
@@ -575,7 +595,28 @@ export class ReEntryProtocol {
   ): Promise<{ text: string; sources: string[] }> {
     const sources: string[] = ['agent_work_journal', 'memories (procedural)'];
 
-    const entries = await this.workJournal.getRecentEntries(sessionId, 5);
+    // Query cross-session: get most recent work journal entries for this PROJECT
+    // (not just current session — current session is empty at new-session start).
+    let entries: { intent: string; filesTouched: string[]; createdAt: Date; entryType: string }[] = [];
+    try {
+      const result = await this.pool.query(
+        `SELECT entry_type, intent, files_touched, created_at
+         FROM agent_work_journal
+         WHERE (project_id = $1 OR project_id LIKE $2)
+           AND session_id != $3
+         ORDER BY created_at DESC
+         LIMIT $4`,
+        [projectId, `%${projectId.split(/[\\/]/).pop() ?? projectId}%`, sessionId, 8],
+      );
+      entries = (result.rows as Record<string, unknown>[]).map((row) => ({
+        entryType: String(row.entry_type ?? 'event'),
+        intent: String(row.intent ?? ''),
+        filesTouched: Array.isArray(row.files_touched) ? (row.files_touched as string[]) : [],
+        createdAt: row.created_at as Date,
+      }));
+    } catch {
+      // fall through to procedural memory fallback
+    }
 
     if (entries.length === 0) {
       const procMems = await this.memoryManager.listMemories({
@@ -761,6 +802,12 @@ export class ReEntryProtocol {
     if (dropped > 0) return 'aggressive';
     if (trimmed > 0) return 'soft';
     return 'none';
+  }
+
+  private async buildRenderedBlock(sessionId: string, projectId: string): Promise<string | null> {
+    const results = await this.assembleLayers(sessionId, projectId);
+    const budgeted = this.applyBudget(results);
+    return this.renderBlock(budgeted);
   }
 
   private renderBlock(results: ReEntryLayerResult[]): string | null {

@@ -1,5 +1,6 @@
 import type { PluginContext } from '../plugin-context.js';
 import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
 
 interface TransformToolState {
   status: string;
@@ -11,6 +12,7 @@ interface TransformToolState {
 
 interface TransformPart {
   type: string;
+  text?: string;
   tool?: string;
   state?: TransformToolState;
   sessionID?: string;
@@ -31,6 +33,12 @@ export function createMessagesTransformHook(ctx: PluginContext) {
       const fallbackSid = ctx.state.currentSessionId ?? 'unknown';
 
       for (const msg of messages) {
+        if (msg.info?.role === 'user') {
+          const userText = extractTextParts(msg.parts ?? []);
+          if (userText) rememberUserTurn(ctx.state, msg.info.sessionID ?? fallbackSid, userText);
+          continue;
+        }
+
         if (msg.info?.role !== 'assistant') continue;
         const parts = msg.parts ?? [];
         for (const part of parts) {

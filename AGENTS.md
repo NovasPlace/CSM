@@ -24,11 +24,11 @@
 ## Progress
 ### Done
 - **Phase 7A — Re-entry Context Builder**: `src/re-entry-protocol.ts` orchestrates 8 layers with priority-based trimming, builds contextual block, preview-only mode.
-- **Phase 7B — Session Start Integration**: `src/hooks/system-transform.ts` injects re-entry block on first turn (preview-only default, first-turn tracking via `reentryInjected` Set). 4 new tests (all pass).
+- **Phase 7B — Session Start Integration**: `src/hooks/system-transform.ts` injects re-entry block on first turn (live injection default, first-turn tracking via `reentryInjected` Set). 4 new tests (all pass).
 - **Phase 7C — Re-entry Protocol Documentation**: `docs/PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md` created with purpose, injection mode, layer order, trimming behavior, safety model, diagnostics, validation checklist.
 - **Phase 7 Complete**: Full test suite passes (808/808), typecheck clean, build clean, lint 7 warnings, live preview-only restart confirms no behavior change. Committed `aa352f2`.
 - **Phase 8A-Impl — Re-entry Preview Adapter + Tool**: `src/reentry-ux-tool.ts` — `csm_reentry_preview` tool. Tool count 31→32. Committed `4b7c2f1`.
-- **Phase 8B — Re-entry Live Enablement Controls**: `CSM_REENTRY_*` env vars → config → protocol. Preview-only default preserved. Committed `2504d81`.
+- **Phase 8B — Re-entry Live Enablement Controls**: `CSM_REENTRY_*` env vars → config → protocol. Live injection is now the default; set `CSM_REENTRY_PREVIEW_ONLY=true` only for explicit preview testing. Committed `2504d81`.
 - **Phase 9A — Agent Onboarding Startup Packet**: `src/agent-onboarding.ts` — 10-provider orchestrator (identity-brief, project-continuity, phase-checkpoint, constraints, relevant-memories, promoted-beliefs, advisories, tool-guidance, handoff-state, readiness-summary). `src/agent-onboarding-tool.ts` — `csm_onboard_agent` tool. Constitutional identity (Prime Directive, hardwired instincts, wake signal). Atlas-style session continuity in handoff (latest session, work journal, open threads, checkpoints). `.env` loader added to `config.ts`. Injected FIRST in system-transform before all other blocks. 34 tests. 903/903 pass. Committed `12f1d48` + `54f35bd`.
 - **Phase 8D — Belief Underflow Fix**: `belief_knowledge_store` schema REAL→DOUBLE PRECISION migration. `consolidate()` crash isolation. `sanitizeFloat()` non-finite guard. 4 regression tests.
 

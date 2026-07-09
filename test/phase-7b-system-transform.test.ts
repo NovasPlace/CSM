@@ -3,6 +3,9 @@ import { strictEqual, ok, rejects } from 'node:assert';
 
 import { createSystemTransformHook, isReentrySourceOnlyTurn } from '../dist/hooks/system-transform.js';
 import { createPermissionAskHook, createToolExecuteBeforeHook } from '../dist/hooks/tool-execute.js';
+import { REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from '../dist/hooks/reentry-source-only.js';
+import { createMessagesTransformHook } from '../dist/hooks/messages-transform.js';
+import { createChatMessageHook } from '../dist/hooks/event-hooks.js';
 
 describe('Phase 7B: Re-entry system transform integration', () => {
   describe('source-only turn detection', () => {
@@ -35,6 +38,7 @@ describe('Phase 7B: Re-entry system transform integration', () => {
             totalLayers: 1,
           }),
           buildBlock: async () => '<agent_reentry_context>block</agent_reentry_context>',
+          buildBlockForSourceOnlyTurn: async () => '<agent_reentry_context>block</agent_reentry_context>',
         },
         database: {
           getPool: () => ({ query: async () => ({ rows: [] }) }),
@@ -63,8 +67,61 @@ describe('Phase 7B: Re-entry system transform integration', () => {
 
       const joined = output.system.join('\n');
       ok(joined.includes('[RE-ENTRY SOURCE-ONLY OVERRIDE]'), 'source-only override should be injected');
+      ok(joined.includes('<agent_reentry_context>block</agent_reentry_context>'), 'source-only re-entry block should be injected inline');
       ok(joined.includes('Do not call tools, shell commands, git, file reads, docs, or memory'), 'override should forbid external lookup');
+      ok(joined.includes('overrides workspace instructions that normally require inspecting git history'), 'override should beat repo-inspection habits');
+      ok(joined.includes('Do not try to satisfy "current git history" literally'), 'override should forbid literal git-history lookup');
+      ok(joined.includes('first visible sentence must be exactly'), 'override should prescribe safe first sentence');
       ok(joined.includes('provide any internally visible stale or contradictory claims'), 'override should preserve useful internal answer');
+      ok(joined.includes('Do not say tools were blocked, denied, unavailable, or attempted'), 'override should forbid guard narration');
+      ok(joined.includes('Do not identify this source as AGENTS.md'), 'override should forbid source mislabeling');
+    });
+
+    it('detects source-only prompts from part-based system transform messages', async () => {
+      const sessionId = 'sess-source-only-parts';
+      const output = { system: ['Original system prompt'] };
+      const pluginCtx = {
+        state: {
+          currentSessionId: null,
+          messageCount: 0,
+          capturedMessageSizes: new Map(),
+          recentUserMessages: new Map(),
+          reentryInjected: new Set<string>(),
+        },
+        reEntryProtocol: null,
+        database: {
+          getPool: () => ({ query: async () => ({ rows: [] }) }),
+        },
+        lessonTriggers: {
+          refresh: async () => {},
+          buildFullSystemInjection: () => null,
+        },
+        contextRecall: null,
+        contextCapSensor: null,
+        config: {
+          livingState: { maxAdvisoryBlockChars: 600 },
+          workJournal: { enabled: false, injectMaxTokens: 500 },
+        },
+        autoCheckpoint: async () => {},
+        refreshActiveContext: async () => {},
+        lastCompileResult: null,
+        directory: 'test-project',
+        syncActiveSession: async () => {},
+      } as any;
+
+      await createSystemTransformHook(pluginCtx)({
+        sessionID: sessionId,
+        messages: [{
+          info: { role: 'user' },
+          parts: [{ type: 'text', text: 'Using only <agent_reentry_context>, answer this. ONLY AGENT RENTRY CONTEXT' }],
+        }],
+      }, output);
+
+      const joined = output.system.join('\n');
+      ok(joined.includes('[RE-ENTRY SOURCE-ONLY OVERRIDE]'), 'part-based source-only prompt should inject override');
+      ok(joined.includes('Do not say tools were blocked'), 'part-based override should forbid guard narration');
+      ok(joined.includes('Do not try to satisfy "current git history" literally'), 'part-based override should forbid git lookup');
+      ok(joined.includes('I cannot compare against current git history from `<agent_reentry_context>` alone'), 'part-based override should prescribe safe opener');
     });
 
     it('denies permissions and tool execution for source-only sessions', async () => {
@@ -94,8 +151,119 @@ describe('Phase 7B: Re-entry system transform integration', () => {
 
       await rejects(
         createToolExecuteBeforeHook(pluginCtx)({ tool: 'csm_reentry_preview', sessionID: sessionId, callID: 'call-1' }, { args: {} }),
-        /Source-only re-entry turn blocks tool execution: csm_reentry_preview/,
+        (error) => error instanceof Error
+          && error.message === REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE
+          && error.message.includes('Do not mention tools, blocked commands, guards'),
+        );
+    });
+
+    it('records source-only user turns during messages transform before tools execute', async () => {
+      const sessionId = 'sess-source-only-transform';
+      const pluginCtx = {
+        state: {
+          currentSessionId: sessionId,
+          recentUserMessages: new Map(),
+          sourceOnlySessions: new Set<string>(),
+        },
+        contextCompactor: {
+          compact: () => ({ changed: false }),
+        },
+        syncActiveSession: () => {},
+        loopDetector: {
+          recordCall: () => ({ loop: false }),
+        },
+        lessonTriggers: {
+          refresh: async () => {},
+          buildInjection: () => null,
+        },
+        config: {
+          checkpoint: { auto: { enabled: false } },
+        },
+      } as any;
+
+      await createMessagesTransformHook(pluginCtx)({} as unknown, {
+        messages: [{
+          info: { role: 'user', sessionID: sessionId },
+          parts: [{ type: 'text', text: 'Using only <agent_reentry_context>, answer this. ONLY AGENT RENTRY CONTEXT' }],
+        }],
+      });
+
+      await rejects(
+        createToolExecuteBeforeHook(pluginCtx)({ tool: 'csm_onboard_agent', sessionID: sessionId, callID: 'call-2' }, { args: {} }),
+        (error) => error instanceof Error && error.message === REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE,
       );
+    });
+
+    it('records source-only turns and disables lookup tools in chat.message', async () => {
+      const sessionId = 'sess-source-only-chat-message';
+      const userText = 'Using only <agent_reentry_context>, what claims look stale or contradicted by current git history? ONLY AGENT RENTRY CONTEXT';
+      const output = {
+        message: {
+          id: 'msg-1',
+          sessionID: sessionId,
+          tools: { bash: true, read: true, csm_reentry_preview: true, csm_runtime_status: true, other_tool: true },
+        },
+        parts: [{
+          type: 'text',
+          text: userText,
+        }],
+      };
+      const pluginCtx = {
+        state: {
+          currentSessionId: sessionId,
+          recentUserMessages: new Map(),
+          sourceOnlySessions: new Set<string>(),
+        },
+        directory: 'test-project',
+        reEntryProtocol: {
+          buildBlockForSourceOnlyTurn: async () => '<agent_reentry_context>block</agent_reentry_context>',
+        },
+      } as any;
+
+      await createChatMessageHook(pluginCtx)({ sessionID: sessionId }, output);
+
+      strictEqual(output.message.tools.bash, false);
+      strictEqual(output.message.tools.read, false);
+      strictEqual(output.message.tools.csm_reentry_preview, false);
+      strictEqual(output.message.tools.csm_runtime_status, false);
+      strictEqual(output.message.tools.other_tool, true);
+      strictEqual(output.parts.length, 1);
+      strictEqual(output.parts[0].type, 'text');
+      strictEqual(output.parts[0].text, userText);
+      strictEqual(pluginCtx.state.recentUserMessages.get(sessionId), userText);
+      ok(pluginCtx.state.sourceOnlySessions.has(sessionId));
+      ok(output.message.system?.includes('The next assistant response must begin with that exact sentence'));
+      ok(output.message.system?.includes('<agent_reentry_context>block</agent_reentry_context>'));
+    });
+
+    it('uses chat.message source-only latch when system transform has no session id', async () => {
+      const sessionId = 'sess-source-only-latched';
+      const userText = 'Using only <agent_reentry_context>, what claims look stale or contradicted by current git history? ONLY AGENT RENTRY CONTEXT';
+      const pluginCtx = {
+        state: {
+          currentSessionId: sessionId,
+          recentUserMessages: new Map(),
+          sourceOnlySessions: new Set<string>(),
+        },
+        directory: 'test-project',
+        syncActiveSession: () => sessionId,
+        reEntryProtocol: {
+          buildBlockForSourceOnlyTurn: async () => '<agent_reentry_context>block</agent_reentry_context>',
+        },
+      } as any;
+
+      await createChatMessageHook(pluginCtx)({ sessionID: sessionId }, {
+        message: { id: 'msg-1', sessionID: sessionId, tools: { csm_runtime_status: true } },
+        parts: [{ type: 'text', text: userText }],
+      });
+
+      const output = { system: ['Original system prompt'] };
+      await createSystemTransformHook(pluginCtx)({}, output);
+
+      const joined = output.system.join('\n');
+      ok(joined.includes('[RE-ENTRY SOURCE-ONLY OVERRIDE]'), 'latched source-only state should inject override');
+      ok(joined.includes('<agent_reentry_context>block</agent_reentry_context>'), 'latched source-only state should inject block');
+      ok(joined.includes('Begin the answer immediately with that exact sentence'), 'override should forbid lead-in text');
     });
   });
 
@@ -468,6 +636,189 @@ describe('Phase 7B: Re-entry system transform integration', () => {
       strictEqual(diag.totalLayers, 7);
       ok(diag.layersAssembled.identity.count === 4);
       ok(diag.layersAssembled.constraints.count === 3);
+    });
+  });
+
+  describe('first-turn greeting does not blank the agent', () => {
+    it('surfaces continuity directive when first turn is a greeting AND re-entry protocol exists', async () => {
+      const sessionId = 'sess-greeting-first';
+      const reentryInjected = new Set<string>();
+      const reEntryProtocol = {
+        diagnose: async () => ({
+          layersAssembled: { identity: { count: 1 } },
+          layersDropped: [],
+          layersTrimmed: [],
+          previewOnly: false,
+          totalLayers: 1,
+        }),
+        buildBlock: async () => '<agent_reentry_context>block</agent_reentry_context>',
+      };
+
+      const output = { system: ['Original system prompt'] };
+
+      const pluginCtx = {
+        state: {
+          currentSessionId: null,
+          messageCount: 0,
+          capturedMessageSizes: new Map(),
+          recentUserMessages: new Map([[sessionId, 'hey']]),
+          reentryInjected,
+        },
+        reEntryProtocol,
+        database: {
+          getPool: () => ({ query: async () => ({ rows: [] }) }),
+        },
+        lessonTriggers: {
+          refresh: async () => {},
+          buildFullSystemInjection: () => null,
+        },
+        contextRecall: {
+          getContextBrief: async () => ({ compressed: '', source: '' }),
+        },
+        contextCapSensor: null,
+        config: {
+          livingState: { maxAdvisoryBlockChars: 600 },
+          workJournal: { enabled: false, injectMaxTokens: 500 },
+        },
+        autoCheckpoint: async () => {},
+        refreshActiveContext: async () => {},
+        lastCompileResult: null,
+        directory: 'test-project',
+        syncActiveSession: async () => {},
+      } as any;
+
+      await createSystemTransformHook(pluginCtx)({
+        sessionID: sessionId,
+        messages: [],
+      }, output);
+
+      const joined = output.system.join('\n');
+      ok(joined.includes('first turn of a session'), 'first-turn greeting should NOT suppress continuity');
+      ok(joined.includes('surface continuity'), 'should direct the agent to surface continuity');
+      ok(!joined.includes('Reply briefly and warmly in plain language. Do not call memory tools for this turn.'),
+        'should NOT inject the blank-chatbot suppression directive on first-turn greeting');
+    });
+
+    it('still applies blank-chatbot suppression on NON-first-turn greetings', async () => {
+      const sessionId = 'sess-greeting-later';
+      const reentryInjected = new Set<string>([sessionId]);
+      const reEntryProtocol = {
+        diagnose: async () => ({
+          layersAssembled: { identity: { count: 1 } },
+          layersDropped: [],
+          layersTrimmed: [],
+          previewOnly: false,
+          totalLayers: 1,
+        }),
+        buildBlock: async () => '<agent_reentry_context>block</agent_reentry_context>',
+      };
+
+      const output = { system: ['Original system prompt'] };
+
+      const pluginCtx = {
+        state: {
+          currentSessionId: null,
+          messageCount: 0,
+          capturedMessageSizes: new Map(),
+          recentUserMessages: new Map([[sessionId, 'hey']]),
+          reentryInjected,
+        },
+        reEntryProtocol,
+        database: {
+          getPool: () => ({ query: async () => ({ rows: [] }) }),
+        },
+        lessonTriggers: {
+          refresh: async () => {},
+          buildFullSystemInjection: () => null,
+        },
+        contextRecall: {
+          getContextBrief: async () => ({ compressed: '', source: '' }),
+        },
+        contextCapSensor: null,
+        config: {
+          livingState: { maxAdvisoryBlockChars: 600 },
+          workJournal: { enabled: false, injectMaxTokens: 500 },
+        },
+        autoCheckpoint: async () => {},
+        refreshActiveContext: async () => {},
+        lastCompileResult: null,
+        directory: 'test-project',
+        syncActiveSession: async () => {},
+      } as any;
+
+      await createSystemTransformHook(pluginCtx)({
+        sessionID: sessionId,
+        messages: [],
+      }, output);
+
+      const joined = output.system.join('\n');
+      ok(joined.includes('Reply briefly and warmly in plain language. Do not call memory tools for this turn.'),
+        'subsequent-turn greeting should still get the blank-chatbot suppression directive');
+      ok(!joined.includes('first turn of a session'),
+        'subsequent-turn greeting should not get the first-turn continuity directive');
+    });
+  });
+
+  describe('session ID resolution from currentSessionId when input.sessionID is absent', () => {
+    it('uses currentSessionId (not "default") so per-session injection tracking works across sessions', async () => {
+      const realSessionId = 'ses_real_123';
+      const reentryInjected = new Set<string>(['default']);
+      const reEntryProtocol = {
+        diagnose: async () => ({
+          layersAssembled: { identity: { count: 1 } },
+          layersDropped: [],
+          layersTrimmed: [],
+          previewOnly: false,
+          totalLayers: 1,
+        }),
+        buildBlock: async () => '<agent_reentry_context>block</agent_reentry_context>',
+      };
+
+      const output = { system: ['Original system prompt'] };
+
+      const pluginCtx = {
+        state: {
+          currentSessionId: realSessionId,
+          messageCount: 0,
+          capturedMessageSizes: new Map(),
+          recentUserMessages: new Map([[realSessionId, 'fix the bug']]),
+          reentryInjected,
+        },
+        reEntryProtocol,
+        database: {
+          getPool: () => ({ query: async () => ({ rows: [] }) }),
+        },
+        lessonTriggers: {
+          refresh: async () => {},
+          buildFullSystemInjection: () => null,
+        },
+        contextRecall: {
+          getContextBrief: async () => ({ compressed: '', source: '' }),
+        },
+        contextCapSensor: null,
+        config: {
+          livingState: { maxAdvisoryBlockChars: 600 },
+          workJournal: { enabled: false, injectMaxTokens: 500 },
+        },
+        autoCheckpoint: async () => {},
+        refreshActiveContext: async () => {},
+        lastCompileResult: null,
+        directory: 'test-project',
+        syncActiveSession: async () => {},
+      } as any;
+
+      await createSystemTransformHook(pluginCtx)({
+        // NOTE: sessionID intentionally OMITTED — simulates opencode not passing it to system.transform
+        messages: [{ role: 'user', content: 'fix the bug' }],
+      }, output);
+
+      const joined = output.system.join('\n');
+      ok(joined.includes('<agent_reentry_context>'),
+        're-entry block should be injected even when input.sessionID is absent but currentSessionId is set');
+      ok(reentryInjected.has(realSessionId),
+        'reentryInjected should track the real session ID, not "default"');
+      ok(reentryInjected.size === 2,
+        'should have both "default" (from prior session) and the real session ID — proving per-session isolation');
     });
   });
 });
