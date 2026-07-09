@@ -2,6 +2,9 @@
 
 ## Development Log
 
+### 2026-07-10 — Auto-documented changes
+- edit: C:/Users/Donovan/Desktop/cross-session-memory/README.md
+
 ### 2026-07-09 — Auto-documented changes
 - write: C:/Users/Donovan/Desktop/cross-session-memory/docs/csm-architecture.svg
 
