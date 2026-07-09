@@ -13,6 +13,7 @@ import { MemoryGovernance } from '../memory_governance.js';
 import { buildResumeInjection, type WorkJournalInjectDeps } from '../work-journal-inject.js';
 import { shouldInjectAdvisory, shouldInjectVcm, advisoryCharBudget, shouldInjectFullMemoryBrief, type InjectionTrimLevel } from '../context-cap-sensor.js';
 import { appendFileSync, mkdirSync } from 'node:fs';
+import { buildOnboardingPacket, formatOnboardingBlock } from '../agent-onboarding.js';
 import { join, dirname } from 'node:path';
 
 const TELEMETRY_LOG = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.cross-session-memory', 'self-continuity-telemetry.jsonl');
@@ -176,6 +177,33 @@ export function createSystemTransformHook(ctx: PluginContext) {
   return async (input: SystemTransformInput, output: SystemTransformOutput): Promise<void> => {
     try {
       output.system = normalizeSystemEntries(output.system);
+
+      // --- Phase 9A: Onboarding packet (FIRST — before everything else) ---
+      // Must run before disable gate, evidence, re-entry, or any other injection.
+      // sessionID is optional in OpenCode's system.transform API — do not gate on it.
+      const sessionId = input.sessionID ?? 'default';
+      if (!ctx.state.onboardingInjected?.has(sessionId)) {
+        try {
+          if (!ctx.state.onboardingInjected) ctx.state.onboardingInjected = new Set();
+          const workspacePath = ctx.directory || process.cwd();
+          const packet = await buildOnboardingPacket({
+            // Prefer workspace path — DB project_id is often the full directory path.
+            projectId: workspacePath,
+            sessionId,
+            workspacePath,
+            pool: ctx.database.getPool(),
+            config: ctx.config,
+          });
+          const block = formatOnboardingBlock(packet);
+          // Always inject — onboarding is the agent's identity, never skip for cap budget.
+          output.system.unshift(block);
+          ctx.state.onboardingInjected.add(sessionId);
+          getLogger().info('Onboarding packet injected');
+        } catch (err) {
+          getLogger().error('Onboarding injection failed', err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+
       if (process.env[PROMPT_INJECTION_DISABLE_ENV] === '1') {
         getLogger().warn('[CrossSessionMemory] Prompt injection disabled via CSM_DISABLE_PROMPT_INJECTION=1');
         return;
@@ -287,9 +315,8 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
       }
 
       // --- Phase 7B: Re-entry context injection (first turn only) ---
-      const sessionId = input.sessionID ?? '';
-
-      if (ctx.reEntryProtocol && sessionId && !ctx.state.reentryInjected.has(sessionId)) {
+      // sessionID is optional in OpenCode API — use same fallback as onboarding.
+      if (ctx.reEntryProtocol && !ctx.state.reentryInjected.has(sessionId)) {
         ctx.state.reentryInjected.add(sessionId);
         try {
           const projectId = ctx.directory ?? 'unknown';
@@ -308,28 +335,8 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             output.system.push(block);
             getLogger().info('Re-entry block injected', { sessionId });
           }
-        } catch { /* re-entry injection non-critical */ }
-      }
-
-      // --- Phase 9A: Onboarding packet (first turn only) ---
-      if (sessionId && !ctx.state.onboardingInjected?.has(sessionId)) {
-        try {
-          const { buildOnboardingPacket, formatOnboardingBlock } = await import('../agent-onboarding.js');
-          const packet = await buildOnboardingPacket({
-            projectId: ctx.directory ?? 'unknown',
-            sessionId,
-            workspacePath: process.cwd(),
-            pool: ctx.database.getPool(),
-            config: ctx.config,
-          });
-          const block = formatOnboardingBlock(packet);
-          if (capTrimLevel !== 'minimal') {
-            output.system.push(block);
-          }
-          ctx.state.onboardingInjected.add(sessionId);
-          getLogger().info('Onboarding packet injected');
         } catch (err) {
-          getLogger().error('Onboarding injection failed', err instanceof Error ? err : new Error(String(err)));
+          getLogger().error('Re-entry injection failed', err instanceof Error ? err : new Error(String(err)));
         }
       }
 

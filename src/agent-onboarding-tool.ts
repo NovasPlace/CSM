@@ -18,13 +18,15 @@ export function onboardAgentTool(pluginCtx: PluginContext) {
       sections: tool.schema.array(tool.schema.string()).optional().describe('Only return these sections (e.g. ["identity-brief", "advisories"])'),
     },
     async execute(args, _context) {
-      const projectId = args.projectId ?? 'cross-session-memory';
+      const workspacePath = process.cwd();
+      // DB project_id is usually the full workspace path for this repo.
+      const projectId = args.projectId ?? workspacePath;
       const sessionId = args.sessionId ?? 'current';
 
       const packet = await buildOnboardingPacket({
         projectId,
         sessionId,
-        workspacePath: process.cwd(),
+        workspacePath,
         pool: pluginCtx.database.getPool(),
         config: pluginCtx.config,
       });

@@ -27,17 +27,17 @@
 - **Phase 7B — Session Start Integration**: `src/hooks/system-transform.ts` injects re-entry block on first turn (preview-only default, first-turn tracking via `reentryInjected` Set). 4 new tests (all pass).
 - **Phase 7C — Re-entry Protocol Documentation**: `docs/PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md` created with purpose, injection mode, layer order, trimming behavior, safety model, diagnostics, validation checklist.
 - **Phase 7 Complete**: Full test suite passes (808/808), typecheck clean, build clean, lint 7 warnings, live preview-only restart confirms no behavior change. Committed `aa352f2`.
+- **Phase 8A-Impl — Re-entry Preview Adapter + Tool**: `src/reentry-ux-tool.ts` — `csm_reentry_preview` tool. Tool count 31→32. Committed `4b7c2f1`.
+- **Phase 8B — Re-entry Live Enablement Controls**: `CSM_REENTRY_*` env vars → config → protocol. Preview-only default preserved. Committed `2504d81`.
+- **Phase 9A — Agent Onboarding Startup Packet**: `src/agent-onboarding.ts` — 10-provider orchestrator (identity-brief, project-continuity, phase-checkpoint, constraints, relevant-memories, promoted-beliefs, advisories, tool-guidance, handoff-state, readiness-summary). `src/agent-onboarding-tool.ts` — `csm_onboard_agent` tool. Constitutional identity (Prime Directive, hardwired instincts, wake signal). Atlas-style session continuity in handoff (latest session, work journal, open threads, checkpoints). `.env` loader added to `config.ts`. Injected FIRST in system-transform before all other blocks. 34 tests. 903/903 pass. Committed `12f1d48` + `54f35bd`.
+- **Phase 8D — Belief Underflow Fix**: `belief_knowledge_store` schema REAL→DOUBLE PRECISION migration. `consolidate()` crash isolation. `sanitizeFloat()` non-finite guard. 4 regression tests.
 
 ### In Progress
-- **Phase 8A-R — Re-entry UX Interface Repair**: `docs/PHASE8A_REPAIR.md` created documenting actual ReEntryProtocol interface, adapter plan, and tool registry consistency fix. All 808 tests pass. Next: implement adapter + tool. Committed `b77dd6e`.
+- **Phase 9A-Tune — Onboarding Continuity Tuning**: Handoff provider rewritten for workfolder session continuity (Atlas pattern). Readiness summary reframed as continuation. AGENTS.md updated with Phase 9A progress.
 
-### Done
-- **Phase 8A-Impl — Re-entry Preview Adapter + Tool**: `src/reentry-ux-tool.ts` — `ReEntryPreviewAdapter` wrapping real `ReEntryProtocol` (built against actual `ReEntryDiagnostic` interface, not an imagined one). `csm_reentry_preview` tool registered in `src/hooks/tool-hooks.ts`; `ReEntryPreviewAdapter` instantiated from `pluginCtx.reEntryProtocol`. Read-only: calls `buildBlock()`/`diagnose()` only, no writes. 5 new tests. Tool count 31→32. Committed `4b7c2f1`.
-- **Phase 8A Complete**: `csm_reentry_preview` live, read-only, tool count 32, 813/813 tests, default behavior unchanged. Preview-only default preserved; no injection unless explicitly enabled.
-- **Phase 8B — Re-entry Live Enablement Controls**: Wired existing `ReEntryProtocol` switch to operator config. `PluginConfig.reentry: ReEntryConfig` parsed from `CSM_REENTRY_ENABLED`/`CSM_REENTRY_PREVIEW_ONLY`/`CSM_REENTRY_MAX_CHARS`/`CSM_REENTRY_MIN_LAYER_CHARS` env vars (defaults: true/true/2100/50). `hooks-registration.ts` passes `config.reentry` into `ReEntryProtocol`. `ReEntryPreviewAdapter` now takes the live config and reports `previewOnly`/`enabled`/`wouldInject` from it — guaranteeing `csm_reentry_preview` agrees with `system-transform.ts`. `.env.example` documents the vars. 9 new tests. No new injection logic: used the existing `buildBlock()`-returns-null-when-previewOnly switch.
-
-### Next (not started — awaiting explicit go-ahead)
-- **Phase 8C — Smart Trimming**: Adaptive token budgeting (after 8B).
+### Next (not started)
+- **Phase 8C — Smart Trimming**: Adaptive token budgeting.
+- **Phase 9B — Onboarding Quality + Telemetry**: Measure whether the packet improves agent behavior.
 
 ### Done
 - **Phase 1A (Config Contract)**: `.env.example` (19 env vars), `src/config.ts` with `getEnvString/getEnvBoolean/getEnvNumber`, provider-specific env vars, mode-based DB URL, `validateAndReturnConfig()`

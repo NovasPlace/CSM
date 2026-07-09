@@ -89,9 +89,10 @@ describe('Identity brief provider', () => {
     const identity = packet.sections.find(s => s.section === 'identity-brief');
     assert.ok(identity, 'identity-brief section must exist');
     assert.equal(identity.status, 'ready');
-    assert.ok(identity.content.includes('software-engineering-agent'), 'should include role');
-    assert.ok(identity.content.includes('cross-session memory'), 'should include operating mode');
-    assert.ok(identity.content.includes('Source: AGENTS.md'), 'should cite AGENTS.md as source');
+    assert.ok(identity.content.includes('persistent software engineering agent'), 'should include constitutional identity');
+    assert.ok(identity.content.includes('Prime Directive'), 'should include prime directive');
+    assert.ok(identity.content.includes('RUN IT'), 'should include verification mandate');
+    assert.ok(identity.source.includes('AGENTS.md'), 'should cite AGENTS.md as source');
   });
 
   it('returns partial when AGENTS.md absent', async () => {
@@ -170,8 +171,8 @@ describe('Constraints provider', () => {
     const constraints = packet.sections.find(s => s.section === 'constraints');
     assert.ok(constraints, 'constraints section must exist');
     assert.equal(constraints.status, 'ready');
-    assert.ok(constraints.content.includes('PostgreSQL'), 'should include database constraint');
-    assert.ok(constraints.content.includes('Key decisions'), 'should include key decisions');
+    assert.ok(constraints.content.includes('Verify Before Speaking'), 'should include hardwired instincts');
+    assert.ok(constraints.content.includes('Honesty Over Agreement'), 'should include honesty instinct');
   });
 
   it('does not invent constraints when AGENTS.md missing', async () => {
@@ -181,7 +182,7 @@ describe('Constraints provider', () => {
     const constraints = packet.sections.find(s => s.section === 'constraints');
     assert.ok(constraints, 'constraints section must exist');
     assert.ok(['partial', 'ready'].includes(constraints.status), `should be partial or ready, got "${constraints.status}"`);
-    assert.ok(constraints.content.includes('Defaults') || constraints.content.includes('default'), 'should indicate using defaults');
+    assert.ok(constraints.content.includes('Instincts'), 'should always include hardwired instincts');
   });
 });
 
@@ -348,15 +349,38 @@ describe('Tool guidance provider', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('Handoff state provider', () => {
-  it('reads work journal and .csm/checkpoints when present', async () => {
+  it('surfaces latest session + work journal continuity for workfolder', async () => {
+    let sessionSql = '';
+    const sessionRows = [{
+      id: 'sess-prior',
+      project_id: 'test-project',
+      directory: WORKSPACE,
+      title: 'Continuity tune session',
+      summary: 'Tuning onboarding for session continuity',
+      turn_count: 12,
+      created_at: '2026-07-09T01:00:00.000Z',
+      updated_at: '2026-07-09T02:00:00.000Z',
+      ended_at: null,
+    }];
     const journalRows = [{
       session_id: 'sess-prior',
+      project_id: 'test-project',
+      entry_type: 'decision',
+      tool_name: null,
+      intent: 'Atlas pattern: spawn with current work + last session + open threads',
       result_summary: 'Implemented Phase 8B re-entry enablement',
       files_touched: JSON.stringify(['src/re-entry-protocol.ts', 'src/hooks/system-transform.ts']),
-      error_summary: 'Schema migration pending for Phase 9A',
+      error_summary: null,
+      created_at: '2026-07-09T02:00:00.000Z',
     }];
     const pool = makePool((sql) => {
+      if (sql.includes('FROM sessions')) {
+        sessionSql = sql;
+        return { rows: sessionRows, rowCount: 1 };
+      }
       if (sql.includes('FROM agent_work_journal')) return { rows: journalRows, rowCount: 1 };
+      if (sql.includes('FROM chat_messages')) return { rows: [], rowCount: 0 };
+      if (sql.includes('FROM memories')) return { rows: [{ content: 'Continue onboarding continuity work', memory_type: 'conversation', created_at: '2026-07-09T02:01:00.000Z' }], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     });
     const { buildOnboardingPacket } = await import('../dist/agent-onboarding.js');
@@ -365,19 +389,70 @@ describe('Handoff state provider', () => {
     const handoff = packet.sections.find(s => s.section === 'handoff-state');
     assert.ok(handoff, 'handoff-state section must exist');
     assert.equal(handoff.status, 'ready');
+    assert.ok(handoff.content.includes('CONTINUATION'), 'should mark as continuation');
     assert.ok(handoff.content.includes('sess-prior'), 'should include session ID');
-    assert.ok(handoff.content.includes('Phase 8B'), 'should include work summary');
-    assert.ok(handoff.content.includes('Known issues'), 'should include error summary');
+    assert.ok(handoff.content.includes('Atlas pattern'), 'should include decision/thread');
+    assert.ok(handoff.content.includes('Files in play') || handoff.content.includes('re-entry-protocol'), 'should include files');
+    assert.ok(sessionSql.includes('COUNT(j.session_id)'), 'should rank sessions by work journal count');
+    assert.ok(sessionSql.includes('COALESCE(s.turn_count, 0) = 0'), 'should demote brand-new zero-turn sessions');
   });
 
-  it('handles missing checkpoint directory', async () => {
+  it('uses chat_messages transcript turns from the prior session', async () => {
+    const chatRows = [
+      { role: 'assistant', content: 'answer 4', created_at: '2026-07-09T02:08:00.000Z' },
+      { role: 'user', content: 'question 4', created_at: '2026-07-09T02:07:00.000Z' },
+      { role: 'assistant', content: 'answer 3', created_at: '2026-07-09T02:06:00.000Z' },
+      { role: 'user', content: 'question 3', created_at: '2026-07-09T02:05:00.000Z' },
+    ];
+    const pool = makePool((sql) => {
+      if (sql.includes('FROM sessions')) {
+        return { rows: [{ id: 'sess-prior', project_id: 'test-project', directory: WORKSPACE, turn_count: 8 }], rowCount: 1 };
+      }
+      if (sql.includes('FROM chat_messages')) return { rows: chatRows, rowCount: chatRows.length };
+      return { rows: [], rowCount: 0 };
+    });
+    const { buildOnboardingPacket } = await import('../dist/agent-onboarding.js');
+    const packet = await buildOnboardingPacket(makeCtx({ pool }));
+    const handoff = packet.sections.find(s => s.section === 'handoff-state');
+    assert.ok(handoff, 'handoff-state section must exist');
+    assert.ok(handoff.content.includes('Last conversation turns'), 'should render transcript section');
+    assert.ok(handoff.content.includes('[user] question 3'), 'should include user turns');
+    assert.ok(handoff.content.includes('[assistant] answer 4'), 'should include assistant turns');
+  });
+
+  it('falls back to conversation memories with unknown role when metadata role is null', async () => {
+    const pool = makePool((sql) => {
+      if (sql.includes('FROM sessions')) {
+        return { rows: [{ id: 'sess-prior', project_id: 'test-project', directory: WORKSPACE, turn_count: 8 }], rowCount: 1 };
+      }
+      if (sql.includes('FROM chat_messages')) throw new Error('chat_messages missing');
+      if (sql.includes("memory_type IN ('conversation', 'episodic', 'lesson')")) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes('FROM memories')) {
+        return {
+          rows: [{ content: 'legacy transcript row', metadata: { role: null }, created_at: '2026-07-09T02:05:00.000Z' }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const { buildOnboardingPacket } = await import('../dist/agent-onboarding.js');
+    const packet = await buildOnboardingPacket(makeCtx({ pool }));
+    const handoff = packet.sections.find(s => s.section === 'handoff-state');
+    assert.ok(handoff, 'handoff-state section must exist');
+    assert.ok(handoff.content.includes('[unknown] legacy transcript row'), 'should label null-role transcript rows as unknown');
+  });
+
+  it('handles missing checkpoint directory and empty continuity', async () => {
     const pool = makePool(() => ({ rows: [], rowCount: 0 }));
     const { buildOnboardingPacket } = await import('../dist/agent-onboarding.js');
     const ctx = makeCtx({ pool, workspacePath: TEMP_DIR });
     const packet = await buildOnboardingPacket(ctx);
     const handoff = packet.sections.find(s => s.section === 'handoff-state');
     assert.ok(handoff, 'handoff-state section must exist');
-    assert.ok(['partial', 'ready'].includes(handoff.status), `should be partial/ready, got "${handoff.status}"`);
+    assert.ok(['partial', 'ready', 'degraded'].includes(handoff.status), `should be partial/ready/degraded, got "${handoff.status}"`);
+    assert.ok(handoff.content.includes('CONTINUATION'), 'still frames as continuation');
   });
 });
 
@@ -392,9 +467,9 @@ describe('Readiness summary provider', () => {
     const packet = await buildOnboardingPacket(ctx);
     const readiness = packet.sections.find(s => s.section === 'readiness-summary');
     assert.ok(readiness, 'readiness-summary section must exist');
-    assert.ok(readiness.content.includes('You are working in'), 'should include project name');
+    assert.ok(readiness.content.includes('continuing work') || readiness.content.includes('You are working'), 'should include project/workspace');
     assert.ok(readiness.content.includes('Readiness:'), 'should include readiness score');
-    assert.ok(readiness.content.includes('ready to begin'), 'should include ready signal');
+    assert.ok(readiness.content.includes('continuation') || readiness.content.includes('ready to begin'), 'should include continuation/ready signal');
   });
 
   it('mentions degraded/missing critical sections', async () => {
@@ -480,8 +555,7 @@ describe('Formatter', () => {
     const ctx = makeCtx();
     const packet = await buildOnboardingPacket(ctx);
     const block = formatOnboardingBlock(packet);
-    assert.ok(block.includes('═══ AGENT ONBOARDING ═══'), 'should include header');
-    assert.ok(block.includes('═══════════════════════════'), 'should include footer');
+    assert.ok(block.includes('You are awake'), 'should include wake signal');
     assert.ok(block.includes('[✓]') || block.includes('[~]') || block.includes('[⚠]') || block.includes('[✗]'), 'should include status markers');
     assert.ok(block.includes('identity-brief'), 'should include section names');
     assert.ok(block.includes('readiness-summary'), 'should include readiness-summary');

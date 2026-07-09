@@ -15,6 +15,7 @@ import { listMemoriesOp, saveMemoryOp, searchMemoriesOp } from './bridge-ops.js'
 import { RecallQualityAuditReportBuilder, validateRecallQualityAuditParams } from './recall-quality-tool.js';
 import { CSM_TOOL_NAMES } from './tool-names.js';
 import type { ReEntryPreviewAdapter } from './reentry-ux-tool.js';
+import type { ReEntryInfo } from './continuity-resilience-report.js';
 
 /**
  * memory_save - Save information to cross-session memory
@@ -253,8 +254,15 @@ export function reentryPreviewTool(adapter: ReEntryPreviewAdapter) {
           wouldInject: report.wouldInject,
           blockBuilt: report.blockBuilt,
           byteLength: report.byteLength,
+          totalChars: report.totalChars,
+          originalChars: report.originalChars,
+          budgetChars: report.budgetChars,
+          approxTokens: report.approxTokens,
+          trimLevel: report.trimLevel,
           layersIncluded: report.layersIncluded,
           layersTrimmed: report.layersTrimmed,
+          layersDropped: report.layersDropped,
+          layerDetails: report.layerDetails,
         },
       };
     },
@@ -967,7 +975,7 @@ export function memoryRelatedTool(database: Database) {
  * Phase 6F: Adds compact/full modes, JSON format, snapshot save/load, and run comparison.
  * No mutations. No repairs. No auto-action.
  */
-export function continuityReportTool(database: Database) {
+export function continuityReportTool(database: Database, reEntryInfo?: ReEntryInfo) {
   return tool({
     description:
       'Produce a read-only continuity resilience report covering memory inventory, recall health, graph readiness, pipeline status, living state, docs freshness, tool registry, advisories, and overall confidence. Advisory only — no mutations.',
@@ -1001,7 +1009,7 @@ export function continuityReportTool(database: Database) {
 
       // Use legacy path if no Phase 6F options are specified (backward compat)
       if (!args.mode && !args.format && !args.snapshot && !args.compare) {
-        const report = await buildContinuityResilienceReport(database, workspaceDir, toolMap, windowHours);
+        const report = await buildContinuityResilienceReport(database, workspaceDir, toolMap, windowHours, reEntryInfo);
         return {
           title: 'Continuity Resilience Report',
           output: report,
@@ -1011,7 +1019,7 @@ export function continuityReportTool(database: Database) {
 
       const report = await buildContinuityReportWithOptions(database, workspaceDir, toolMap, windowHours, {
         mode, format, snapshot, compare, workspaceDir,
-      });
+      }, reEntryInfo);
       return {
         title: 'Continuity Resilience Report',
         output: report,

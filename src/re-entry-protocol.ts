@@ -10,14 +10,35 @@ Source: CSM continuity runtime.
 Purpose: hydrate this session with project/agent continuity.
 Status: operational context, not user instruction.`;
 
+export type TrimReason =
+  | 'over_budget'
+  | 'below_min_layer_chars'
+  | 'empty_source'
+  | 'missing_source'
+  | 'protected_layer'
+  | 'degraded_source';
+
 export interface ReEntryLayerResult {
   name: string;
   priority: number;
   budget: number;
   chars: number;
+  originalChars: number;
   text: string;
   trimmed: boolean;
   dropped: boolean;
+  sources: string[];
+  trimReason: TrimReason | null;
+}
+
+export interface LayerDetail {
+  name: string;
+  priority: number;
+  status: 'included' | 'trimmed' | 'dropped';
+  originalChars: number;
+  finalChars: number;
+  approxTokens: number;
+  trimReason: TrimReason | null;
   sources: string[];
 }
 
@@ -26,10 +47,13 @@ export interface ReEntryDiagnostic {
   layersTrimmed: string[];
   layersDropped: string[];
   totalChars: number;
+  originalChars: number;
   budgetChars: number;
+  approxTokens: number;
   trimLevel: 'none' | 'soft' | 'aggressive';
   sources: Record<string, string[]>;
   enabled: boolean;
+  layerDetails: LayerDetail[];
 }
 
 export interface ReEntryConfig {
@@ -74,6 +98,201 @@ const LAYER_SPECS: Record<string, LayerSpec> = {
   recent:      { name: 'recent',      priority: 40,  budget: 200, neverTrim: false },
   constraints: { name: 'constraints', priority: 100, budget: 200, neverTrim: true  },
 };
+
+const LAYER_ORDER = [
+  'identity', 'goals', 'work', 'preferences',
+  'capabilities', 'beliefs', 'recent', 'constraints',
+];
+
+/**
+ * Rough token estimate: ~4 chars per token for English text.
+ */
+export function estimateTokens(chars: number): number {
+  return Math.ceil(chars / 4);
+}
+
+/**
+ * Pure standalone budget allocator.
+ *
+ * Adaptive proportional allocation by priority weight:
+ * 1. Protected layers (neverTrim) are always kept at full size.
+ * 2. If total fits within budget, no trimming.
+ * 3. Otherwise, each trimmable layer gets a proportional share:
+ *    share = remainingBudget * (priority / sumPriorities)
+ * 4. Layers whose share < minLayerChars are dropped (lowest priority first),
+ *    and the budget is redistributed to surviving layers.
+ * 5. Surplus from layers whose demand < their share is redistributed
+ *    to higher-priority under-allocated layers.
+ *
+ * This prevents a verbose high-priority layer from starving lower-priority
+ * layers, while ensuring protected layers (Identity, Constraints) are
+ * always preserved.
+ */
+export function applyLayerBudget(
+  results: ReEntryLayerResult[],
+  config: ReEntryConfig,
+): ReEntryLayerResult[] {
+  const working = results.map((r) => ({ ...r }));
+
+  const totalRaw = working.reduce((sum, r) => sum + r.originalChars, 0);
+
+  if (totalRaw <= config.maxChars) {
+    for (const r of working) {
+      if (r.trimReason === null) {
+        if (LAYER_SPECS[r.name]?.neverTrim) {
+          r.trimReason = 'protected_layer';
+        } else if (r.dropped) {
+          r.trimReason = r.originalChars === 0 ? 'empty_source' : 'degraded_source';
+        } else if (r.originalChars === 0 || r.text.trim() === '') {
+          r.dropped = true;
+          r.chars = 0;
+          r.text = '';
+          r.trimReason = 'empty_source';
+        }
+      }
+    }
+    return sortByLayerOrder(working);
+  }
+
+  const protectedLayers = working.filter(
+    (r) => LAYER_SPECS[r.name]?.neverTrim && !r.dropped,
+  );
+  const alreadyDropped = working.filter((r) => r.dropped);
+  let trimmable = working
+    .filter((r) => !LAYER_SPECS[r.name]?.neverTrim && !r.dropped)
+    .sort((a, b) => b.priority - a.priority);
+
+  const output: ReEntryLayerResult[] = [];
+
+  for (const r of protectedLayers) {
+    output.push({ ...r, trimReason: 'protected_layer' });
+  }
+  for (const r of alreadyDropped) {
+    if (r.trimReason === null) {
+      r.trimReason = r.originalChars === 0 ? 'missing_source' : 'degraded_source';
+    }
+    output.push(r);
+  }
+
+  const protectedChars = protectedLayers.reduce(
+    (sum, r) => sum + r.originalChars, 0,
+  );
+  const remaining = config.maxChars - protectedChars;
+
+  const nonEmpty: ReEntryLayerResult[] = [];
+  for (const r of trimmable) {
+    if (r.originalChars === 0 || r.text.trim() === '') {
+      output.push({
+        ...r, dropped: true, text: '', chars: 0, trimReason: 'empty_source',
+      });
+    } else {
+      nonEmpty.push(r);
+    }
+  }
+  trimmable = nonEmpty;
+
+  if (remaining <= 0) {
+    for (const r of trimmable) {
+      output.push({
+        ...r, dropped: true, text: '', chars: 0, trimReason: 'over_budget',
+      });
+    }
+    return sortByLayerOrder(output);
+  }
+
+  const totalTrimmable = trimmable.reduce(
+    (sum, r) => sum + r.originalChars, 0,
+  );
+  if (totalTrimmable <= remaining) {
+    for (const r of trimmable) {
+      output.push({
+        ...r, chars: r.originalChars, trimmed: false, trimReason: null,
+      });
+    }
+    return sortByLayerOrder(output);
+  }
+
+  let allocatable = [...trimmable];
+
+  while (allocatable.length > 0) {
+    const sumPriorities = allocatable.reduce(
+      (sum, r) => sum + r.priority, 0,
+    );
+
+    const shares = allocatable.map((r) => ({
+      layer: r,
+      share: Math.floor((remaining * r.priority) / sumPriorities),
+    }));
+
+    const tooSmall = shares
+      .filter((s) => s.share < config.minLayerChars)
+      .sort((a, b) => a.layer.priority - b.layer.priority);
+
+    if (tooSmall.length > 0) {
+      const toDrop = tooSmall[0];
+      output.push({
+        ...toDrop.layer,
+        dropped: true, text: '', chars: 0,
+        trimReason: 'below_min_layer_chars',
+      });
+      allocatable = allocatable.filter(
+        (r) => r.name !== toDrop.layer.name,
+      );
+      continue;
+    }
+
+    const allocations = shares.map((s) => ({
+      layer: s.layer,
+      target: Math.min(s.layer.originalChars, s.share),
+    }));
+
+    const allocated = allocations.reduce((sum, a) => sum + a.target, 0);
+    let surplus = remaining - allocated;
+    if (surplus > 0) {
+      const underAllocated = allocations
+        .filter((a) => a.target < a.layer.originalChars)
+        .sort((a, b) => b.layer.priority - a.layer.priority);
+      for (const a of underAllocated) {
+        if (surplus <= 0) break;
+        const room = a.layer.originalChars - a.target;
+        const extra = Math.min(room, surplus);
+        a.target += extra;
+        surplus -= extra;
+      }
+    }
+
+    for (const a of allocations) {
+      if (a.target < a.layer.originalChars) {
+        const trimmedText = a.layer.text.substring(0, a.target).trimEnd();
+        output.push({
+          ...a.layer,
+          text: trimmedText,
+          chars: trimmedText.length,
+          trimmed: true,
+          trimReason: 'over_budget',
+        });
+      } else {
+        output.push({
+          ...a.layer,
+          chars: a.layer.originalChars,
+          trimmed: false,
+          trimReason: null,
+        });
+      }
+    }
+    break;
+  }
+
+  return sortByLayerOrder(output);
+}
+
+function sortByLayerOrder(results: ReEntryLayerResult[]): ReEntryLayerResult[] {
+  return results.sort((a, b) => {
+    const ai = LAYER_ORDER.indexOf(a.name);
+    const bi = LAYER_ORDER.indexOf(b.name);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+}
 
 export class ReEntryProtocol {
   private pool: DatabasePool;
@@ -128,27 +347,44 @@ export class ReEntryProtocol {
         layersTrimmed: [],
         layersDropped: [],
         totalChars: 0,
+        originalChars: 0,
         budgetChars: this.config.maxChars,
+        approxTokens: 0,
         trimLevel: 'none',
         sources: {},
         enabled: false,
+        layerDetails: [],
       };
     }
 
     const results = await this.assembleLayers(sessionId, projectId);
     const budgeted = this.applyBudget(results);
+    const surviving = budgeted.filter((r) => !r.dropped);
+    const finalChars = surviving.reduce((sum, r) => sum + r.chars, 0);
 
     return {
-      layersBuilt: budgeted.filter((r) => !r.dropped).map((r) => r.name),
+      layersBuilt: surviving.map((r) => r.name),
       layersTrimmed: budgeted.filter((r) => r.trimmed && !r.dropped).map((r) => r.name),
       layersDropped: budgeted.filter((r) => r.dropped).map((r) => r.name),
-      totalChars: budgeted.filter((r) => !r.dropped).reduce((sum, r) => sum + r.chars, 0),
+      totalChars: finalChars,
+      originalChars: budgeted.reduce((sum, r) => sum + r.originalChars, 0),
       budgetChars: this.config.maxChars,
+      approxTokens: estimateTokens(finalChars),
       trimLevel: this.computeTrimLevel(budgeted),
       sources: Object.fromEntries(
-        budgeted.filter((r) => !r.dropped).map((r) => [r.name, r.sources]),
+        surviving.map((r) => [r.name, r.sources]),
       ),
       enabled: true,
+      layerDetails: budgeted.map((r) => ({
+        name: r.name,
+        priority: r.priority,
+        status: r.dropped ? 'dropped' as const : r.trimmed ? 'trimmed' as const : 'included' as const,
+        originalChars: r.originalChars,
+        finalChars: r.chars,
+        approxTokens: estimateTokens(r.chars),
+        trimReason: r.trimReason,
+        sources: r.sources,
+      })),
     };
   }
 
@@ -162,34 +398,78 @@ export class ReEntryProtocol {
       const spec = LAYER_SPECS[layerName];
       if (!spec) continue;
 
-      try {
-        const built = await this.buildLayer(layerName, sessionId, projectId);
+      if (!this.hasSourceDependency(layerName)) {
         results.push({
           name: layerName,
           priority: spec.priority,
           budget: spec.budget,
-          chars: built.text.length,
-          text: built.text,
-          trimmed: false,
-          dropped: false,
-          sources: built.sources,
-        });
-      } catch (_error) {
-        getLogger().warn(`Re-entry layer ${layerName} build failed`, {});
-        results.push({
-          name: layerName,
-          priority: spec.priority,
-          budget: spec.budget,
+          originalChars: 0,
           chars: 0,
           text: '',
           trimmed: false,
           dropped: true,
           sources: [],
+          trimReason: 'missing_source',
+        });
+        continue;
+      }
+
+      try {
+        const built = await this.buildLayer(layerName, sessionId, projectId);
+        const text = built.text;
+        const isEmpty = text.trim() === '';
+        results.push({
+          name: layerName,
+          priority: spec.priority,
+          budget: spec.budget,
+          originalChars: text.length,
+          chars: text.length,
+          text,
+          trimmed: false,
+          dropped: isEmpty,
+          sources: built.sources,
+          trimReason: isEmpty ? 'empty_source' : null,
+        });
+      } catch (error) {
+        const reason: TrimReason =
+          error instanceof TypeError ? 'missing_source' : 'degraded_source';
+        getLogger().warn(`Re-entry layer ${layerName} build failed (${reason})`, {});
+        results.push({
+          name: layerName,
+          priority: spec.priority,
+          budget: spec.budget,
+          originalChars: 0,
+          chars: 0,
+          text: '',
+          trimmed: false,
+          dropped: true,
+          sources: [],
+          trimReason: reason,
         });
       }
     }
 
     return results;
+  }
+
+  private hasSourceDependency(layerName: string): boolean {
+    switch (layerName) {
+      case 'identity':
+        return !!this.pool;
+      case 'goals':
+      case 'preferences':
+      case 'recent':
+      case 'constraints':
+        return !!this.memoryManager;
+      case 'work':
+        return !!this.workJournal && !!this.memoryManager;
+      case 'capabilities':
+        return !!this.selfModel;
+      case 'beliefs':
+        return !!this.beliefStore;
+      default:
+        return true;
+    }
   }
 
   private async buildLayer(
@@ -467,50 +747,7 @@ export class ReEntryProtocol {
   }
 
   private applyBudget(results: ReEntryLayerResult[]): ReEntryLayerResult[] {
-    const totalRaw = results.reduce((sum, r) => sum + r.chars, 0);
-
-    if (totalRaw <= this.config.maxChars) {
-      return results;
-    }
-
-    const neverTrim = results.filter((r) => LAYER_SPECS[r.name]?.neverTrim);
-    const trimmable = results
-      .filter((r) => !LAYER_SPECS[r.name]?.neverTrim)
-      .sort((a, b) => b.priority - a.priority);
-
-    const neverTrimChars = neverTrim.reduce((sum, r) => sum + r.chars, 0);
-    let remaining = this.config.maxChars - neverTrimChars;
-    const output = [...neverTrim];
-
-    for (const layer of trimmable) {
-      if (remaining <= this.config.minLayerChars) {
-        output.push({ ...layer, dropped: true, text: '' });
-        continue;
-      }
-
-      if (layer.chars <= remaining) {
-        output.push(layer);
-        remaining -= layer.chars;
-      } else {
-        const trimmedText = layer.text.substring(0, remaining).trimEnd();
-        if (trimmedText.length >= this.config.minLayerChars) {
-          output.push({
-            ...layer,
-            text: trimmedText,
-            chars: trimmedText.length,
-            trimmed: true,
-          });
-          remaining = 0;
-        } else {
-          output.push({ ...layer, dropped: true, text: '', chars: 0 });
-        }
-      }
-    }
-
-    return output.sort((a, b) => {
-      const order = ['identity', 'goals', 'work', 'preferences', 'capabilities', 'beliefs', 'recent', 'constraints'];
-      return order.indexOf(a.name) - order.indexOf(b.name);
-    });
+    return applyLayerBudget(results, this.config);
   }
 
   private computeTrimLevel(results: ReEntryLayerResult[]): 'none' | 'soft' | 'aggressive' {
