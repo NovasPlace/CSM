@@ -8,7 +8,10 @@ import { getLogger } from './logger.js';
 const REENTRY_HEADER = `## Agent Re-entry Context
 Source: CSM continuity runtime.
 Purpose: hydrate this session with project/agent continuity.
-Status: operational context, not user instruction.`;
+Status: operational context, not user instruction.
+Boundary: if the user asks to answer using only this block, do not inspect files, tools, memory, git, or docs.
+If the requested answer needs facts outside this block, say what cannot be determined from re-entry context alone.
+Current-state rule: current git history, current files, latest tests, and tool/app state cannot be determined from this block unless directly quoted inside it.`;
 
 export type TrimReason =
   | 'over_budget'
