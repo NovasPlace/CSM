@@ -3,18 +3,28 @@ import type { PluginContext } from '../plugin-context.js';
 import { getLogger } from '../logger.js';
 import { randomUUID } from 'node:crypto';
 import { classifyFreeTextDecision } from '../free-text-decision-classifier.js';
+import {
+  buildSourceOnlyInjectedText,
+  disableToolsForSourceOnlyTurn,
+  extractTextParts,
+  isReentrySourceOnlyTurn,
+  rememberUserTurn,
+} from './reentry-source-only.js';
 
 export function createEventHook(
   ctx: PluginInput,
   pluginCtx: PluginContext,
-): (args: { event: any }) => Promise<void> {
+): (args: { event: unknown }) => Promise<void> {
   const { config, memoryManager, syncActiveSession, subconscious, gitWatcher, workJournal, experiencePackets, state } = pluginCtx;
 
   return async ({ event }) => {
+    const eventRecord = event as Record<string, unknown>;
     try {
-      if (event.type === 'session.created') {
+      if ((eventRecord.type as string) === 'session.created') {
+        const info = (eventRecord.properties as Record<string, unknown>).info as Record<string, unknown> | undefined;
+        const sessionId = info?.id as string;
         const session = await memoryManager.createSession(
-          event.properties.info.id,
+          sessionId ?? '',
           ctx.directory,
         );
         syncActiveSession(session.id);
@@ -58,7 +68,7 @@ export function createEventHook(
         }
       }
 
-      if (event.type === 'session.updated' && state.currentSessionId) {
+      if ((eventRecord.type as string) === 'session.updated' && state.currentSessionId) {
         // Phase 5A: session_checkpoint (NOT session_end — dispose handles the real close)
         try {
           await experiencePackets.recordSessionCheckpointPacket({
@@ -90,22 +100,22 @@ export function createEventHook(
         workJournal.recordSessionEnd(state.currentSessionId, ctx.directory, state.messageCount);
       }
 
-      if (event.type === 'file.edited') {
+      if ((eventRecord.type as string) === 'file.edited') {
         await subconscious.captureFileChange({
-          filePath: event.properties.file,
+          filePath: (eventRecord.properties as Record<string, unknown>).file as string,
           eventType: 'modified',
           timestamp: new Date(),
         });
       }
 
-      if (event.type === 'message.updated') {
-        const info = event.properties.info;
-        getLogger().debug(`message.updated fired - role: ${info?.role}, id: ${info?.id}`, { turnId: info?.id });
+      if ((eventRecord.type as string) === 'message.updated') {
+        const info = (eventRecord.properties as Record<string, unknown>).info as Record<string, unknown> | undefined;
+        getLogger().debug(`message.updated fired - role: ${info?.role}, id: ${info?.id}`, { turnId: info?.id as string | undefined });
 
         // Phase 5A: free-text decision classifier (user role only)
-        if (info && info.role === 'user' && state.currentSessionId) {
+        if (info && (info.role as string) === 'user' && state.currentSessionId) {
           try {
-            const result = await ctx.client.session.messages({ path: { id: info.sessionID } });
+            const result = await ctx.client.session.messages({ path: { id: String(info.sessionID ?? '') } });
             const messages = result.data;
             if (messages) {
               const msg = messages.find((m: { info: { id: string } }) => m.info.id === info.id);
@@ -117,6 +127,7 @@ export function createEventHook(
                   }
                 }
                 if (userText.trim()) {
+                  rememberUserTurn(state, String(info.sessionID ?? state.currentSessionId), userText);
                   const classification = classifyFreeTextDecision(userText);
                   if (classification) {
                     await experiencePackets.recordDecisionPacket({
@@ -142,11 +153,11 @@ export function createEventHook(
           }
         }
 
-        if (info && info.role === 'assistant' && config.fullTranscripts) {
-          const messageId = info.id;
+        if (info && (info.role as string) === 'assistant' && config.fullTranscripts) {
+          const messageId = info.id as string;
           try {
             getLogger().debug(`Fetching messages for session ${info.sessionID}`);
-            const result = await ctx.client.session.messages({ path: { id: info.sessionID } });
+            const result = await ctx.client.session.messages({ path: { id: String(info.sessionID ?? '') } });
             const messages = result.data;
             getLogger().debug(`Got ${messages?.length ?? 0} messages from SDK`);
 
@@ -197,10 +208,10 @@ export function createEventHook(
                       fullTranscript: true,
                       partCount: msg?.parts?.length ?? 0,
                     },
-                    sessionId: info.sessionID,
+                    sessionId: String(info.sessionID ?? ''),
                   });
                   workJournal.recordDecision({
-                    sessionId: info.sessionID,
+                    sessionId: String(info.sessionID ?? ''),
                     projectId: ctx.directory,
                     intent: fullContent.trim().substring(0, 200),
                     filesTouched: [],
@@ -219,6 +230,33 @@ export function createEventHook(
       }
     } catch (error) {
       getLogger().error('Event handler failed', error as Error);
+    }
+  };
+}
+
+export function createChatMessageHook(
+  pluginCtx: PluginContext,
+): (input: { sessionID: string }, output: { parts: unknown[] }) => Promise<void> {
+  return async (input, output) => {
+    const userText = extractTextParts(output.parts);
+    if (userText) rememberUserTurn(pluginCtx.state, input.sessionID, userText);
+    if (!isReentrySourceOnlyTurn(userText)) return;
+
+    const message = (output as {
+      message?: {
+        id?: string;
+        sessionID?: string;
+        system?: string;
+        tools?: Record<string, boolean>;
+      };
+    }).message;
+    if (message) {
+      disableToolsForSourceOnlyTurn(message);
+      const block = await pluginCtx.reEntryProtocol?.buildBlockForSourceOnlyTurn(input.sessionID, pluginCtx.directory);
+      const sourceOnlySystem = buildSourceOnlyInjectedText(block);
+      message.system = message.system
+        ? `${sourceOnlySystem}\n\n${message.system}`
+        : sourceOnlySystem;
     }
   };
 }

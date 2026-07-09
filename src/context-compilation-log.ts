@@ -18,6 +18,20 @@ interface LogCompilationInput {
   pinnedCategories: Record<string, number>;
 }
 
+interface CompilationRow {
+  id: number;
+  session_id: string;
+  created_at: Date;
+  mode: string;
+  budget: number;
+  before_tokens: number;
+  after_tokens: number;
+  parts_compressed: number;
+  parts_pinned: number;
+  compressed_details: CompressedPartDetail[] | null;
+  pinned_categories: Record<string, number> | null;
+}
+
 const INSERT_SQL = `
   INSERT INTO context_compilation_log
     (session_id, mode, budget, before_tokens, after_tokens,
@@ -43,7 +57,7 @@ export async function logCompilation(
     details, cats,
   ]);
   if (res.rows.length === 0) return null;
-  const row = res.rows[0] as any;
+  const row = res.rows[0] as CompilationRow;
   return { id: row.id, createdAt: row.created_at };
 }
 
@@ -61,7 +75,7 @@ export async function getRecentCompilation(
 ): Promise<ContextCompilationEntry | null> {
   const res = await pool.query(RECENT_SQL, [sessionId]);
   if (res.rows.length === 0) return null;
-  return rowToEntry(res.rows[0]);
+  return rowToEntry(res.rows[0] as CompilationRow);
 }
 
 const HISTORY_SQL = `
@@ -78,7 +92,7 @@ export async function getCompilationHistory(
   limit: number,
 ): Promise<ContextCompilationEntry[]> {
   const res = await pool.query(HISTORY_SQL, [sessionId, limit]);
-  return res.rows.map(rowToEntry);
+  return res.rows.map(r => rowToEntry(r as CompilationRow));
 }
 
 const PRUNE_SQL = `
@@ -93,7 +107,7 @@ export async function pruneOldDetails(pool: DatabasePool, days: number): Promise
   return res.rowCount ?? 0;
 }
 
-function rowToEntry(row: any): ContextCompilationEntry {
+function rowToEntry(row: CompilationRow): ContextCompilationEntry {
   return {
     id: row.id,
     sessionId: row.session_id,

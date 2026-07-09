@@ -2,9 +2,20 @@ import { buildCheckpoint } from './checkpoint-builder.js';
 import { estimateTokens } from './token-bucket-analyzer.js';
 import type { CheckpointConfig, SessionMessage } from './checkpoint-types.js';
 
+interface CheckpointPart {
+  type?: string;
+  text?: string;
+  tool?: string;
+  toolCallId?: string;
+  state?: Record<string, unknown>;
+  output?: string;
+  input?: unknown;
+  error?: string;
+}
+
 interface MessageLike {
   info?: { role?: string; id?: string; sessionID?: string };
-  parts?: any[];
+  parts?: CheckpointPart[];
 }
 
 const CHECKPOINT_CONFIG: CheckpointConfig = {
@@ -22,14 +33,14 @@ function toSessionMessage(message: MessageLike, index: number): SessionMessage {
       role: message.info?.role ?? 'assistant',
     },
     parts: (message.parts ?? []).map((part, partIndex) => ({
-      type: part.type,
+      type: part.type ?? 'text',
       text: part.text,
       tool: part.tool,
       toolCallId: part.toolCallId ?? `tool-${index}-${partIndex}`,
       state: part.state,
       output: part.output ?? part.state?.output,
       input: part.input ?? part.state?.input,
-      error: part.error ?? part.state?.error,
+      error: (part.error ?? part.state?.error) as string | undefined,
     })),
   };
 }

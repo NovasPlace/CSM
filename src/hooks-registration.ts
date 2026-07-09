@@ -35,6 +35,7 @@ import { SelfModelUpdater } from './self-model-updater.js';
 import { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
 import { LivingStateRuntime } from './living-state-runtime.js';
 import { LivingStateAdvisor } from './living-state-advisor.js';
+import { ReEntryProtocol } from './re-entry-protocol.js';
 import { VcmManager } from './vcm-manager.js';
 import { ContextCapSensor } from './context-cap-sensor.js';
 import { BeliefPromotionScanner } from './belief-promotion-scanner.js';
@@ -48,18 +49,18 @@ import { createAutoCheckpoint } from './helpers/auto-checkpoint.js';
 import { createSystemTransformHook } from './hooks/system-transform.js';
 import { createSessionCompactingHook, createAutocontinueHook } from './hooks/session-compaction.js';
 import { createMessagesTransformHook } from './hooks/messages-transform.js';
-import { createToolExecuteBeforeHook, createToolExecuteAfterHook } from './hooks/tool-execute.js';
-import { createEventHook } from './hooks/event-hooks.js';
+import { createPermissionAskHook, createToolExecuteBeforeHook, createToolExecuteAfterHook } from './hooks/tool-execute.js';
+import { createChatMessageHook, createEventHook } from './hooks/event-hooks.js';
 import { registerTools } from './hooks/tool-hooks.js';
 import { disposeAll } from './hooks/dispose-hooks.js';
 
 export async function registerHooks(
   ctx: PluginInput,
   options?: PluginOptions,
-  _defaultExports: any = {}
+  _defaultExports: unknown = {}
 ): Promise<Hooks> {
   const config = validateAndReturnConfig();
-  const mergedConfig = { ...config, ...(options as any ?? {}) };
+  const mergedConfig = { ...config, ...(options as unknown ?? {}) };
 
   const logging = new Logger({
     sessionId: undefined,
@@ -101,6 +102,10 @@ export async function registerHooks(
     messageCount: 0,
     capturedMessageSizes: new Map<string, number>(),
     recentUserMessages: new Map<string, string>(),
+    sourceOnlySessions: new Set<string>(),
+    sourceOnlyUntilMs: undefined as number | undefined,
+    reentryInjected: new Set<string>(),
+    onboardingInjected: new Set<string>(),
   };
 
   const syncActiveSession = (sessionId?: string): string | null => {
@@ -144,6 +149,14 @@ export async function registerHooks(
     beliefPromotion,
   );
   const livingStateAdvisor = new LivingStateAdvisor(livingState, config.livingState);
+  const reEntryProtocol = new ReEntryProtocol({
+    pool: database.getPool(),
+    memoryManager,
+    selfModel,
+    beliefStore: beliefKnowledge,
+    workJournal,
+    config: config.reentry,
+  });
   const vcmManager = new VcmManager(memoryManager, database);
   const contextCapSensor = new ContextCapSensor(config.targetContextCap);
   const lessonTriggers = new LessonTriggerCache(database.getPool());
@@ -172,6 +185,7 @@ export async function registerHooks(
     refreshActiveContext, syncActiveSession,
     lastCompileResult: null,
     workJournal, experiencePackets, lessonTriggers, selfModel, beliefKnowledge, livingState, livingStateAdvisor,
+    reEntryProtocol,
     vcmManager,
     contextCapSensor,
     state: sessionState,
@@ -194,13 +208,15 @@ export async function registerHooks(
 
   return {
     event: createEventHook(ctx, pluginCtx),
+    'chat.message': createChatMessageHook(pluginCtx),
+    'permission.ask': createPermissionAskHook(pluginCtx),
     'experimental.chat.system.transform': createSystemTransformHook(pluginCtx),
     'experimental.chat.messages.transform': createMessagesTransformHook(pluginCtx),
     'experimental.session.compacting': createSessionCompactingHook(pluginCtx),
     'experimental.compaction.autocontinue': createAutocontinueHook(pluginCtx),
     'tool.execute.before': createToolExecuteBeforeHook(pluginCtx),
     'tool.execute.after': createToolExecuteAfterHook(pluginCtx),
-    tool: registerTools(pluginCtx),
+    tool: registerTools(pluginCtx) as unknown as Hooks['tool'],
     dispose: () => disposeAll(ctx, pluginCtx),
   };
 }

@@ -3,6 +3,7 @@
  * Passed to each extracted hook so they can access shared state
  * without capturing closure variables from index.ts.
  */
+import type { PluginInput } from '@opencode-ai/plugin';
 import type { PluginConfig } from './types.js';
 import type { Database } from './database.js';
 import type { MemoryManager } from './memory-manager.js';
@@ -45,16 +46,20 @@ export interface PluginState {
   messageCount: number;
   capturedMessageSizes: Map<string, number>;
   recentUserMessages: Map<string, string>;
+  sourceOnlySessions?: Set<string>;
+  sourceOnlyUntilMs?: number;
   stateChangeTracker?: Record<string, unknown>;
   _docsInitialized?: boolean;
   pendingFileContext?: import('./file-context-primer.js').FileContextBlock | null;
   pendingMilestonePrompt?: import('./milestone-tracker.js').MilestonePromptBlock | null;
+  reentryInjected: Set<string>;
+  onboardingInjected: Set<string>;
 }
 
 export interface PluginContext {
   config: PluginConfig;
   database: Database;
-  client: any;
+  client: PluginInput['client'];
   directory: string;
   worktree?: string;
   memoryManager: MemoryManager;
@@ -83,6 +88,7 @@ export interface PluginContext {
   beliefKnowledge: BeliefKnowledgeConsolidator;
   livingState: LivingStateRuntime;
   livingStateAdvisor: LivingStateAdvisor;
+  reEntryProtocol?: import('./re-entry-protocol.js').ReEntryProtocol;
   decisionRegistry?: import('./decision-registry.js').DecisionRegistry;
   knownDebtRegistry?: import('./known-debt-registry.js').KnownDebtRegistry;
   lintDeltaTracker?: import('./lint-delta-tracker.js').LintDeltaTracker;

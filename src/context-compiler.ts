@@ -468,7 +468,7 @@ function classifyAndCollect(
 }
 
 function compressToFit(
-  candidates: { part: any; tokens: number }[], target: number,
+  candidates: { part: SdkPart; tokens: number }[], target: number,
 ): { saved: number; details: CompressedPartDetail[] } {
   candidates.sort((a, b) => {
     const critA = scoreCriticality(a.part);

@@ -50,7 +50,7 @@ export function captureTraceSession(dir: string, turns: number, mode: 'baseline'
   for (let turn = 0; turn < turns; turn++) {
     appendTurn(active, messages, turn);
     if (mode === 'governor') governor.govern(active, 'balanced');
-    writePromptDebugLog(dir, 'after-normalization', active, {
+    writePromptDebugLog(dir, 'after-normalization', active as unknown as Array<Record<string, unknown>>, {
       phase32Mode: mode,
       turn: turn + 1,
     });

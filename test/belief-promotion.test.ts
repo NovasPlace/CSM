@@ -342,8 +342,11 @@ describe('BeliefPromotionEngine', () => {
     const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
     const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
 
-    // Relaxed mode: minConfidence=0.3, should promote
-    const report = await engine.promote({ dryRun: true, relaxed: true });
+    // Relaxed mode: minConfidence=0.3, should promote.
+    // maxPromote=1000 ensures the test candidate (low confidence, sits at the
+    // tail of the ordered list) is reached despite pre-existing pending
+    // candidates in the live DB. This is dryRun, so no side effects.
+    const report = await engine.promote({ dryRun: true, relaxed: true, maxPromote: 1000 });
 
     const decision = report.decisions.find(d => d.candidateId === candidateId);
     assert.ok(decision, 'decision should exist');
@@ -543,8 +546,8 @@ describe('Phase 4G: tool registration', () => {
     assert.ok(CSM_TOOL_NAMES.includes('csm_belief_promote'), 'csm_belief_promote should be in CSM_TOOL_NAMES');
   });
 
-  it('tool count is 31 (30 + 1 new scan tool)', async () => {
+  it('tool count is 32 (31 + 1 reentry preview tool)', async () => {
     const { CSM_TOOL_NAMES } = await import('../dist/tool-names.js');
-    assert.equal(CSM_TOOL_NAMES.length, 31, `expected 31 tools, got ${CSM_TOOL_NAMES.length}`);
+    assert.equal(CSM_TOOL_NAMES.length, 33, `expected 33 tools, got ${CSM_TOOL_NAMES.length}`);
   });
 });

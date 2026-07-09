@@ -14,6 +14,8 @@ import type { Redactor } from './redactor.js';
 import { listMemoriesOp, saveMemoryOp, searchMemoriesOp } from './bridge-ops.js';
 import { RecallQualityAuditReportBuilder, validateRecallQualityAuditParams } from './recall-quality-tool.js';
 import { CSM_TOOL_NAMES } from './tool-names.js';
+import type { ReEntryPreviewAdapter } from './reentry-ux-tool.js';
+import type { ReEntryInfo } from './continuity-resilience-report.js';
 
 /**
  * memory_save - Save information to cross-session memory
@@ -227,6 +229,44 @@ export function memoryContextTool(contextRecall: ContextRecallDaemon) {
       };
     },
   });
+}
+
+/**
+ * csm_reentry_preview - Preview re-entry block without injecting it
+ */
+export function reentryPreviewTool(adapter: ReEntryPreviewAdapter) {
+  return {
+    description: 'Get the current re-entry block for a session/project without injecting it into the system prompt. Shows layers, trimming diagnostics, and token estimate. Does not modify any state.',
+    args: {},
+    async execute(_args: Record<string, unknown>, context: { sessionID?: string; directory?: string }) {
+      const sessionId = context.sessionID || 'unknown';
+      const projectId = context.directory || 'default';
+
+      const report = await adapter.buildPreviewReport({ sessionId, projectId });
+
+      return {
+        title: 'Re-entry Preview',
+        output: await adapter.formatReport({ sessionId, projectId }),
+        metadata: {
+          sessionId,
+          projectId,
+          previewOnly: report.previewOnly,
+          wouldInject: report.wouldInject,
+          blockBuilt: report.blockBuilt,
+          byteLength: report.byteLength,
+          totalChars: report.totalChars,
+          originalChars: report.originalChars,
+          budgetChars: report.budgetChars,
+          approxTokens: report.approxTokens,
+          trimLevel: report.trimLevel,
+          layersIncluded: report.layersIncluded,
+          layersTrimmed: report.layersTrimmed,
+          layersDropped: report.layersDropped,
+          layerDetails: report.layerDetails,
+        },
+      };
+    },
+  };
 }
 
 /**
@@ -527,15 +567,15 @@ export function memoryProjectListTool(memoryManager: MemoryManager) {
     description: 'List all project scopes with memory counts.',
     args: {},
     async execute(_args, _context) {
-      const projects = await memoryManager.getAllProjectScopes();
+       const projects = await memoryManager.getAllProjectScopes();
 
-      let output = `Found ${projects.length} projects:\n\n`;
+       let output = `Found ${projects.length} projects:\n\n`;
 
-      for (const project of projects) {
-        output += `#${project.project_id} - ${project.name}\n`;
-        output += `  Directory: ${project.directory}\n`;
-        output += `  Memories: ${project.memory_count} | Last active: ${project.last_active_at}\n\n`;
-      }
+       for (const project of projects) {
+         output += `#${project.projectId} - ${project.name}\n`;
+         output += `  Directory: ${project.directory}\n`;
+         output += `  Memories: ${project.memoryCount} | Last active: ${project.lastActiveAt}\n\n`;
+       }
 
       return {
         title: 'Project Scopes',
@@ -935,7 +975,7 @@ export function memoryRelatedTool(database: Database) {
  * Phase 6F: Adds compact/full modes, JSON format, snapshot save/load, and run comparison.
  * No mutations. No repairs. No auto-action.
  */
-export function continuityReportTool(database: Database) {
+export function continuityReportTool(database: Database, reEntryInfo?: ReEntryInfo) {
   return tool({
     description:
       'Produce a read-only continuity resilience report covering memory inventory, recall health, graph readiness, pipeline status, living state, docs freshness, tool registry, advisories, and overall confidence. Advisory only — no mutations.',
@@ -969,7 +1009,7 @@ export function continuityReportTool(database: Database) {
 
       // Use legacy path if no Phase 6F options are specified (backward compat)
       if (!args.mode && !args.format && !args.snapshot && !args.compare) {
-        const report = await buildContinuityResilienceReport(database, workspaceDir, toolMap, windowHours);
+        const report = await buildContinuityResilienceReport(database, workspaceDir, toolMap, windowHours, reEntryInfo);
         return {
           title: 'Continuity Resilience Report',
           output: report,
@@ -979,7 +1019,7 @@ export function continuityReportTool(database: Database) {
 
       const report = await buildContinuityReportWithOptions(database, workspaceDir, toolMap, windowHours, {
         mode, format, snapshot, compare, workspaceDir,
-      });
+      }, reEntryInfo);
       return {
         title: 'Continuity Resilience Report',
         output: report,

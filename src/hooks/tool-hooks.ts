@@ -2,10 +2,11 @@ import {
   memorySaveTool, memorySearchTool, memoryListTool, memoryDeleteTool,
   memoryContextTool, memoryLessonTool, memoryTranscriptTool,
   memoryDistillTool, memoryDistilledViewTool, memoryCompactTool,
-  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool,
+  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool, reentryPreviewTool,
 } from '../tools.js';
 import { memoryBackfillEmbeddingsTool, memoryDedupDetectTool, memoryMergeDuplicatesTool, memoryCandidateGenerateTool, memoryCandidateReportTool } from '../maintenance-tools.js';
 import { archiveCandidateReportTool } from '../archive-candidate-report-tool.js';
+import { ReEntryPreviewAdapter } from '../reentry-ux-tool.js';
 import { memoryGovernanceReportTool } from '../memory-governance-report-tool.js';
 import { memoryPacketsTool } from '../experience-packet-tool.js';
 import { beliefScanTool, beliefScanReportTool } from '../belief-scan-tool.js';
@@ -16,6 +17,7 @@ import { selfModelTool } from '../self-model-tool.js';
 import { beliefKnowledgeTool } from '../belief-knowledge-tool.js';
 import { livingStatePreviewTool, livingStateDebugTool } from '../living-state-tool.js';
 import { goalSetTool, goalUpdateTool, goalListTool } from '../goal-tools.js';
+import { onboardAgentTool } from '../agent-onboarding-tool.js';
 import { createCheckpointTool, expandCheckpointRefTool, listCheckpointsTool } from '../checkpoint-tool.js';
 import { contextReviewTool } from '../context-review-tool.js';
 import {
@@ -29,8 +31,9 @@ import { MemoryMerger } from '../merge-tool.js';
 import { CandidateGenerator } from '../candidate-generator.js';
 import { ArchiveCandidateReportBuilder } from '../archive-candidate-report.js';
 import { MemoryGovernanceReportBuilder } from '../memory-governance-report.js';
+import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
 
-export function registerTools(pluginCtx: PluginContext): Record<string, any> {
+export function registerTools(pluginCtx: PluginContext): Record<string, unknown> {
   const {
     memoryManager, database, primingEngine, contextRecall,
     toolDistiller, memoryExtractor, redactor, contextCompactor,
@@ -48,7 +51,7 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
   const archiveCandidateReportBuilder = new ArchiveCandidateReportBuilder(database);
   const governanceReportBuilder = new MemoryGovernanceReportBuilder(database);
 
-  return {
+  const toolList: Record<string, unknown> = {
     csm_memory_save: memorySaveTool(memoryManager),
     csm_memory_search: memorySearchTool(memoryManager, primingEngine),
     csm_memory_list: memoryListTool(memoryManager),
@@ -79,7 +82,12 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     csm_compaction_audit: compactionAuditTool(database),
     csm_recall_quality_report: recallQualityReportTool(database),
     csm_memory_related: memoryRelatedTool(database),
-    csm_continuity_report: continuityReportTool(database),
+    csm_continuity_report: continuityReportTool(database, {
+      protocol: pluginCtx.reEntryProtocol,
+      config: config.reentry,
+      reentryInjected: pluginCtx.state.reentryInjected,
+      projectId: pluginCtx.directory,
+    }),
     create_checkpoint: createCheckpointTool(checkpointToolDeps),
     expand_checkpoint_ref: expandCheckpointRefTool(checkpointToolDeps),
     list_checkpoints: listCheckpointsTool(checkpointToolDeps),
@@ -93,5 +101,35 @@ export function registerTools(pluginCtx: PluginContext): Record<string, any> {
     goal_set: goalSetTool({ pool: database.getPool() }),
     goal_update: goalUpdateTool({ pool: database.getPool() }),
     goal_list: goalListTool({ pool: database.getPool() }),
+    csm_onboard_agent: onboardAgentTool(pluginCtx),
   };
+
+  if (pluginCtx.reEntryProtocol) {
+    const proto = pluginCtx.reEntryProtocol;
+    toolList['csm_reentry_preview'] = reentryPreviewTool(
+      new ReEntryPreviewAdapter(proto, pluginCtx.config.reentry),
+    );
+  }
+
+  return guardToolsForSourceOnly(pluginCtx, toolList);
+}
+
+function guardToolsForSourceOnly(pluginCtx: PluginContext, toolList: Record<string, unknown>): Record<string, unknown> {
+  for (const [name, definition] of Object.entries(toolList)) {
+    if (!definition || typeof definition !== 'object' || !('execute' in definition)) continue;
+    const toolDef = definition as { execute?: unknown };
+    if (typeof toolDef.execute !== 'function') continue;
+    const execute = toolDef.execute as (args: unknown, context?: { sessionID?: string }) => Promise<unknown>;
+    toolDef.execute = async (args: unknown, context?: { sessionID?: string }) => {
+      if (isReentrySourceOnlyActive(pluginCtx.state, context?.sessionID)) {
+        return {
+          title: 'Use re-entry context only',
+          output: REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE,
+          metadata: { blocked: true, reason: 'reentry_source_only', tool: name },
+        };
+      }
+      return execute(args, context);
+    };
+  }
+  return toolList;
 }

@@ -186,15 +186,53 @@ export class ToolCallDistiller {
     if (group.outcome !== 'success' && group.outcome !== 'partial') return undefined;
     const hasWrites = group.toolCalls.some((c) => c.tool === 'write' || c.tool === 'edit');
     if (!hasWrites || group.filesChanged.length === 0) return undefined;
-    return `Applied fix in ${group.filesChanged.join(', ')}`;
+
+    // Extract what was actually changed from edit args
+    const edits = group.toolCalls.filter((c) => c.tool === 'edit' || c.tool === 'write');
+    const changeDescriptions: string[] = [];
+
+    for (const edit of edits) {
+      const oldStr = edit.args?.oldString as string | undefined;
+      const newStr = edit.args?.newString as string | undefined;
+      const filePath = edit.filePath ?? (edit.args?.filePath as string | undefined);
+      const fileName = filePath ? (filePath.split(/[\\/]/).pop() ?? filePath) : 'file';
+
+      if (oldStr && newStr && oldStr !== newStr) {
+        const removal = this.summarizeSnippet(oldStr, 80);
+        const addition = this.summarizeSnippet(newStr, 80);
+        changeDescriptions.push(`${fileName}: "${removal}" → "${addition}"`);
+      } else if (filePath) {
+        changeDescriptions.push(fileName);
+      }
+    }
+
+    // Include error context if available (error → fix narrative)
+    const error = this.extractError(group);
+    if (error && changeDescriptions.length > 0) {
+      const errorSnippet = this.summarizeSnippet(error, 80);
+      return `Fixed "${errorSnippet}" by changing: ${changeDescriptions.join('; ')}`;
+    }
+
+    return changeDescriptions.length > 0
+      ? `Changed: ${changeDescriptions.join('; ')}`
+      : `Applied fix in ${group.filesChanged.join(', ')}`;
+  }
+
+  private summarizeSnippet(s: string, maxLen: number): string {
+    const cleaned = s.replace(/\s+/g, ' ').trim();
+    if (cleaned.length <= maxLen) return cleaned;
+    return cleaned.slice(0, maxLen - 3) + '...';
   }
 
   private extractInsight(group: ToolCallGroup): string | undefined {
     if (group.outcome === 'failure' && group.errorSummary) {
-      return `FAILED: ${group.intent} — ${group.errorSummary.slice(0, 100)}`;
+      return `FAILED: ${group.intent} — ${this.summarizeSnippet(group.errorSummary, 100)}`;
     }
     if (group.outcome === 'partial') {
       return `PARTIAL: ${group.intent} — some steps succeeded, errors remain`;
+    }
+    if (group.outcome === 'success' && group.fixApplied) {
+      return group.fixApplied;
     }
     if (group.outcome === 'success' && group.filesChanged.length > 0) {
       return `Completed: ${group.intent} — ${group.filesChanged.length} file(s) changed`;

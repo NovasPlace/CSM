@@ -2,7 +2,7 @@ import { getContextBriefOp } from './bridge-ops.js';
 import type { CodexBridgeExtraDeps } from './codex-bridge-extra-ops.js';
 import type { Database } from './database.js';
 import { ToolCallDistiller } from './tool-distiller.js';
-import type { ToolCallRecord } from './types.js';
+import type { MemoryType, ToolCallRecord } from './types.js';
 import { asLimit, asRecord, asString, asStringArray, requireSession, requireString } from './codex-bridge-extra-utils.js';
 
 export async function memoryTranscriptOp(memoryManager: CodexBridgeExtraDeps['memoryManager'], sessionId: string | undefined, input: Record<string, unknown>) {
@@ -90,7 +90,7 @@ export async function reviewCandidateOp(memoryExtractor: CodexBridgeExtraDeps['m
   const sid = requireSession(sessionId);
   const candidateId = requireString(input.id, 'id');
   const approval = name === 'memory_candidate_approve'
-    ? { candidateId, action: 'approve' as const, editedContent: asString(input.editedContent), editedType: asString(input.editedType) as any, editedImportance: typeof input.editedImportance === 'number' ? input.editedImportance : undefined, editedTags: asStringArray(input.editedTags), reviewedBy: 'user' as const, reviewedAt: new Date() }
+    ? { candidateId, action: 'approve' as const, editedContent: asString(input.editedContent), editedType: asString(input.editedType) as MemoryType | undefined, editedImportance: typeof input.editedImportance === 'number' ? input.editedImportance : undefined, editedTags: asStringArray(input.editedTags), reviewedBy: 'user' as const, reviewedAt: new Date() }
     : { candidateId, action: 'reject' as const, reviewedBy: 'user' as const, reviewedAt: new Date() };
   await memoryExtractor.reviewCandidate(approval, 'user');
   return { sessionId: sid, candidateId, action: approval.action };

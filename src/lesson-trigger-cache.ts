@@ -74,8 +74,8 @@ export class LessonTriggerCache {
          LIMIT 50`,
       );
 
-      this.triggers = (result.rows as any[]).map((row) =>
-        this.rowToTrigger(row),
+      this.triggers = (result.rows as unknown[]).map((row) =>
+        this.rowToTrigger(row as Record<string, unknown>),
       );
 
       for (const [key, rule] of Object.entries(BUILTIN_PATTERNS)) {
@@ -183,20 +183,20 @@ export class LessonTriggerCache {
     return lines.join('\n');
   }
 
-  private rowToTrigger(row: any): LessonTrigger {
-    const meta = row.metadata ?? {};
-    const triggers = meta?.triggers ?? meta?.triggerPatterns ?? {};
-    const toolPatterns: string[] = triggers?.tools ?? this.inferToolPatterns(row.content, row.tags);
-    const filePatterns: string[] = triggers?.files ?? this.inferFilePatterns(row.content, row.tags);
-    const argPatterns: Record<string, string> = triggers?.args ?? {};
+   private rowToTrigger(row: Record<string, unknown>): LessonTrigger {
+    const meta = (row.metadata as Record<string, unknown> | undefined) ?? {};
+    const triggers = (meta.triggers as Record<string, unknown> | undefined) ?? (meta.triggerPatterns as Record<string, unknown> | undefined) ?? {};
+    const toolPatterns: string[] = (triggers.tools as string[] | undefined) ?? this.inferToolPatterns(row.content as string, (row.tags as unknown[]).map((tag) => tag as string));
+    const filePatterns: string[] = (triggers.files as string[] | undefined) ?? this.inferFilePatterns(row.content as string, (row.tags as unknown[]).map((tag) => tag as string));
+    const argPatterns: Record<string, string> = (triggers.args as Record<string, string> | undefined) ?? {};
 
     return {
-      memoryId: row.id,
-      content: this.makeActionable(row.content),
+      memoryId: row.id as number,
+      content: this.makeActionable(row.content as string),
       toolPatterns,
       filePatterns,
       argPatterns,
-      importance: row.importance ?? 0.7,
+      importance: row.importance as number ?? 0.7,
     };
   }
 

@@ -1,8 +1,15 @@
 import { estimateTokens } from './token-bucket-analyzer.js';
 
+interface BenchmarkPart {
+  type?: string;
+  text?: string;
+  tool?: string;
+  state?: Record<string, unknown>;
+}
+
 export interface BenchmarkMessage {
   info: { role: string };
-  parts: any[];
+  parts: BenchmarkPart[];
 }
 
 export interface ScenarioFacts {

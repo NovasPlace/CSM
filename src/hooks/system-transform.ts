@@ -13,7 +13,14 @@ import { MemoryGovernance } from '../memory_governance.js';
 import { buildResumeInjection, type WorkJournalInjectDeps } from '../work-journal-inject.js';
 import { shouldInjectAdvisory, shouldInjectVcm, advisoryCharBudget, shouldInjectFullMemoryBrief, type InjectionTrimLevel } from '../context-cap-sensor.js';
 import { appendFileSync, mkdirSync } from 'node:fs';
+import { buildOnboardingPacket, formatOnboardingBlock } from '../agent-onboarding.js';
 import { join, dirname } from 'node:path';
+import {
+  extractTextParts,
+  isReentrySourceOnlyActive,
+  isReentrySourceOnlyTurn,
+  rememberUserTurn,
+} from './reentry-source-only.js';
 
 const TELEMETRY_LOG = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.cross-session-memory', 'self-continuity-telemetry.jsonl');
 const PROMPT_INJECTION_DISABLE_ENV = 'CSM_DISABLE_PROMPT_INJECTION';
@@ -78,7 +85,12 @@ interface CompressedDetail {
 interface SystemTransformInput {
   sessionID?: string;
   model?: unknown;
-  messages?: Array<{ content?: string }>;
+  messages?: Array<{
+    content?: string;
+    parts?: unknown;
+    info?: { role?: string };
+    role?: string;
+  }>;
 }
 
 interface SystemTransformOutput {
@@ -117,6 +129,41 @@ export function isWorkspaceFactTurn(text: string | undefined): boolean {
   if (!text) return false;
   return WORKSPACE_FACT_TURN_RE.test(text);
 }
+
+function getLatestInputTurn(messages: SystemTransformInput['messages']): string | undefined {
+  if (!messages?.length) return undefined;
+  const userTurns = messages
+    .filter((message) => (message.info?.role ?? message.role ?? 'user') === 'user')
+    .map((message) => {
+      const content = message.content?.trim();
+      if (content) return content;
+      return extractTextParts(message.parts).trim();
+    })
+    .filter(Boolean);
+  return userTurns.at(-1);
+}
+
+function buildSourceOnlyOverride(hasBlock: boolean): string {
+  const blockLine = hasBlock
+    ? 'The <agent_reentry_context> block is provided in this system prompt. Use that block only.'
+    : 'No <agent_reentry_context> block is available in this system prompt. Say that current-git comparison is unavailable from the block and do not call tools.';
+  return [
+    '[RE-ENTRY SOURCE-ONLY OVERRIDE]',
+    'The current user turn requests only agent re-entry context.',
+    'This source boundary overrides workspace instructions that normally require inspecting git history, files, tests, docs, tools, or memory.',
+    'Do not try to satisfy "current git history" literally. The correct source-only response is to say current-git comparison is unavailable from <agent_reentry_context>.',
+    'Your first visible sentence must be exactly: I cannot compare against current git history from `<agent_reentry_context>` alone.',
+    'Begin the answer immediately with that exact sentence. Do not preface it with "Examining", "Based on", "Let me", or any other lead-in.',
+    blockLine,
+    'Do not call tools, shell commands, git, file reads, docs, or memory for this turn.',
+    'Answer from <agent_reentry_context> only. If asked about current git history or current files, state that comparison is unavailable from the block, then provide any internally visible stale or contradictory claims from the block text.',
+    'Do not say tools were blocked, denied, unavailable, or attempted. Do not mention any guard, permission check, shell command, git command, file read, docs lookup, or memory lookup.',
+    'Do not identify this source as AGENTS.md. Refer to it only as <agent_reentry_context> or the re-entry block, even if content inside the block mentions AGENTS.md as provenance.',
+    '[/RE-ENTRY SOURCE-ONLY OVERRIDE]',
+  ].join('\n');
+}
+
+export { isReentrySourceOnlyTurn } from './reentry-source-only.js';
 
 async function fetchMemorySnapshot(ctx: PluginContext, limit: number): Promise<string[]> {
   const pool = ctx.database.getPool();
@@ -176,29 +223,77 @@ export function createSystemTransformHook(ctx: PluginContext) {
   return async (input: SystemTransformInput, output: SystemTransformOutput): Promise<void> => {
     try {
       output.system = normalizeSystemEntries(output.system);
+      const sessionId = input.sessionID ?? ctx.state.currentSessionId ?? 'default';
+      ctx.syncActiveSession(input.sessionID ?? '');
+      const latestInputTurn = getLatestInputTurn(input.messages);
+      const latestStateTurn = input.sessionID
+        ? ctx.state.recentUserMessages.get(input.sessionID)
+        : [...ctx.state.recentUserMessages.values()].at(-1);
+      const latestUserTurn = latestStateTurn ?? latestInputTurn;
+      if (latestUserTurn) rememberUserTurn(ctx.state, sessionId, latestUserTurn);
+
+      if (isReentrySourceOnlyTurn(latestUserTurn) || isReentrySourceOnlyActive(ctx.state, input.sessionID ?? sessionId)) {
+        const sourceOnlySessionId = input.sessionID ?? ctx.state.currentSessionId ?? sessionId;
+        const block = await ctx.reEntryProtocol?.buildBlockForSourceOnlyTurn(sourceOnlySessionId, ctx.directory);
+        if (block) output.system.unshift(block);
+        output.system.unshift(buildSourceOnlyOverride(Boolean(block)));
+        return;
+      }
+
+      // --- Phase 9A: Onboarding packet (FIRST — before everything else) ---
+      // Must run before disable gate, evidence, re-entry, or any other injection.
+      // sessionID is optional in OpenCode's system.transform API — do not gate on it.
+      if (!ctx.state.onboardingInjected?.has(sessionId)) {
+        try {
+          if (!ctx.state.onboardingInjected) ctx.state.onboardingInjected = new Set();
+          const workspacePath = ctx.directory || process.cwd();
+          const packet = await buildOnboardingPacket({
+            // Prefer workspace path — DB project_id is often the full directory path.
+            projectId: workspacePath,
+            sessionId,
+            workspacePath,
+            pool: ctx.database.getPool(),
+            config: ctx.config,
+          });
+          const block = formatOnboardingBlock(packet);
+          // Always inject — onboarding is the agent's identity, never skip for cap budget.
+          output.system.unshift(block);
+          ctx.state.onboardingInjected.add(sessionId);
+          getLogger().info('Onboarding packet injected');
+        } catch (err) {
+          getLogger().error('Onboarding injection failed', err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+
       if (process.env[PROMPT_INJECTION_DISABLE_ENV] === '1') {
         getLogger().warn('[CrossSessionMemory] Prompt injection disabled via CSM_DISABLE_PROMPT_INJECTION=1');
         return;
       }
-
-      ctx.syncActiveSession(input.sessionID ?? '');
-      const latestUserTurn = input.sessionID ? ctx.state.recentUserMessages.get(input.sessionID) : undefined;
 
       output.system.unshift(
         [
           '[CROSS-SESSION MEMORY TOOL USE CONTRACT]',
           '- Memory tools are optional support tools, not the default response path.',
           '- Do not call memory tools for greetings, acknowledgements, pleasantries, or other low-context turns.',
+          '- If the user says to use only <agent_reentry_context> or only agent re-entry context, do not call any tools, shell commands, git, files, docs, or memory. Answer only from the re-entry block text: list internal stale/contradictory signals if visible, and mark external/current-git comparison unavailable. Do not narrate blocked tools or guards.',
           '- When the user asks about repo facts, phases, docs, changelog items, or files in the current workspace, inspect the workspace first. Use memory tools only as a fallback when the answer is not in the repo.',
           '- Do not narrate hidden reasoning, tool selection, or internal plans to the user.',
           '- After any memory tool call, answer directly and naturally. Do not produce canned option menus unless the user explicitly asks for memory help or choices.',
           '[/CROSS-SESSION MEMORY TOOL USE CONTRACT]',
         ].join('\n'),
       );
+      const isFirstTurnOfSession = !ctx.state.reentryInjected.has(sessionId);
+      const hasReEntryProtocol = !!ctx.reEntryProtocol;
       if (isGreetingLikeTurn(latestUserTurn)) {
-        output.system.unshift(
-          'Current user turn is a simple greeting. Reply briefly and warmly in plain language. Do not call memory tools for this turn.',
-        );
+        if (isFirstTurnOfSession && hasReEntryProtocol) {
+          output.system.unshift(
+            'Current user turn is a simple greeting, BUT this is the first turn of a session and a re-entry / onboarding context block was injected. Reply briefly and warmly, then surface continuity in 1-3 lines: acknowledge you are resuming (e.g. project name, prior session, open threads, current phase). Do not call memory tools — answer from the injected block. Do not pretend to be a blank chatbot.',
+          );
+        } else {
+          output.system.unshift(
+            'Current user turn is a simple greeting. Reply briefly and warmly in plain language. Do not call memory tools for this turn.',
+          );
+        }
       } else if (isWorkspaceFactTurn(latestUserTurn)) {
         output.system.unshift(
           'Current user turn is asking about current-workspace facts. Search/read the workspace before using memory tools, and answer from repo evidence if available.',
@@ -284,6 +379,32 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         : null;
       if (contextBrief) {
         output.system.push(contextBrief.compressed);
+      }
+
+      // --- Phase 7B: Re-entry context injection (first turn only) ---
+      // sessionID is optional in OpenCode API — use same fallback as onboarding.
+      if (ctx.reEntryProtocol && !ctx.state.reentryInjected.has(sessionId)) {
+        try {
+          const projectId = ctx.directory ?? 'unknown';
+          const diag = await ctx.reEntryProtocol.diagnose(sessionId, projectId);
+
+          getLogger().info('Re-entry block diagnosed', {
+            sessionId,
+          });
+
+          if (diag.layersDropped.length > 0 || diag.layersTrimmed.length > 0) {
+            getLogger().info('Re-entry budget trimming applied', { sessionId });
+          }
+
+          const block = await ctx.reEntryProtocol.buildBlock(sessionId, projectId);
+          if (block && capTrimLevel !== 'minimal') {
+            output.system.push(block);
+            ctx.state.reentryInjected.add(sessionId);
+            getLogger().info('Re-entry block injected', { sessionId });
+          }
+        } catch (err) {
+          getLogger().error('Re-entry injection failed', err instanceof Error ? err : new Error(String(err)));
+        }
       }
 
       // --- Phase 4F: Advisory Living State block ---

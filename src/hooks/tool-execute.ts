@@ -4,6 +4,7 @@ import { cacheToolErrorSignal } from '../context-cache-signals.js';
 import type { ToolCallRecord } from '../types.js';
 import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
+import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
 
 /** Before-hook input shape (matches OpenCode plugin API). */
 interface ToolExecuteBeforeInput {
@@ -39,10 +40,30 @@ interface ToolExecuteMetadata {
   exitCode?: number;
 }
 
+interface PermissionAskInput {
+  sessionID?: string;
+  [key: string]: unknown;
+}
+
+interface PermissionAskOutput {
+  status: 'ask' | 'deny' | 'allow';
+}
+
+export function createPermissionAskHook(ctx: PluginContext) {
+  return async (input: PermissionAskInput, output: PermissionAskOutput) => {
+    const sessionId = input.sessionID ?? ctx.state.currentSessionId ?? undefined;
+    if (!isReentrySourceOnlyActive(ctx.state, sessionId)) return;
+    output.status = 'deny';
+  };
+}
+
 export function createToolExecuteBeforeHook(ctx: PluginContext) {
   return async (input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput) => {
+    ctx.syncActiveSession(input.sessionID);
+    if (isReentrySourceOnlyActive(ctx.state, input.sessionID)) {
+      throw new Error(REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE);
+    }
     try {
-      ctx.syncActiveSession(input.sessionID);
       const result = ctx.loopDetector.recordCall(input.tool, output.args);
       await injectLessonWarning(ctx, input, output);
       await maybeCreateRiskyEditCheckpoint(ctx, input, output);

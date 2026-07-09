@@ -78,7 +78,8 @@ export function deriveInternalState(input: DeriveInput, previous?: InternalState
   }
 
   if (input.toolName && TOOL_STANCE_MAP[input.toolName]) {
-    if (frustration === 0 && !input.error && (input.exitCode === undefined || input.exitCode === 0)) {
+    const hasAccumulatedFrustration = (previous?.frustration ?? 0) > 0.2;
+    if (frustration === 0 && !input.error && (input.exitCode === undefined || input.exitCode === 0) && !hasAccumulatedFrustration) {
       stance = TOOL_STANCE_MAP[input.toolName];
       dominantEmotion = 'curiosity';
     }
@@ -94,9 +95,20 @@ export function deriveInternalState(input: DeriveInput, previous?: InternalState
 
   if (previous) {
     cognitiveLoad = (cognitiveLoad + previous.cognitiveLoad) / 2;
-    frustration = Math.min(frustration + previous.frustration * 0.3, 1);
+    // Frustration decays slowly — 50% carry-forward, not 30%
+    frustration = Math.min(frustration + previous.frustration * 0.5, 1);
     energy = Math.max(0, (energy + previous.energy * 0.5) / 1.5);
     urgency = (urgency + previous.urgency) / 2;
+
+    // Emotion carry-forward: if session accumulated frustration, don't show pure curiosity
+    if (dominantEmotion === 'curiosity' && previous.frustration > 0.3) {
+      dominantEmotion = 'concern';
+    }
+    // If still hitting issues after prior frustration, stay frustrated
+    if (previous.dominantEmotion === 'frustration' && (frustration > 0.1 || input.error)) {
+      dominantEmotion = 'frustration';
+      stance = 'recovery';
+    }
   }
 
   cognitiveLoad = clamp(cognitiveLoad);

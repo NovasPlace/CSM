@@ -43,7 +43,15 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / ratio);
 }
 
-export function estimatePartTokens(part: any): number {
+interface TokenBucketPart {
+  text?: string;
+  content?: string;
+  type?: string;
+  state?: Record<string, unknown>;
+  input?: unknown;
+}
+
+export function estimatePartTokens(part: TokenBucketPart): number {
   if (!part) return 0;
   let tokens = 0;
   if (part.text) tokens += estimateTokens(String(part.text));
@@ -56,7 +64,7 @@ export function estimatePartTokens(part: any): number {
 
 interface MessageLike {
   info?: { role?: string; [k: string]: unknown };
-  parts?: any[];
+  parts?: unknown[];
   [k: string]: unknown;
 }
 
@@ -81,8 +89,9 @@ export function analyzeMessages(
   for (const msg of messages) {
     const role = msg.info?.role ?? "unknown";
     for (const part of msg.parts ?? []) {
-      const tokens = estimatePartTokens(part);
-      const text = String(part.text ?? part.content ?? part.state?.output ?? "");
+      const bucketPart = part as unknown as TokenBucketPart | undefined;
+      const tokens = estimatePartTokens(bucketPart ?? {});
+      const text = String(bucketPart?.text ?? bucketPart?.content ?? bucketPart?.state?.output ?? "");
       const isCompactMarker = text.startsWith("[Compacted]") || text.startsWith("[COMPA");
 
       if (isCompactMarker) {
@@ -92,18 +101,18 @@ export function analyzeMessages(
       if (role === "user") {
         userMessages += tokens;
       } else if (role === "assistant") {
-        if (part.type === "tool") {
-          if (part.state?.status !== "completed" && part.state?.status !== "error") {
+        if (bucketPart?.type === "tool") {
+          if (bucketPart?.state?.status !== "completed" && bucketPart?.state?.status !== "error") {
             toolCalls += tokens;
           }
           // Completed/error tool parts in assistant messages: counted via compactedToolTokens
           if (!isCompactMarker) {
             recentRawParts += tokens;
           }
-        } else if (part.type === "text") {
+        } else if (bucketPart?.type === "text") {
           assistantText += tokens;
         }
-      } else if (role === "tool" && part.type === "tool" && !isCompactMarker) {
+      } else if (role === "tool" && bucketPart?.type === "tool" && !isCompactMarker) {
         // Tool-role messages: tracked as recent raw (not yet compacted) tool parts
         recentRawParts += tokens;
       }

@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-07-08T10:51:11.450Z",
+  "grade": "healthy",
+  "score": 86,
+  "normalizedWeight": 0.9999999999999999,
+  "sectionGrades": {
+    "recallHealth": "healthy",
+    "graphReadiness": "needs_attention",
+    "pipelineStatus": "healthy",
+    "memoryInventory": "healthy",
+    "livingState": "healthy",
+    "docsFreshness": "sparse_data",
+    "toolRegistry": "healthy"
+  },
+  "memoryTotal": 54612,
+  "recallEvents": 19314,
+  "graphLinks": 26879,
+  "graphCoveragePct": 12.134695671281037,
+  "pipelinePackets": 8617,
+  "pipelinePackets24h": 1498,
+  "pendingCandidates": 10,
+  "promotedBeliefs": 0,
+  "advisoryCount": 0,
+  "topAdvisoryPriorities": []
+}

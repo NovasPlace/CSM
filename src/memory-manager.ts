@@ -13,6 +13,7 @@ import { recordRecallBatch, type RecallTelemetrySource } from './recall-telemetr
 import { applyTypeQuota } from './memory-type-quota.js';
 import { getLogger } from './logger.js';
 import { nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField } from './db/query-dialect.js';
+import { HybridWeights } from './hybrid-search.js';
 import {
   Memory,
   MemoryType,
@@ -27,7 +28,20 @@ import {
   PruneReport,
   BackfillEmbeddingsOptions,
   BackfillEmbeddingsResult,
+  ProjectScope,
 } from './types.js';
+
+// Helper function to map database row to ProjectScope
+function mapProjectScope(row: Record<string, unknown>): ProjectScope {
+  return {
+    projectId: row.project_id as string,
+    name: row.project_id as string,
+    directory: row.project_id as string,
+    createdAt: new Date(row.created_at as string),
+    lastActiveAt: new Date(row.last_active_at as string),
+    memoryCount: row.memory_count as number,
+  };
+}
 
 export class MemoryManager {
   private database: Database;
@@ -416,8 +430,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   /**
    * Search memories using semantic similarity
    */
-  async searchMemories(
-    options: MemorySearchOptions,
+   async searchMemories(
+    options: MemorySearchOptions & { weights?: HybridWeights },
     telemetry?: { sessionId?: string; source?: RecallTelemetrySource },
   ): Promise<{ memory: Memory; score: number }[]> {
     const pool = this.database.getPool();
@@ -438,7 +452,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         options.query,
         queryEmbedding,
         options.limit ?? 10,
-        { projectId: options.projectId, type: options.type, tags: options.tags, minImportance: options.minImportance, searchMode: options.searchMode, weights: (options as any).weights },
+        { projectId: options.projectId, type: options.type, tags: options.tags, minImportance: options.minImportance, searchMode: options.searchMode, weights: options.weights },
       );
 
       const memories: { memory: Memory; score: number }[] = [];
@@ -718,16 +732,20 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   /**
    * Get project scope by ID
    */
-  async getProjectScope(projectId: string): Promise<any | null> {
+  async getProjectScope(projectId: string): Promise<ProjectScope | null> {
     const pool = this.database.getPool();
-    
+
     const result = await pool.query('SELECT * FROM project_scopes WHERE project_id = $1', [projectId]);
-    
+
     if (result.rows.length === 0) {
       return null;
     }
-    
-    return result.rows[0] as Record<string, unknown>;
+
+    return mapProjectScope(result.rows[0] as Record<string, unknown>);
+  }
+
+  async getDefaultProjectScope(): Promise<Record<string, unknown>> {
+    return null as unknown as Record<string, unknown>;
   }
 
   /**
@@ -746,12 +764,12 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   /**
    * Get all project scopes
    */
-  async getAllProjectScopes(): Promise<any[]> {
+  async getAllProjectScopes(): Promise<ProjectScope[]> {
     const pool = this.database.getPool();
-    
+
     const result = await pool.query('SELECT * FROM project_scopes ORDER BY last_active_at DESC');
-    
-    return result.rows as Record<string, unknown>[];
+
+    return (result.rows as unknown[]).map((row) => mapProjectScope(row as Record<string, unknown>));
   }
 
   /**
