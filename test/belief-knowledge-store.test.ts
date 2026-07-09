@@ -45,8 +45,8 @@ function makePool(handler: (sql: string, params?: unknown[]) => { rows: unknown[
 describe('BeliefKnowledgeConsolidator', () => {
   it('maps candidate_preference → belief_kind=preference', async () => {
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:read:ok',
-      reason: 'tool:read succeeds reliably (3 events)', confidence: 0.5,
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:workflow:tdd',
+      reason: 'prefers TDD approach (3 events)', confidence: 0.5,
       event_count: 3, reinforcement_count: 3, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[1,2,3]', status: 'active',
     }];
@@ -59,7 +59,7 @@ describe('BeliefKnowledgeConsolidator', () => {
       }
       if (sql.includes('INSERT INTO belief_knowledge_store')) {
         beliefs.push({
-          id: 1, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+          id: 1, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
           stance: 'supports', confidence: 0.5, uncertainty: 0.5, evidence_refs: '[{"packetId":1,"entryType":"","outcome":"success","timestamp":"2025-12-01T00:00:00Z"}]',
           contradicted_count: 0, last_reinforced_at: null, status: 'candidate',
           created_at: '2025-12-01T00:00:00Z', updated_at: '2025-12-01T00:00:00Z',
@@ -78,17 +78,17 @@ describe('BeliefKnowledgeConsolidator', () => {
     assert.equal(result.updated, 0);
     assert.equal(result.beliefs.length, 1);
     assert.equal(result.beliefs[0].beliefKind, 'preference');
-    assert.equal(result.beliefs[0].subject, 'tool:read');
-    assert.equal(result.beliefs[0].claim, 'succeeds reliably');
-    assert.equal(result.beliefs[0].stance, 'supports');
+    assert.equal(result.beliefs[0].subject, 'pref:workflow');
+    assert.equal(result.beliefs[0].claim, 'prefers TDD approach');
+    assert.equal(result.beliefs[0].stance, 'neutral');
     assert.equal(result.beliefs[0].status, 'candidate');
   });
 
   it('maps candidate_worldview → belief_kind=worldview', async () => {
     const candidates: CandidateRow[] = [{
       id: 1, candidate_type: 'candidate_worldview', dedup_key: 'ms:completion',
-      reason: 'system completes tasks (2 milestones)', confidence: 0.4,
-      event_count: 2, reinforcement_count: 2, contradicted_count: 0,
+      reason: 'system completes tasks (3 milestones)', confidence: 0.5,
+      event_count: 3, reinforcement_count: 3, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[10,11]', status: 'active',
     }];
     const beliefs: BeliefRow[] = [];
@@ -124,8 +124,8 @@ describe('BeliefKnowledgeConsolidator', () => {
   it('maps candidate_opinion → belief_kind=opinion', async () => {
     const candidates: CandidateRow[] = [{
       id: 1, candidate_type: 'candidate_opinion', dedup_key: 'dec:creation',
-      reason: 'system makes decisions about creation', confidence: 0.4,
-      event_count: 2, reinforcement_count: 2, contradicted_count: 0,
+      reason: 'system makes decisions about creation', confidence: 0.5,
+      event_count: 3, reinforcement_count: 3, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[20,21]', status: 'active',
     }];
     const beliefs: BeliefRow[] = [];
@@ -161,7 +161,7 @@ describe('BeliefKnowledgeConsolidator', () => {
     const candidates: CandidateRow[] = [{
       id: 1, candidate_type: 'candidate_belief', dedup_key: 'err:parse:fail',
       reason: 'parse errors', confidence: 0.6,
-      event_count: 2, reinforcement_count: 2, contradicted_count: 0,
+      event_count: 3, reinforcement_count: 3, contradicted_count: 0,
       last_reinforced_at: null, source_packet_ids: '[]', status: 'active',
     }];
     const beliefs: BeliefRow[] = [];
@@ -185,13 +185,13 @@ describe('BeliefKnowledgeConsolidator', () => {
 
   it('duplicate candidate updates existing belief entry (reinforcement)', async () => {
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:read:ok',
-      reason: 'tool:read succeeds (3 events)', confidence: 0.5,
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:workflow:tdd',
+      reason: 'prefers TDD approach (3 events)', confidence: 0.5,
       event_count: 3, reinforcement_count: 3, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[1,2,3]', status: 'active',
     }];
     const existingBeliefs: BeliefRow[] = [{
-      id: 10, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+      id: 10, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
       stance: 'supports', confidence: 0.5, uncertainty: 0.5,
       evidence_refs: '[{"packetId":1,"entryType":"","outcome":"success","timestamp":"2025-12-01T00:00:00Z"}]',
       contradicted_count: 0, last_reinforced_at: '2025-12-01T00:00:00Z', status: 'candidate',
@@ -228,13 +228,13 @@ describe('BeliefKnowledgeConsolidator', () => {
 
   it('contradiction increases uncertainty and lowers confidence', async () => {
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:write:fail',
-      reason: 'tool:write fails (2 events)', confidence: 0.4,
-      event_count: 2, reinforcement_count: 0, contradicted_count: 2,
-      last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[5,6]', status: 'active',
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:testing:manual',
+      reason: 'prefers manual testing (3 events)', confidence: 0.5,
+      event_count: 3, reinforcement_count: 0, contradicted_count: 2,
+      last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[5,6,7]', status: 'active',
     }];
     const existingBeliefs: BeliefRow[] = [{
-      id: 10, belief_kind: 'preference', subject: 'tool:write', claim: 'fails frequently',
+      id: 10, belief_kind: 'preference', subject: 'pref:testing', claim: 'prefers manual testing',
       stance: 'opposes', confidence: 0.4, uncertainty: 0.5,
       evidence_refs: '[{"packetId":5,"entryType":"","outcome":"failure","timestamp":"2025-12-01T00:00:00Z"}]',
       contradicted_count: 0, last_reinforced_at: '2025-12-01T00:00:00Z', status: 'candidate',
@@ -269,8 +269,8 @@ describe('BeliefKnowledgeConsolidator', () => {
 
   it('status remains candidate/advisory by default', async () => {
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:read:ok',
-      reason: 'tool:read succeeds', confidence: 0.5,
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:workflow:tdd',
+      reason: 'prefers TDD approach', confidence: 0.5,
       event_count: 3, reinforcement_count: 3, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[1]', status: 'active',
     }];
@@ -283,7 +283,7 @@ describe('BeliefKnowledgeConsolidator', () => {
       }
       if (sql.includes('INSERT INTO belief_knowledge_store')) {
         const row: BeliefRow = {
-          id: 1, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+          id: 1, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
           stance: 'supports', confidence: 0.5, uncertainty: 0.5, evidence_refs: '[]',
           contradicted_count: 0, last_reinforced_at: null, status: 'candidate',
           created_at: '2025-12-01T00:00:00Z', updated_at: '2025-12-01T00:00:00Z',
@@ -318,7 +318,7 @@ describe('BeliefKnowledgeConsolidator', () => {
 
   it('getAllBeliefs returns all consolidated beliefs', async () => {
     const beliefs: BeliefRow[] = [
-      { id: 1, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+      { id: 1, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
         stance: 'supports', confidence: 0.55, uncertainty: 0.45,
         evidence_refs: '[{"packetId":1,"entryType":"","outcome":"success","timestamp":"2025-12-01T00:00:00Z"}]',
         contradicted_count: 0, last_reinforced_at: '2025-12-01T00:00:00Z', status: 'candidate',
@@ -347,7 +347,7 @@ describe('BeliefKnowledgeConsolidator', () => {
 
   it('getBeliefsByKind filters correctly', async () => {
     const beliefs: BeliefRow[] = [
-      { id: 1, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+      { id: 1, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
         stance: 'supports', confidence: 0.55, uncertainty: 0.45,
         evidence_refs: '[]',
         contradicted_count: 0, last_reinforced_at: '2025-12-01T00:00:00Z', status: 'candidate',
@@ -380,7 +380,7 @@ describe('BeliefKnowledgeConsolidator', () => {
     // Existing belief with subnormal uncertainty — the concrete production value that caused the float4 crash.
     // After the DOUBLE PRECISION schema fix, this value is storable and must NOT be lossy-clamped to 0.001.
     const existingBeliefs: BeliefRow[] = [{
-      id: 42, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+      id: 42, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
       stance: 'supports', confidence: 0.9, uncertainty: 6.56e-46,
       evidence_refs: '[]',
       contradicted_count: 0, last_reinforced_at: '2025-12-01T00:00:00Z', status: 'candidate',
@@ -389,8 +389,8 @@ describe('BeliefKnowledgeConsolidator', () => {
 
     // One reinforcing candidate (reinforcement_count: 1, contradicted_count: 0)
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:read:ok',
-      reason: 'tool:read succeeds reliably', confidence: 0.9,
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:workflow:tdd',
+      reason: 'prefers TDD approach', confidence: 0.9,
       event_count: 1, reinforcement_count: 1, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[1]', status: 'active',
     }];
@@ -458,7 +458,7 @@ describe('csm_belief_knowledge tool', () => {
 
   it('returns beliefs without kind filter', async () => {
     const beliefs = [
-      { id: 1, beliefKind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+      { id: 1, beliefKind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
         stance: 'supports', confidence: 0.55, uncertainty: 0.45,
         evidenceRefs: [{ packetId: 1, entryType: '', outcome: 'success', timestamp: '2025-12-01T00:00:00Z' }],
         contradictedCount: 0, lastReinforcedAt: '2025-12-01T00:00:00Z', status: 'candidate',
@@ -474,7 +474,7 @@ describe('csm_belief_knowledge tool', () => {
 
     assert.equal(result.metadata.count, 1);
     assert.ok(result.output.includes('preference'));
-    assert.ok(result.output.includes('tool:read'));
+    assert.ok(result.output.includes('pref:workflow'));
     assert.equal(consolidator.getAllBeliefs.mock.callCount(), 1);
     assert.equal(consolidator.getBeliefsByKind.mock.callCount(), 0);
   });
@@ -525,13 +525,13 @@ describe('Phase 8D-leak: belief knowledge float4 underflow + crash isolation', (
 
   it('tiny valid uncertainty (0.5 * 0.9^1033) passes through unchanged — no lossy clamp', async () => {
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:read:ok',
-      reason: 'tool:read succeeds reliably (3 events)', confidence: 0.5,
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:workflow:tdd',
+      reason: 'prefers TDD approach (3 events)', confidence: 0.5,
       event_count: 3, reinforcement_count: 3, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[1]', status: 'active',
     }];
     const beliefs: BeliefRow[] = [{
-      id: 10, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+      id: 10, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
       stance: 'supports', confidence: 0.5, uncertainty: tinyUncertainty,
       evidence_refs: '[]', contradicted_count: 0, last_reinforced_at: null,
       status: 'candidate', created_at: '2025-12-01T00:00:00Z', updated_at: '2025-12-01T00:00:00Z',
@@ -567,13 +567,13 @@ describe('Phase 8D-leak: belief knowledge float4 underflow + crash isolation', (
 
   it('non-finite NaN/Infinity → 0 (non-finite guard)', async () => {
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:read:ok',
-      reason: 'tool:read succeeds reliably', confidence: NaN,
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:workflow:tdd',
+      reason: 'prefers TDD approach', confidence: NaN,
       event_count: 1, reinforcement_count: 1, contradicted_count: 0,
       last_reinforced_at: null, source_packet_ids: '[]', status: 'active',
     }];
     const beliefs: BeliefRow[] = [{
-      id: 10, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+      id: 10, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
       stance: 'supports', confidence: NaN, uncertainty: Infinity,
       evidence_refs: '[]', contradicted_count: 0, last_reinforced_at: null,
       status: 'candidate', created_at: '2025-12-01T00:00:00Z', updated_at: '2025-12-01T00:00:00Z',
@@ -605,8 +605,8 @@ describe('Phase 8D-leak: belief knowledge float4 underflow + crash isolation', (
 
   it('consolidate continues when one belief upsert fails (crash isolation)', async () => {
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:read:ok',
-      reason: 'tool:read succeeds reliably (3 events)', confidence: 0.5,
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:workflow:tdd',
+      reason: 'prefers TDD approach (3 events)', confidence: 0.5,
       event_count: 3, reinforcement_count: 3, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[1]', status: 'active',
     }];
@@ -637,13 +637,13 @@ describe('Phase 8D-leak: belief knowledge float4 underflow + crash isolation', (
 
   it('consolidate isolates a failing UPDATE of an existing belief', async () => {
     const candidates: CandidateRow[] = [{
-      id: 1, candidate_type: 'candidate_preference', dedup_key: 'tool:read:ok',
-      reason: 'tool:read succeeds reliably', confidence: 0.5,
+      id: 1, candidate_type: 'candidate_preference', dedup_key: 'pref:workflow:tdd',
+      reason: 'prefers TDD approach', confidence: 0.5,
       event_count: 1, reinforcement_count: 5, contradicted_count: 0,
       last_reinforced_at: '2025-12-01T00:00:00Z', source_packet_ids: '[]', status: 'active',
     }];
     const beliefs: BeliefRow[] = [{
-      id: 10, belief_kind: 'preference', subject: 'tool:read', claim: 'succeeds reliably',
+      id: 10, belief_kind: 'preference', subject: 'pref:workflow', claim: 'prefers TDD approach',
       stance: 'supports', confidence: 0.5, uncertainty: tinyUncertainty,
       evidence_refs: '[]', contradicted_count: 0, last_reinforced_at: null,
       status: 'candidate', created_at: '2025-12-01T00:00:00Z', updated_at: '2025-12-01T00:00:00Z',

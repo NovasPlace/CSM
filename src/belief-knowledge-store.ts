@@ -83,7 +83,9 @@ function deriveClaim(dedupKey: string, beliefKind: BeliefKind, reason: string): 
   if (beliefKind === 'preference') {
     if (outcomePart === 'ok') return 'succeeds reliably';
     if (outcomePart === 'fail') return 'fails frequently';
-    return outcomePart;
+    // Use reason but strip "(N events/milestones/etc)" count suffixes for cleaner claims
+    const cleaned = reason.replace(/\s*\(\d+\s+\w+\)\s*$/, '').trim();
+    return cleaned || outcomePart;
   }
 
   if (beliefKind === 'opinion') {
@@ -114,6 +116,20 @@ function deriveStance(beliefKind: BeliefKind, dedupKey: string): 'supports' | 'o
   if (beliefKind === 'worldview') return 'supports'; // worldviews are positive by default
   if (beliefKind === 'opinion') return 'neutral'; // opinions are contextual/neutral
   return 'neutral';
+}
+
+function isJunkBelief(subject: string, claim: string, dedupKey: string): boolean {
+  // Trivially true: "tool:bash succeeds reliably" — any tool that doesn't crash
+  if (subject.startsWith('tool:')) return true;
+  // Test data pollution: candidates from test sessions leaked into prod DB
+  if (/^(live-test|test-dedup|scan-test|checks-test|relaxed-test|low-conf-default|phase-test)/.test(subject)) return true;
+  if (/^(live-test|test-dedup|scan-test|checks-test|relaxed-test|low-conf-default|phase-test)/.test(dedupKey)) return true;
+  // Empty taxonomy: "ms:other other" or "pref:decision: other" = "something happened"
+  if (subject === 'ms:other' || (subject === 'ms' && claim === 'other')) return true;
+  if (subject === 'pref:decision' && (claim === 'other' || claim.includes('category: other'))) return true;
+  // Auto-taxonomy noise: "User decision — category: X (Nx, NR/0C)"
+  if (claim.includes('User decision — category:')) return true;
+  return false;
 }
 
 export class BeliefKnowledgeConsolidator {
@@ -151,6 +167,11 @@ export class BeliefKnowledgeConsolidator {
       const claim = deriveClaim(c.dedup_key, kind, c.reason);
       const key = `${kind}:${subject}:${claim}`;
       const stance = deriveStance(kind, c.dedup_key);
+
+      if (isJunkBelief(subject, claim, c.dedup_key)) {
+        skipped++;
+        continue;
+      }
 
       const existingBelief = beliefMap.get(key);
 
@@ -256,6 +277,16 @@ export class BeliefKnowledgeConsolidator {
     const allBeliefs = [...beliefMap.values()];
     getLogger().info(`Belief consolidation: ${created} created, ${updated} updated, ${skipped} skipped`);
 
+    // Clean up junk beliefs (test pollution, trivial tool:* patterns, empty taxonomy)
+    try {
+      const cleaned = await this.cleanupJunkBeliefs();
+      if (cleaned > 0) {
+        getLogger().info(`Belief cleanup during consolidate: ${cleaned} junk entries marked stale`);
+      }
+    } catch {
+      // non-fatal
+    }
+
     return { created, updated, skipped, beliefs: allBeliefs };
   }
 
@@ -335,7 +366,9 @@ export class BeliefKnowledgeConsolidator {
         `SELECT id, candidate_type, dedup_key, reason, confidence, event_count,
                 reinforcement_count, contradicted_count, last_reinforced_at, source_packet_ids, status
          FROM memory_candidate_queue
-          WHERE candidate_type IN ('candidate_preference', 'candidate_worldview', 'candidate_opinion', 'candidate_belief')`,
+          WHERE candidate_type IN ('candidate_preference', 'candidate_worldview', 'candidate_opinion', 'candidate_belief')
+            AND COALESCE(event_count, 0) >= 3
+            AND COALESCE(confidence, 0) >= 0.4`,
       );
       return result.rows as CandidateRow[];
     } catch {
@@ -380,6 +413,44 @@ export class BeliefKnowledgeConsolidator {
 
       getLogger().info(`Phase E migration: ${migrated} stale preference entries archived (audit note attached)`);
       return migrated;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Mark beliefs with junk subjects (test pollution, trivially true tool:* patterns,
+   * empty taxonomy) as stale. Safe to run periodically.
+   */
+  async cleanupJunkBeliefs(): Promise<number> {
+    try {
+      const now = nowFn(this.dialect);
+      const result = await this.pool.query(
+        `UPDATE belief_knowledge_store
+         SET status = 'stale', updated_at = ${now}
+         WHERE status != 'stale'
+           AND (
+             subject LIKE 'tool:%'
+             OR subject LIKE 'live-test%'
+             OR subject LIKE 'test-dedup%'
+             OR subject LIKE 'scan-test%'
+             OR subject LIKE 'checks-test%'
+             OR subject LIKE 'relaxed-test%'
+             OR subject LIKE 'low-conf-default%'
+             OR subject LIKE 'phase-test%'
+             OR (subject = 'ms' AND claim = 'other')
+             OR (subject = 'ms:other')
+             OR (subject = 'pref:decision' AND (claim = 'other' OR claim LIKE '%category: other%'))
+             OR claim LIKE '%User decision — category:%'
+           )`,
+      );
+      const count = this.dialect === 'sqlite'
+        ? (result.rows as Record<string, unknown>[]).length
+        : (result as { rowCount?: number }).rowCount ?? 0;
+      if (count > 0) {
+        getLogger().info(`Belief cleanup: ${count} junk beliefs marked stale`);
+      }
+      return count;
     } catch {
       return 0;
     }

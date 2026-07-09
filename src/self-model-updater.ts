@@ -102,6 +102,17 @@ export class SelfModelUpdater {
       }
     }
 
+    // One-time cap: existing confidence values > 0.9 from before the diminishing-returns fix
+    try {
+      await this.pool.query(
+        `UPDATE self_model_capabilities
+         SET confidence = 0.9, updated_at = ${nowFn(this.dialect)}
+         WHERE confidence > 0.9`,
+      );
+    } catch {
+      // non-fatal
+    }
+
     return caps.sort((a, b) => a.capability.localeCompare(b.capability));
   }
 
@@ -186,7 +197,14 @@ export class SelfModelUpdater {
     const outcome = this.determineOutcome(packet, signals);
 
     if (outcome === 'success') {
-      cap.confidence += (1 - cap.confidence) * this.config.confidenceIncrementRate;
+      // Diminishing returns: after 20 evidence points, additional successes
+      // provide less confidence. Prevents confidence from reaching 1.0 purely
+      // from raw tool-call counts — verification (tests, user feedback) needed.
+      const totalEvidence = cap.successCount + cap.failureCount;
+      const dimRate = totalEvidence < 20
+        ? this.config.confidenceIncrementRate
+        : this.config.confidenceIncrementRate * (20 / totalEvidence);
+      cap.confidence += (1 - cap.confidence) * dimRate;
       cap.successCount++;
     } else if (outcome === 'failure') {
       cap.uncertainty += (1 - cap.uncertainty) * this.config.uncertaintyIncrementRate;
@@ -199,7 +217,9 @@ export class SelfModelUpdater {
       cap.failureCount++;
     }
 
-    cap.confidence = Math.max(0, Math.min(1, cap.confidence));
+    // Cap at 0.9 — raw tool-call success cannot prove 100% capability.
+    // Remaining 0.1 requires explicit verification (tests, user feedback).
+    cap.confidence = Math.max(0, Math.min(0.9, cap.confidence));
     cap.uncertainty = Math.max(0, Math.min(1, cap.uncertainty));
 
     if (cap.uncertainty >= this.config.driftWarningThreshold) {

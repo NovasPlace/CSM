@@ -142,11 +142,15 @@ export class MemoryExtractor {
     group: ToolCallGroup,
   ): MemoryCandidate {
     const isFailure = group.outcome === 'failure' || group.outcome === 'partial';
-    const type: MemoryType = isFailure ? 'lesson' : 'procedural';
-    const importance = isFailure ? 0.75 : 0.6;
-    const emotion: MemoryEmotion = isFailure ? 'frustration' : 'success';
+    const hasErrorFix = group.fixApplied?.startsWith('Fixed ') === true;
+    const isFixLesson = !isFailure && hasErrorFix;
+    const type: MemoryType = (isFailure || isFixLesson) ? 'lesson' : 'procedural';
+    const importance = (isFailure || isFixLesson) ? 0.75 : 0.6;
+    const emotion: MemoryEmotion = (isFailure || isFixLesson) ? 'frustration' : 'success';
     const confidence = 0.92;
-    const content = isFailure ? this.makeActionableLesson(group.proceduralInsight ?? group.intent, group) : (group.proceduralInsight ?? group.intent);
+    const content = (isFailure || isFixLesson)
+      ? this.makeActionableLesson(group.fixApplied ?? group.proceduralInsight ?? group.intent, group)
+      : (group.proceduralInsight ?? group.intent);
     const status = this.determineInitialStatus(confidence) as 'pending' | 'approved' | 'rejected' | 'auto-approved';
 
     const tags = this.generateDistilledTags(group, isFailure);
