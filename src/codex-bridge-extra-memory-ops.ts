@@ -12,8 +12,17 @@ export async function memoryTranscriptOp(memoryManager: CodexBridgeExtraDeps['me
   return { sessionId: sid, count: memories.filter((m) => m.sessionId === sid && (role === 'all' || (m.metadata?.role as string | undefined) === role)).length, transcript: memories };
 }
 
+// `memory_delete`'s MCP schema declares `id` as a number, but this called
+// requireString() -- so any schema-validating client (e.g. Claude Code) could
+// never invoke the tool. Accept either form and validate it is a real id.
+function requireMemoryId(value: unknown): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value.trim()) : NaN;
+  if (!Number.isInteger(n) || n <= 0) throw new Error('id must be a positive integer memory id.');
+  return n;
+}
+
 export async function memoryDeleteOp(memoryManager: CodexBridgeExtraDeps['memoryManager'], id: unknown) {
-  return { deleted: await memoryManager.deleteMemory(Number(requireString(id, 'id'))) };
+  return { deleted: await memoryManager.deleteMemory(requireMemoryId(id)) };
 }
 
 export async function memoryContextOp(deps: CodexBridgeExtraDeps, sessionId: string | undefined, input: Record<string, unknown>) {
