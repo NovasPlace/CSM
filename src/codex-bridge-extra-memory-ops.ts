@@ -4,6 +4,7 @@ import type { Database } from './database.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import type { MemoryType, ToolCallRecord } from './types.js';
 import { asLimit, asRecord, asString, asStringArray, requireSession, requireString } from './codex-bridge-extra-utils.js';
+import { withBridgeProvenance } from './bridge-provenance.js';
 
 export async function memoryTranscriptOp(memoryManager: CodexBridgeExtraDeps['memoryManager'], sessionId: string | undefined, input: Record<string, unknown>) {
   const sid = requireSession(sessionId);
@@ -25,10 +26,22 @@ export async function memoryContextOp(deps: CodexBridgeExtraDeps, sessionId: str
   };
 }
 
+/** Caller-supplied `context` must never dictate provenance: strip source_* / evidence keys
+ *  so the MCP clientInfo handshake stays the only authority. */
+function stripProvenanceKeys(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!meta) return meta;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (key.startsWith('source_') || key === 'evidence_strength' || key === 'derivative_of') continue;
+    out[key] = value;
+  }
+  return out;
+}
+
 export async function memoryLessonOp(memoryManager: CodexBridgeExtraDeps['memoryManager'], sessionId: string | undefined, input: Record<string, unknown>) {
   const sid = requireSession(sessionId);
   return {
-    memory: await memoryManager.saveMemory({
+    memory: await memoryManager.saveMemory(withBridgeProvenance({
       content: requireString(input.content, 'content'),
       type: 'lesson',
       importance: 0.75,
@@ -36,9 +49,9 @@ export async function memoryLessonOp(memoryManager: CodexBridgeExtraDeps['memory
       confidence: 0.9,
       source: 'lesson',
       tags: asStringArray(input.tags) ?? ['lesson'],
-      metadata: asRecord(input.context),
+      metadata: stripProvenanceKeys(asRecord(input.context)),
       sessionId: sid,
-    }),
+    }, { sessionId: sid, projectRoot: asString(input.projectRoot) ?? sid, sourceKind: 'user_supplied' })),
   };
 }
 

@@ -18,6 +18,33 @@ export interface BridgeProvenanceSummary {
   gapCount: number;
 }
 
+/**
+ * Identity of the MCP client attached to this process, captured from the
+ * `initialize` handshake. Falls back to the historical Codex defaults when no
+ * client announced itself (e.g. the in-process Codex plugin runtime), so
+ * existing behaviour is preserved.
+ */
+let clientIdentity: { surface?: string; agentId?: string } = {};
+
+/** Cowork announces `local-agent-mode-<serverName>` — a per-connection string,
+ *  not a stable agent identity. Collapse it to one surface. */
+function normalizeSurface(name: string): string {
+  return name.startsWith('local-agent-mode-') ? 'cowork' : name;
+}
+
+export function setClientIdentity(info?: { name?: string; version?: string }): void {
+  const name = info?.name?.trim();
+  if (!name) return;
+  clientIdentity = {
+    surface: normalizeSurface(name),
+    agentId: info?.version ? `${name}@${info.version}` : name,
+  };
+}
+
+export function getClientIdentity(): { surface?: string; agentId?: string } {
+  return { ...clientIdentity };
+}
+
 export function rankMemoriesByProvenance(memories: Memory[]): Memory[] {
   return [...memories].sort(compareMemories);
 }
@@ -52,9 +79,9 @@ export function buildBridgeProvenanceMetadata(
     source_kind: current.source_kind ?? context.sourceKind ?? 'user_supplied',
     evidence_strength: current.evidence_strength ?? 'direct_original',
     source_session_id: current.source_session_id ?? context.sessionId,
-    source_agent_id: current.source_agent_id ?? 'codex-bridge',
-    source_model_id: current.source_model_id ?? 'gpt-5-codex',
-    source_surface: current.source_surface ?? 'codex',
+    source_agent_id: current.source_agent_id ?? clientIdentity.agentId ?? 'codex-bridge',
+    source_model_id: current.source_model_id,
+    source_surface: current.source_surface ?? clientIdentity.surface ?? 'codex',
     project_root: current.project_root ?? context.projectRoot,
     ...current,
   };
