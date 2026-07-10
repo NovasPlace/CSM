@@ -1,100 +1,81 @@
-import { describe, it, before, after } from "node:test";
+import { it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { Pool } from 'pg';
 import { Database } from "../dist/database.js";
 import { MemoryManager } from "../dist/memory-manager.js";
 import { EmbeddingGenerator } from "../dist/embeddings.js";
-import type { PluginConfig } from "../dist/types.js";
+import type { MemorySaveOptions, PluginConfig } from "../dist/types.js";
 
-const DB_URL = process.env.DATABASE_URL
+const BASE_DB_URL = process.env.CSM_DATABASE_URL
+  ?? process.env.DATABASE_URL
   ?? 'postgresql://postgres:postgres@localhost:5432/cross_session_memory';
 
-const config: PluginConfig = {
-  databaseUrl: DB_URL,
-  databaseProvider: 'postgres',
-  sqlitePath: '.data/csm-memory.db',
-  embeddingModel: 'nomic-embed-text',
-  embeddingApiUrl: process.env.OLLAMA_URL ?? 'http://localhost:11434',
-};
+function databaseUrl(name: string): string {
+  const url = new URL(BASE_DB_URL);
+  url.pathname = `/${name}`;
+  return url.toString();
+}
 
-describe("hybrid search: exact terms beat semantic", () => {
-  let db: Database;
+function quoteIdentifier(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+const FIXTURES: Array<Omit<MemorySaveOptions, 'sessionId'>> = [
+  { content: 'function time.compacted() { return compactedContext(); }', type: 'code', importance: 0.9, emotion: 'neutral', confidence: 1, source: 'assistant', tags: ['time', 'compaction'] },
+  { content: 'The ContextCompactor class handles compaction logic in src/tui.ts', type: 'code', importance: 0.8, emotion: 'neutral', confidence: 1, source: 'assistant', tags: ['compaction', 'context'] },
+  { content: 'AGENT_PG_DSN environment variable must be set for database connection', type: 'config', importance: 0.7, emotion: 'neutral', confidence: 1, source: 'assistant', tags: ['config', 'database'] },
+  { content: 'Migration failed with error: foreign key constraint violation on users table', type: 'error', importance: 0.9, emotion: 'frustrated', confidence: 1, source: 'assistant', tags: ['migration', 'error'] },
+  { content: 'The compaction process reduces token usage by summarizing old context', type: 'concept', importance: 0.5, emotion: 'neutral', confidence: 1, source: 'assistant', tags: ['compaction', 'tokens'] },
+  { content: 'Semantic search finds related concepts like memory management and context window', type: 'concept', importance: 0.4, emotion: 'neutral', confidence: 1, source: 'assistant', tags: ['search', 'memory'] },
+];
+
+async function seedMemories(mem: MemoryManager): Promise<void> {
+  await mem.createSession('hybrid-test', 'test-project');
+  for (const fixture of FIXTURES) {
+    await mem.saveMemory({ ...fixture, sessionId: 'hybrid-test' });
+  }
+}
+
+async function cleanupDatabase(
+  admin: Pool,
+  db: Database | undefined,
+  databaseName: string,
+  databaseCreated: boolean,
+): Promise<void> {
+  const errors: unknown[] = [];
+  try { if (db) await db.close(); } catch (error) { errors.push(error); }
+  if (databaseCreated) {
+    try {
+      await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1', [databaseName]);
+      await admin.query(`DROP DATABASE ${quoteIdentifier(databaseName)}`);
+    } catch (error) { errors.push(error); }
+  }
+  try { await admin.end(); } catch (error) { errors.push(error); }
+  if (errors.length) throw new AggregateError(errors, 'Hybrid-search database cleanup failed');
+}
+
+  const databaseName = `csm_hybrid_${Date.now()}`;
+  const admin = new Pool({ connectionString: databaseUrl('postgres') });
+  const config = {
+    databaseUrl: databaseUrl(databaseName),
+    databaseProvider: 'postgres',
+    sqlitePath: '.data/csm-memory.db',
+    embeddingModel: 'nomic-embed-text',
+    embeddingApiUrl: process.env.OLLAMA_URL ?? 'http://localhost:11434',
+  } as PluginConfig;
+  let db: Database | undefined;
   let embeddings: EmbeddingGenerator;
   let mem: MemoryManager;
+  let databaseCreated = false;
 
   before(async () => {
+    await admin.query(`CREATE DATABASE ${quoteIdentifier(databaseName)}`);
+    databaseCreated = true;
     db = new Database(config);
     await db.connect();
     embeddings = new EmbeddingGenerator(config);
     mem = new MemoryManager(db, embeddings);
-
-    await mem.createSession("hybrid-test", "test-project");
-
-    // Insert test memories
-    await mem.saveMemory({
-      sessionId: "hybrid-test",
-      content: `function time.compacted() { return compactedContext(); }`,
-      type: "code",
-      importance: 0.9,
-      emotion: "neutral",
-      confidence: 1,
-      source: "assistant",
-      tags: ["time", "compaction"],
-    });
-
-    await mem.saveMemory({
-      sessionId: "hybrid-test",
-      content: `The ContextCompactor class handles compaction logic in src/tui.ts`,
-      type: "code",
-      importance: 0.8,
-      emotion: "neutral",
-      confidence: 1,
-      source: "assistant",
-      tags: ["compaction", "context"],
-    });
-
-    await mem.saveMemory({
-      sessionId: "hybrid-test",
-      content: `AGENT_PG_DSN environment variable must be set for database connection`,
-      type: "config",
-      importance: 0.7,
-      emotion: "neutral",
-      confidence: 1,
-      source: "assistant",
-      tags: ["config", "database"],
-    });
-
-    await mem.saveMemory({
-      sessionId: "hybrid-test",
-      content: `Migration failed with error: foreign key constraint violation on users table`,
-      type: "error",
-      importance: 0.9,
-      emotion: "frustrated",
-      confidence: 1,
-      source: "assistant",
-      tags: ["migration", "error"],
-    });
-
-    await mem.saveMemory({
-      sessionId: "hybrid-test",
-      content: `The compaction process reduces token usage by summarizing old context`,
-      type: "concept",
-      importance: 0.5,
-      emotion: "neutral",
-      confidence: 1,
-      source: "assistant",
-      tags: ["compaction", "tokens"],
-    });
-
-    await mem.saveMemory({
-      sessionId: "hybrid-test",
-      content: `Semantic search finds related concepts like memory management and context window`,
-      type: "concept",
-      importance: 0.4,
-      emotion: "neutral",
-      confidence: 1,
-      source: "assistant",
-      tags: ["search", "memory"],
-    });
+    await seedMemories(mem);
   });
 
   it("exact function name 'time.compacted' beats semantic matches", async () => {
@@ -184,6 +165,5 @@ describe("hybrid search: exact terms beat semantic", () => {
   });
 
   after(async () => {
-    await db.close();
+    await cleanupDatabase(admin, db, databaseName, databaseCreated);
   });
-});

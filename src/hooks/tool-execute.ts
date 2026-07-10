@@ -5,6 +5,7 @@ import type { ToolCallRecord } from '../types.js';
 import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
 import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
+import { getLogger } from '../logger.js';
 
 /** Before-hook input shape (matches OpenCode plugin API). */
 interface ToolExecuteBeforeInput {
@@ -49,6 +50,10 @@ interface PermissionAskOutput {
   status: 'ask' | 'deny' | 'allow';
 }
 
+const WORK_LEDGER_EDIT_TOOLS = new Set([
+  'edit', 'write', 'multiedit', 'patch', 'apply_patch',
+]);
+
 export function createPermissionAskHook(ctx: PluginContext) {
   return async (input: PermissionAskInput, output: PermissionAskOutput) => {
     const sessionId = input.sessionID ?? ctx.state.currentSessionId ?? undefined;
@@ -63,6 +68,7 @@ export function createToolExecuteBeforeHook(ctx: PluginContext) {
     if (isReentrySourceOnlyActive(ctx.state, input.sessionID)) {
       throw new Error(REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE);
     }
+    await captureWorkLedgerBefore(ctx, input, output);
     try {
       const result = ctx.loopDetector.recordCall(input.tool, output.args);
       await injectLessonWarning(ctx, input, output);
@@ -76,8 +82,9 @@ export function createToolExecuteBeforeHook(ctx: PluginContext) {
 
 export function createToolExecuteAfterHook(ctx: PluginContext) {
   return async (input: ToolExecuteAfterInput, output: ToolExecuteAfterOutput) => {
+    ctx.syncActiveSession(input.sessionID);
+    await captureWorkLedgerAfter(ctx, input);
     try {
-      ctx.syncActiveSession(input.sessionID);
       const sid = ctx.state.currentSessionId;
       await ensureDocsInitialized(ctx);
 
@@ -106,6 +113,44 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
       console.error('[CrossSessionMemory] Tool tracking error:', error);
     }
   };
+}
+
+async function captureWorkLedgerBefore(
+  ctx: PluginContext,
+  input: ToolExecuteBeforeInput,
+  output: ToolExecuteBeforeOutput,
+): Promise<void> {
+  if (!ctx.workLedger || !WORK_LEDGER_EDIT_TOOLS.has(input.tool)) return;
+  await ctx.workLedger.captureBefore({
+    runId: ctx.state.runId ?? 'unknown',
+    sessionId: input.sessionID,
+    modelId: workLedgerModelId(ctx, input.sessionID),
+    toolCallId: input.callID,
+    toolName: input.tool,
+    projectRoot: ctx.directory,
+    args: output.args,
+  });
+}
+
+async function captureWorkLedgerAfter(
+  ctx: PluginContext,
+  input: ToolExecuteAfterInput,
+): Promise<void> {
+  if (!ctx.workLedger || !WORK_LEDGER_EDIT_TOOLS.has(input.tool)) return;
+  await ctx.workLedger.captureAfter({
+    runId: ctx.state.runId ?? 'unknown',
+    sessionId: input.sessionID,
+    modelId: workLedgerModelId(ctx, input.sessionID),
+    toolCallId: input.callID,
+    toolName: input.tool,
+    projectRoot: ctx.directory,
+    args: input.args,
+  });
+}
+
+function workLedgerModelId(ctx: PluginContext, sessionId: string): string {
+  if (ctx.state.modelIdPinned) return ctx.state.currentModelId ?? 'unknown';
+  return ctx.state.modelIdBySession?.get(sessionId) ?? 'unknown';
 }
 
 async function injectLessonWarning(ctx: PluginContext, input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput): Promise<void> {
@@ -386,7 +431,7 @@ async function recordContinuitySignals(
   sid: string | null,
   toolOutput: string,
 ): Promise<void> {
-  if (!sid || !ctx.database) return;
+  if (!sid || !ctx.database || !ctx.config.contextCache?.enabled) return;
   await cacheToolErrorSignal(ctx.database.getPool(), {
     sessionId: sid,
     toolName: input.tool as string,

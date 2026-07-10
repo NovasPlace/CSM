@@ -3,7 +3,13 @@
 // Traverses linked memories to find related context
 
 import { Database } from './database.js';
-import { paramInColArray } from './db/query-dialect.js';
+import {
+  paramInColArray,
+  parseArrayField,
+  parseJsonField,
+  toDate,
+  type QueryDialect,
+} from './db/query-dialect.js';
 import { Memory } from './types.js';
 
 export interface CascadeResult {
@@ -124,25 +130,7 @@ export class PrimingEngine {
       return null;
     }
 
-    const row = result.rows[0] as Record<string, unknown>;
-    
-    return {
-      id: row.id as number,
-      sessionId: row.session_id as string | undefined,
-      memoryType: row.memory_type as Memory['memoryType'],
-      content: row.content as string,
-      importance: row.importance as number,
-      emotion: row.emotion as Memory['emotion'],
-      confidence: row.confidence as number,
-      source: row.source as Memory['source'],
-      tags: row.tags as string[],
-      linkedMemoryIds: row.linked_memory_ids as number[],
-      metadata: row.metadata as Record<string, unknown>,
-      createdAt: row.created_at as Date,
-      updatedAt: row.updated_at as Date,
-      accessedAt: row.accessed_at as Date,
-      accessCount: row.access_count as number,
-    };
+    return mapMemoryRow(this.database.dialect, result.rows[0] as Record<string, unknown>);
   }
 
   /**
@@ -158,32 +146,21 @@ export class PrimingEngine {
       [memoryId]
     );
 
-    return result.rows.map(row => {
-      const r = row as Record<string, unknown>;
-      return {
-        id: r.id as number,
-        sessionId: r.session_id as string | undefined,
-        memoryType: r.memory_type as Memory['memoryType'],
-        content: r.content as string,
-        importance: r.importance as number,
-        emotion: r.emotion as Memory['emotion'],
-        confidence: r.confidence as number,
-        source: r.source as Memory['source'],
-        tags: r.tags as string[],
-        linkedMemoryIds: r.linked_memory_ids as number[],
-        metadata: r.metadata as Record<string, unknown>,
-        createdAt: r.created_at as Date,
-        updatedAt: r.updated_at as Date,
-        accessedAt: r.accessed_at as Date,
-        accessCount: r.access_count as number,
-      };
-    });
+    return result.rows.map((row) =>
+      mapMemoryRow(this.database.dialect, row as Record<string, unknown>),
+    );
   }
 
   /**
    * Link two memories together (bidirectional)
    */
   async linkMemories(memoryId1: number, memoryId2: number): Promise<void> {
+    if (this.database.dialect === 'sqlite') {
+      await this.appendSqliteLink(memoryId1, memoryId2);
+      await this.appendSqliteLink(memoryId2, memoryId1);
+      return;
+    }
+
     const pool = this.database.getPool();
     
     // Add memoryId2 to memoryId1's linked_memory_ids
@@ -207,6 +184,12 @@ export class PrimingEngine {
    * Unlink two memories (bidirectional)
    */
   async unlinkMemories(memoryId1: number, memoryId2: number): Promise<void> {
+    if (this.database.dialect === 'sqlite') {
+      await this.removeSqliteLink(memoryId1, memoryId2);
+      await this.removeSqliteLink(memoryId2, memoryId1);
+      return;
+    }
+
     const pool = this.database.getPool();
     
     // Remove memoryId2 from memoryId1's linked_memory_ids
@@ -225,4 +208,54 @@ export class PrimingEngine {
       [memoryId1, memoryId2]
     );
   }
+
+  private async appendSqliteLink(memoryId: number, linkedId: number): Promise<void> {
+    await this.database.getPool().query(
+      `UPDATE memories
+       SET linked_memory_ids = json_insert(COALESCE(linked_memory_ids, '[]'), '$[#]', $1)
+       WHERE id = $2
+         AND NOT (${paramInColArray('sqlite', 1, 'linked_memory_ids')})`,
+      [linkedId, memoryId],
+    );
+  }
+
+  private async removeSqliteLink(memoryId: number, linkedId: number): Promise<void> {
+    await this.database.getPool().query(
+      `UPDATE memories
+       SET linked_memory_ids = COALESCE(
+         (SELECT json_group_array(value)
+          FROM json_each(linked_memory_ids)
+          WHERE value != $1),
+         '[]'
+       )
+       WHERE id = $2`,
+      [linkedId, memoryId],
+    );
+  }
+}
+
+function mapMemoryRow(dialect: QueryDialect, row: Record<string, unknown>): Memory {
+  const tags = parseArrayField(dialect, row.tags)
+    .filter((tag): tag is string => typeof tag === 'string');
+  const linkedMemoryIds = parseArrayField(dialect, row.linked_memory_ids)
+    .map(Number)
+    .filter(Number.isFinite);
+  return {
+    id: row.id as number,
+    sessionId: row.session_id as string | undefined,
+    projectId: row.project_id as string | undefined,
+    memoryType: row.memory_type as Memory['memoryType'],
+    content: row.content as string,
+    importance: row.importance as number,
+    emotion: row.emotion as Memory['emotion'],
+    confidence: row.confidence as number,
+    source: row.source as Memory['source'],
+    tags,
+    linkedMemoryIds,
+    metadata: parseJsonField(dialect, row.metadata),
+    createdAt: toDate(dialect, row.created_at),
+    updatedAt: toDate(dialect, row.updated_at),
+    accessedAt: toDate(dialect, row.accessed_at),
+    accessCount: row.access_count as number,
+  };
 }

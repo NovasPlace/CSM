@@ -32,6 +32,21 @@ import { CandidateGenerator } from '../candidate-generator.js';
 import { ArchiveCandidateReportBuilder } from '../archive-candidate-report.js';
 import { MemoryGovernanceReportBuilder } from '../memory-governance-report.js';
 import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
+import { workLedgerSurvivingTool } from '../work-ledger-tool.js';
+
+const SQLITE_UNSUPPORTED_TOOLS = [
+  'csm_memory_backfill_embeddings', 'csm_memory_distill', 'csm_memory_distilled_view',
+  'csm_memory_dedup_detect', 'csm_memory_merge', 'csm_memory_candidate_generate', 'csm_memory_candidate_report',
+  'csm_memory_archive_candidate_report', 'csm_memory_governance_report',
+  'csm_belief_scan', 'csm_belief_scan_report', 'csm_belief_promote',
+  'csm_belief_promotion_scan', 'csm_self_model', 'csm_belief_knowledge',
+  'csm_living_state_preview', 'csm_living_state_debug', 'csm_compaction_audit',
+  'csm_recall_quality_report', 'csm_continuity_report', 'csm_reentry_preview',
+  'create_checkpoint', 'expand_checkpoint_ref', 'list_checkpoints', 'context_review',
+  'context_fetch', 'context_search', 'context_fetch_file_region', 'context_fetch_last_error',
+  'context_fetch_decision_log', 'goal_set', 'goal_update', 'goal_list',
+  'csm_work_ledger_surviving',
+] as const;
 
 export function registerTools(pluginCtx: PluginContext): Record<string, unknown> {
   const {
@@ -104,6 +119,14 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     csm_onboard_agent: onboardAgentTool(pluginCtx),
   };
 
+  if (pluginCtx.workLedger) {
+    toolList['csm_work_ledger_surviving'] = workLedgerSurvivingTool(
+      pluginCtx.workLedger,
+      pluginCtx.state,
+      pluginCtx.directory,
+    );
+  }
+
   if (pluginCtx.reEntryProtocol) {
     const proto = pluginCtx.reEntryProtocol;
     toolList['csm_reentry_preview'] = reentryPreviewTool(
@@ -111,7 +134,16 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     );
   }
 
-  return guardToolsForSourceOnly(pluginCtx, toolList);
+  return guardToolsForSourceOnly(pluginCtx, removeSqliteUnsupportedTools(pluginCtx, toolList));
+}
+
+function removeSqliteUnsupportedTools(
+  pluginCtx: PluginContext,
+  toolList: Record<string, unknown>,
+): Record<string, unknown> {
+  if (pluginCtx.config.databaseProvider !== 'sqlite') return toolList;
+  for (const name of SQLITE_UNSUPPORTED_TOOLS) delete toolList[name];
+  return toolList;
 }
 
 function guardToolsForSourceOnly(pluginCtx: PluginContext, toolList: Record<string, unknown>): Record<string, unknown> {

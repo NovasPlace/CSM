@@ -8,6 +8,7 @@ type MemoryStats = {
   lastCheckpoint: string | null;
   contextPressure: number;
   compactions: number;
+  providerStatus: string | null;
 };
 
 const defaultStats: MemoryStats = {
@@ -16,11 +17,14 @@ const defaultStats: MemoryStats = {
   lastCheckpoint: null,
   contextPressure: 0,
   compactions: 0,
+  providerStatus: null,
 };
 
 const STATS_KEY = "__csm_stats";
 const POLL_INTERVAL_MS = 5000;
+const SQLITE_MODE = process.env.CSM_DATABASE_PROVIDER === "sqlite";
 const DATABASE_URL =
+  process.env.CSM_DATABASE_URL ||
   process.env.DATABASE_URL ||
   "postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory";
 
@@ -35,6 +39,7 @@ function readStats(kv: { get: (key: string, fallback: null) => unknown }): Memor
         lastCheckpoint: typeof s.lastCheckpoint === "string" ? s.lastCheckpoint : null,
         contextPressure: typeof s.contextPressure === "number" ? s.contextPressure : 0,
         compactions: typeof s.compactions === "number" ? s.compactions : 0,
+        providerStatus: typeof s.providerStatus === "string" ? s.providerStatus : null,
       };
     }
      } catch (_e) {
@@ -58,6 +63,14 @@ function pressureColor(p: number): string {
 }
 
 async function pollStats(api: TuiPluginApi): Promise<void> {
+  if (SQLITE_MODE) {
+    api.kv.set(STATS_KEY, {
+      ...defaultStats,
+      providerStatus: "SQLite core-memory mode: PostgreSQL dashboard metrics are unavailable",
+    });
+    return;
+  }
+
   const { Pool } = pg;
   const pool = new Pool({
     connectionString: DATABASE_URL,
@@ -86,6 +99,7 @@ async function pollStats(api: TuiPluginApi): Promise<void> {
         : null,
       contextPressure: 0,
       compactions: compResult.rows[0]?.n ?? 0,
+      providerStatus: null,
     };
     api.kv.set(STATS_KEY, stats);
   } catch {
@@ -118,7 +132,9 @@ const mod: TuiPluginModule = {
         sidebar_content: (_props: { session_id: string }) => {
           try {
             const s = readStats(api.kv);
-            if (s.totalMemories === 0 || !h) return null;
+            if (!h) return null;
+            if (s.providerStatus) return h("text", { dim: true }, `  ${s.providerStatus}`);
+            if (s.totalMemories === 0) return null;
 
             return h("box", { flexDirection: "column", padding: 1 },
               h("text", { style: "bold", color: "cyan" }, "  Memory"),
@@ -139,7 +155,9 @@ const mod: TuiPluginModule = {
         sidebar_footer: (_props: { session_id: string }) => {
           try {
             const s = readStats(api.kv);
-            if (s.totalMemories === 0 || !h) return null;
+            if (!h) return null;
+            if (s.providerStatus) return h("text", { dim: true }, `  ${s.providerStatus}`);
+            if (s.totalMemories === 0) return null;
 
             return h("text", { dim: true },
               `  ${s.totalMemories} mem | ${s.contextPressure}% ${formatPressure(s.contextPressure)}`);
@@ -165,6 +183,7 @@ const mod: TuiPluginModule = {
             return h("box", { flexDirection: "column", padding: 1 },
               h("text", { style: "bold" }, "  Cross-Session Memory Dashboard"),
               h("text", {}, "  " + "─".repeat(40)),
+              s.providerStatus ? h("text", { color: "yellow" }, `  ${s.providerStatus}`) : null,
               h("text", {}, `  Total Memories:    ${s.totalMemories}`),
               h("text", {}, `  Active Sessions:   ${s.recentSessions}`),
               h("text", { color: pressureColor(s.contextPressure) },

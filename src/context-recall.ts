@@ -22,10 +22,18 @@ export class ContextRecallDaemon {
     this.interval = interval * 1000; // Convert to milliseconds
   }
 
+  private supportsPersistentBriefs(): boolean {
+    return this.database.dialect === 'pg';
+  }
+
   /**
    * Start the daemon
    */
   start(): void {
+    if (!this.supportsPersistentBriefs()) {
+      getLogger().info('ContextRecallDaemon disabled for SQLite MVP');
+      return;
+    }
     if (this.timer) {
       getLogger().debug('ContextRecallDaemon already running');
       return;
@@ -77,6 +85,7 @@ export class ContextRecallDaemon {
    * Get current context brief
    */
   async getContextBrief(): Promise<ContextBrief | null> {
+    if (!this.supportsPersistentBriefs()) return null;
     const pool = this.database.getPool();
 
     if (!this.currentSessionId) {
@@ -110,6 +119,9 @@ export class ContextRecallDaemon {
    * Build context brief from three tiers plus distilled tool activity
    */
   async buildContext(): Promise<ContextBrief> {
+    if (!this.supportsPersistentBriefs()) {
+      return { episodic: [], procedural: [], semantic: [], distilled: [], compressed: '' };
+    }
     const pool = this.database.getPool();
 
     // 1. Episodic: Recent file changes, session events (last 6 hours)

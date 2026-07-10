@@ -27,6 +27,7 @@ const FILE_ARG_KEYS = ['filePath', 'path', 'pattern', 'command', 'url', 'query']
 export class AgentWorkJournal {
   private writeBuffer: WorkJournalEntry[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private flushPromise: Promise<void> = Promise.resolve();
   private readonly FLUSH_INTERVAL_MS = 500;
   private currentTokenSnapshot: number = 0;
 
@@ -100,7 +101,7 @@ export class AgentWorkJournal {
     });
   }
 
-  recordSessionEnd(sessionId: string, projectId?: string, messageCount?: number): void {
+  async recordSessionEnd(sessionId: string, projectId?: string, messageCount?: number): Promise<void> {
     if (!this.config.enabled || !this.config.persistOnDispose) return;
 
     this.bufferEntry({
@@ -112,7 +113,7 @@ export class AgentWorkJournal {
       tokenSnapshot: this.currentTokenSnapshot,
     });
 
-    this.flush().catch(() => {});
+    await this.flush();
   }
 
   updateTokenSnapshot(tokens: number): void {
@@ -126,10 +127,11 @@ export class AgentWorkJournal {
     }
 
     const entries = this.writeBuffer.splice(0);
-     if (entries.length === 0) return;
+    if (entries.length === 0) return this.flushPromise;
 
-     getLogger().info(`WorkJournal flushing ${entries.length} entries`);
-     try {
+    this.flushPromise = this.flushPromise.then(async () => {
+      getLogger().info(`WorkJournal flushing ${entries.length} entries`);
+      try {
       for (const entry of entries) {
         const redactedIntent = this.redactor ? this.redactor.redact(entry.intent).text : entry.intent;
         const redactedTarget = entry.target
@@ -161,10 +163,12 @@ export class AgentWorkJournal {
           ],
          );
          getLogger().info(`WorkJournal inserted entry: ${entry.toolName || 'unknown'} (${entry.entryType})`);
-       }
-     } catch (e) {
-       getLogger().error('WorkJournal flush failed', e instanceof Error ? e : undefined);
-     }
+      }
+      } catch (e) {
+        getLogger().error('WorkJournal flush failed', e instanceof Error ? e : undefined);
+      }
+    });
+    return this.flushPromise;
   }
 
   async buildResumePayload(

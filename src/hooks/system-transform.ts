@@ -14,6 +14,7 @@ import { buildResumeInjection, type WorkJournalInjectDeps } from '../work-journa
 import { shouldInjectAdvisory, shouldInjectVcm, advisoryCharBudget, shouldInjectFullMemoryBrief, type InjectionTrimLevel } from '../context-cap-sensor.js';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { buildOnboardingPacket, formatOnboardingBlock } from '../agent-onboarding.js';
+import { parseArrayField } from '../db/query-dialect.js';
 import { join, dirname } from 'node:path';
 import {
   extractTextParts,
@@ -177,7 +178,8 @@ async function fetchMemorySnapshot(ctx: PluginContext, limit: number): Promise<s
   const lines: string[] = [];
   for (const row of result.rows as MemorySnapshotRow[]) {
     const preview = row.content?.substring(0, 180)?.replace(/\n/g, ' ') ?? '(empty)';
-    const tags = row.tags?.length ? ` tags=[${row.tags.join(',')}]` : '';
+    const tagValues = parseArrayField(ctx.database.dialect, row.tags).map(String);
+    const tags = tagValues.length ? ` tags=[${tagValues.join(',')}]` : '';
     const sess = row.session_id ? ` session=${row.session_id.slice(0, 8)}` : '';
     lines.push(`  #${row.id} [${row.memory_type}] imp=${row.importance?.toFixed(2) ?? '?'}${tags}${sess} — ${preview}${row.content?.length > 180 ? '...' : ''}`);
   }
@@ -347,23 +349,25 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         }
       } catch { /* lesson triggers non-critical */ }
 
-      // --- Memory governance veto injection (enforcement, not advisory) ---
-      try {
-        const gov = new MemoryGovernance(ctx.database.getPool());
-        const govResult = await gov.evaluate();
-        if (govResult.vetoes.length > 0) {
-          const govInjection = gov.buildVetoInjection(govResult.vetoes);
-          if (govInjection) {
-            output.system.push(govInjection);
-            logTelemetry({
-              governanceVetoesInjected: govResult.vetoes.length,
-              governanceVetoIds: govResult.vetoes.map(v => v.memoryId),
-              governanceAccessed: govResult.accessed,
-              governanceAccessLog: govResult.accessLog,
-            });
+      // --- Memory governance veto injection (PostgreSQL runtime only) ---
+      if (ctx.config.databaseProvider === 'postgres') {
+        try {
+          const gov = new MemoryGovernance(ctx.database.getPool());
+          const govResult = await gov.evaluate();
+          if (govResult.vetoes.length > 0) {
+            const govInjection = gov.buildVetoInjection(govResult.vetoes);
+            if (govInjection) {
+              output.system.push(govInjection);
+              logTelemetry({
+                governanceVetoesInjected: govResult.vetoes.length,
+                governanceVetoIds: govResult.vetoes.map(v => v.memoryId),
+                governanceAccessed: govResult.accessed,
+                governanceAccessLog: govResult.accessLog,
+              });
+            }
           }
-        }
-      } catch { /* governance injection non-critical */ }
+        } catch { /* governance injection non-critical */ }
+      }
 
       // --- Context cap sensor: measure pressure and decide trim level ---
       let capTrimLevel: InjectionTrimLevel = 'full';
@@ -485,7 +489,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
       }
 
       // --- Active goal injection ---
-      if (input.sessionID) {
+      if (input.sessionID && ctx.config.databaseProvider === 'postgres') {
         try {
           const goal = await getActiveGoal(ctx.database.getPool(), input.sessionID);
           if (goal) {
@@ -817,7 +821,9 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
 
       // --- Living Mind Cortex: inject cognitive state ---
       try {
-        const res = await fetch('http://localhost:8008/api/agent/context');
+        const res = await fetch('http://localhost:8008/api/agent/context', {
+          signal: AbortSignal.timeout(500),
+        });
         if (res.ok) {
           const cortex = await res.json() as LivingMindCortex;
           const lines = ['<living_mind_context>'];

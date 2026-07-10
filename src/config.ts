@@ -3,6 +3,10 @@ import { resolve } from 'node:path';
 import { PluginConfig } from './types.js';
 import { DEFAULT_GOVERNOR_CONFIG } from './context-governor-profiles.js';
 import { DEFAULT_ROLLOVER_CONFIG } from './context-rollover-config.js';
+import {
+  databaseRuntimeConfigFromEnv,
+  validateDatabaseRuntimeConfig,
+} from './database-runtime-config.js';
 
 // Load .env from cwd (OpenCode does not load it for plugins).
 // Only sets keys that are not already in process.env.
@@ -94,6 +98,17 @@ function getOllamaHost(): string {
 
 // Validate configuration
 function validateConfig(config: PluginConfig): void {
+  if (config.databaseProvider !== 'postgres' && config.databaseProvider !== 'sqlite') {
+    throw new Error(`Invalid databaseProvider: "${String(config.databaseProvider)}"`);
+  }
+  if (config.databaseRuntime) validateDatabaseRuntimeConfig(config.databaseRuntime);
+  if (config.workLedger.maxFileBytes < 1_024 || config.workLedger.maxFileBytes > 100_000_000) {
+    throw new Error('CSM_WORK_LEDGER_MAX_FILE_BYTES must be between 1024 and 100000000');
+  }
+  if (config.workLedger.captureTimeoutMs < 1_000 || config.workLedger.captureTimeoutMs > 3_600_000) {
+    throw new Error('CSM_WORK_LEDGER_CAPTURE_TIMEOUT_MS must be between 1000 and 3600000');
+  }
+
   // Production requires explicit database URL (only for postgres provider)
   if (isProduction && config.databaseProvider === 'postgres' && !process.env['CSM_DATABASE_URL']) {
     throw new Error('CSM_DATABASE_URL is required in production mode');
@@ -117,6 +132,12 @@ export const DEFAULT_CONFIG: PluginConfig = {
   databaseUrl: getDatabaseUrl(),
   databaseProvider: getDatabaseProvider(),
   sqlitePath: getSqlitePath(),
+  databaseRuntime: databaseRuntimeConfigFromEnv(),
+  workLedger: {
+    enabled: getEnvBoolean('CSM_WORK_LEDGER_ENABLED', true),
+    maxFileBytes: getEnvNumber('CSM_WORK_LEDGER_MAX_FILE_BYTES', 5_000_000),
+    captureTimeoutMs: getEnvNumber('CSM_WORK_LEDGER_CAPTURE_TIMEOUT_MS', 300_000),
+  },
   embeddingModel: getEmbeddingProvider() === 'openai' ? 'text-embedding-3-small' : 'nomic-embed-text',
   embeddingApiKey: getEmbeddingProvider() === 'openai' ? getOpenAIApiKey() : undefined,
   embeddingApiUrl: getEmbeddingProvider() === 'ollama' ? getOllamaHost() : undefined,
@@ -290,7 +311,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
     maxChars: getEnvNumber('CSM_REENTRY_MAX_CHARS', 2100),
     previewOnly: getEnvBoolean('CSM_REENTRY_PREVIEW_ONLY', false),
     minLayerChars: getEnvNumber('CSM_REENTRY_MIN_LAYER_CHARS', 50),
-    layers: ['identity', 'activeGoals', 'inProgressWork', 'preferences', 'capabilities', 'beliefs', 'recentContext', 'constraints'],
+    layers: ['identity', 'goals', 'work', 'preferences', 'capabilities', 'beliefs', 'recent', 'constraints'],
   },
   selfContinuity: {
     enabled: true,
@@ -338,4 +359,9 @@ export const DEFAULT_CONFIG: PluginConfig = {
 export function validateAndReturnConfig(): PluginConfig {
   validateConfig(DEFAULT_CONFIG);
   return DEFAULT_CONFIG;
+}
+
+export function validatePluginConfig(config: PluginConfig): PluginConfig {
+  validateConfig(config);
+  return config;
 }

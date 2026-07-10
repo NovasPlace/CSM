@@ -34,6 +34,7 @@ import type { AutoCheckpointTrigger } from './helpers/auto-checkpoint.js';
 import type { CompileResult } from './context-compiler.js';
 import type { Redactor } from './redactor.js';
 import type { StatsWriter } from './stats-writer.js';
+import type { WorkLedger } from './work-ledger.js';
 
 export type AutoCheckpointFn = (
   sessionId: string,
@@ -43,6 +44,10 @@ export type AutoCheckpointFn = (
 
 export interface PluginState {
   currentSessionId: string | null;
+  runId?: string;
+  currentModelId?: string;
+  modelIdPinned?: boolean;
+  modelIdBySession?: Map<string, string>;
   messageCount: number;
   capturedMessageSizes: Map<string, number>;
   recentUserMessages: Map<string, string>;
@@ -82,6 +87,7 @@ export interface PluginContext {
   syncActiveSession: (sessionId: string) => void;
   lastCompileResult: CompileResult | null;
   workJournal: AgentWorkJournal;
+  workLedger?: WorkLedger;
   experiencePackets: ExperiencePacketCreator;
   lessonTriggers: LessonTriggerCache;
   selfModel: SelfModelUpdater;

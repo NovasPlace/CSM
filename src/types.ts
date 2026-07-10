@@ -276,10 +276,22 @@ export interface AutoDocsConfig {
 
 export type DatabaseProvider = 'postgres' | 'sqlite';
 
+export type DatabaseTlsMode = 'url' | 'disable' | 'require' | 'verify-full';
+
+export interface DatabaseRuntimeConfig {
+  maxConnections: number;
+  connectionTimeoutMs: number;
+  statementTimeoutMs: number;
+  idleTimeoutMs: number;
+  tlsMode: DatabaseTlsMode;
+}
+
 export interface PluginConfig {
   databaseUrl: string;
   databaseProvider: DatabaseProvider;
   sqlitePath: string;
+  databaseRuntime?: DatabaseRuntimeConfig;
+  workLedger: import('./work-ledger-types.js').WorkLedgerConfig;
   embeddingModel: string;
   embeddingApiKey?: string;
   embeddingApiUrl?: string;
@@ -545,14 +557,37 @@ export interface DatabasePool {
   query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number | null }>;
   connect: () => Promise<DatabaseClient>;
   end: () => Promise<void>;
+  getStats?: () => DatabasePoolStats;
   /** Returns the SQL dialect. Defaults to 'pg' when not implemented (e.g. raw pg.Pool). */
   getDialect?: () => 'pg' | 'sqlite';
+}
+
+export interface DatabasePoolStats {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+}
+
+export type DatabaseStartupState = 'idle' | 'connecting' | 'migrating' | 'ready' | 'failed' | 'closed';
+
+export interface DatabaseDiagnostics {
+  provider: DatabaseProvider;
+  checkedAt: string;
+  startup: { state: DatabaseStartupState; error?: string };
+  liveness: { status: 'pass' };
+  readiness: {
+    status: 'pass' | 'fail';
+    latencyMs: number;
+    reason?: 'not_connected' | 'probe_failed';
+    error?: string;
+  };
+  pool?: DatabasePoolStats;
 }
 
 /** Transactional client acquired via pool.connect(); release() returns it to the pool. */
 export interface DatabaseClient {
   query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number | null }>;
-  release: () => void;
+  release: (error?: Error) => void;
 }
 
 export type PruneRiskLevel = 'low' | 'medium' | 'high';

@@ -6,43 +6,36 @@ const PARAM_REGEX = /\$(\d+)/g;
 
 export function createSqlitePool(filepath: string): Promise<DatabasePool> {
   const db = new Database(filepath);
-
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');
-
   const execQuery = (text: string, params?: unknown[]): { rows: unknown[]; rowCount: number | null } => {
     const cleaned = stripCasts(text);
     const { sql: translated, params: mappedParams } = translateParams(cleaned, params);
     const stmt = db.prepare(translated);
-    const isReturning = /^\s*(SELECT|WITH)\b/i.test(translated) || /\bRETURNING\b/i.test(translated);
-
+    const isReturning = /^\s*(SELECT|WITH|PRAGMA)\b/i.test(translated) || /\bRETURNING\b/i.test(translated);
     if (isReturning) {
       const rows = mappedParams.length > 0 ? stmt.all(...mappedParams) : stmt.all();
       return { rows: rows as unknown[], rowCount: rows.length };
     }
-
     const info = mappedParams.length > 0 ? stmt.run(...mappedParams) : stmt.run();
     return { rows: [], rowCount: info.changes };
   };
-
   const makeClient = (): DatabaseClient => ({
     query: (text: string, params?: unknown[]) => Promise.resolve(execQuery(text, params)),
     release: () => {},
   });
-
-   const wrapped: DatabasePool = {
-     query: (text: string, params?: unknown[]) => Promise.resolve(execQuery(text, params)),
-     connect: () => Promise.resolve(makeClient()),
-     end: () => {
-       db.close();
-       return Promise.resolve();
-     },
-     getDialect() {
-       return 'sqlite';
-     },
-   };
-
+  const wrapped: DatabasePool = {
+    query: (text: string, params?: unknown[]) => Promise.resolve(execQuery(text, params)),
+    connect: () => Promise.resolve(makeClient()),
+    end: () => {
+      db.close();
+      return Promise.resolve();
+    },
+    getDialect() {
+      return 'sqlite';
+    },
+  };
   return Promise.resolve(wrapped);
 }
 
