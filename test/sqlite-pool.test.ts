@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,7 +7,6 @@ import { createSqlitePool } from '../src/db/sqlite-pool.js';
 const TMP_DIR = join(process.cwd(), '.tmp');
 const DB_PATH = join(TMP_DIR, 'test-sqlite-pool.db');
 
-describe('SqlitePool', () => {
   beforeEach(() => {
     try { mkdirSync(TMP_DIR, { recursive: true }); } catch { /* exists */ }
     try { rmSync(DB_PATH); } catch { /* not exists */ }
@@ -74,6 +73,15 @@ describe('SqlitePool', () => {
     await pool.end();
   });
 
+  it('returns rows for PRAGMA introspection', async () => {
+    const pool = await createSqlitePool(':memory:');
+    await pool.query('CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)');
+    const result = await pool.query('PRAGMA table_info(t)');
+    const names = result.rows.map((row) => (row as { name: string }).name);
+    assert.deepEqual(names, ['id', 'name']);
+    await pool.end();
+  });
+
   it('supports transactions via connect/BEGIN/COMMIT', async () => {
     const pool = await createSqlitePool(':memory:');
     await pool.query('CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)');
@@ -135,4 +143,3 @@ describe('SqlitePool', () => {
     assert.equal(result.rows.length, 1);
     await pool.end();
   });
-});

@@ -1,4 +1,5 @@
 import type { DatabasePool } from './types.js';
+import { dialectFromPool, parseArrayField, parseJsonField } from './db/query-dialect.js';
 import { getLogger } from './logger.js';
 
 export interface LessonTrigger {
@@ -14,6 +15,11 @@ interface TriggerRule {
   toolPatterns: string[];
   filePatterns: string[];
   argPatterns: Record<string, string>;
+}
+
+function parseStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((item): item is string => typeof item === 'string');
 }
 
 const BUILTIN_PATTERNS: Record<string, TriggerRule> = {
@@ -183,11 +189,13 @@ export class LessonTriggerCache {
     return lines.join('\n');
   }
 
-   private rowToTrigger(row: Record<string, unknown>): LessonTrigger {
-    const meta = (row.metadata as Record<string, unknown> | undefined) ?? {};
-    const triggers = (meta.triggers as Record<string, unknown> | undefined) ?? (meta.triggerPatterns as Record<string, unknown> | undefined) ?? {};
-    const toolPatterns: string[] = (triggers.tools as string[] | undefined) ?? this.inferToolPatterns(row.content as string, (row.tags as unknown[]).map((tag) => tag as string));
-    const filePatterns: string[] = (triggers.files as string[] | undefined) ?? this.inferFilePatterns(row.content as string, (row.tags as unknown[]).map((tag) => tag as string));
+  private rowToTrigger(row: Record<string, unknown>): LessonTrigger {
+    const dialect = dialectFromPool(this.pool);
+    const meta = parseJsonField(dialect, row.metadata);
+    const triggers = parseJsonField(dialect, meta.triggers ?? meta.triggerPatterns);
+    const tags = parseStringArray(parseArrayField(dialect, row.tags));
+    const toolPatterns = parseStringArray(triggers.tools) ?? this.inferToolPatterns(String(row.content), tags);
+    const filePatterns = parseStringArray(triggers.files) ?? this.inferFilePatterns(String(row.content), tags);
     const argPatterns: Record<string, string> = (triggers.args as Record<string, string> | undefined) ?? {};
 
     return {

@@ -39,21 +39,17 @@ export async function initializeBeliefKnowledgeSchema(pool: DatabasePool): Promi
  * once already double precision. Never floors valid tiny values.
  */
 async function migrateBeliefColumnsToDoublePrecision(pool: DatabasePool): Promise<void> {
-  try {
-    const res = await pool.query(
-      `SELECT data_type FROM information_schema.columns
-       WHERE table_name = 'belief_knowledge_store' AND column_name = 'confidence'`,
+  const res = await pool.query(
+    `SELECT data_type FROM information_schema.columns
+     WHERE table_name = 'belief_knowledge_store' AND column_name = 'confidence'`,
+  );
+  const dataType = (res.rows[0] as { data_type?: string } | undefined)?.data_type;
+  if (dataType === 'real') {
+    await pool.query(
+      `ALTER TABLE belief_knowledge_store
+         ALTER COLUMN confidence TYPE double precision,
+         ALTER COLUMN uncertainty TYPE double precision`,
     );
-    const dataType = (res.rows[0] as { data_type?: string } | undefined)?.data_type;
-    if (dataType === 'real') {
-      await pool.query(
-        `ALTER TABLE belief_knowledge_store
-           ALTER COLUMN confidence TYPE double precision,
-           ALTER COLUMN uncertainty TYPE double precision`,
-      );
-      getLogger().info('Belief knowledge schema: upgraded confidence/uncertainty to double precision');
-    }
-  } catch (err) {
-    getLogger().warn(`Belief knowledge schema migration skipped: ${err instanceof Error ? err.message : String(err)}`);
+    getLogger().info('Belief knowledge schema: upgraded confidence/uncertainty to double precision');
   }
 }

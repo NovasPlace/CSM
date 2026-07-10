@@ -126,12 +126,10 @@ export class MemoryManager {
    */
   async getRecentProjectSessions(projectPath: string, limit: number = 10): Promise<Session[]> {
     const pool = this.database.getPool();
-    const now = nowFn(this.database.dialect);
-    
     const result = await pool.query(
       `SELECT * FROM sessions
        WHERE directory = $1 OR project_id = $1
-       ORDER BY ${now} DESC
+       ORDER BY updated_at DESC, created_at DESC
        LIMIT $2`,
       [projectPath, limit]
     );
@@ -576,21 +574,35 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     }
 
     if (options.dateFrom) {
-      query += ` AND created_at >= $${paramIndex}`;
-      params.push(options.dateFrom);
+      query += this.database.dialect === 'sqlite'
+        ? ` AND julianday(created_at) >= julianday($${paramIndex})`
+        : ` AND created_at >= $${paramIndex}`;
+      params.push(this.database.dialect === 'sqlite' ? options.dateFrom.toISOString() : options.dateFrom);
       paramIndex++;
     }
 
     if (options.dateTo) {
-      query += ` AND created_at <= $${paramIndex}`;
-      params.push(options.dateTo);
+      query += this.database.dialect === 'sqlite'
+        ? ` AND julianday(created_at) <= julianday($${paramIndex})`
+        : ` AND created_at <= $${paramIndex}`;
+      params.push(this.database.dialect === 'sqlite' ? options.dateTo.toISOString() : options.dateTo);
       paramIndex++;
     }
 
     if (options.entityType && options.entityValue) {
-      query += ` AND ${jsonContainsPath(this.database.dialect, 'metadata', 'extracted_concepts', paramIndex)}`;
-      params.push(JSON.stringify([{ type: options.entityType, value: options.entityValue }]));
-      paramIndex++;
+      if (this.database.dialect === 'sqlite') {
+        query += ` AND EXISTS (
+          SELECT 1 FROM json_each(json_extract(metadata, '$.extracted_concepts')) AS concept
+          WHERE json_extract(concept.value, '$.type') = $${paramIndex}
+            AND json_extract(concept.value, '$.value') = $${paramIndex + 1}
+        )`;
+        params.push(options.entityType, options.entityValue);
+        paramIndex += 2;
+      } else {
+        query += ` AND ${jsonContainsPath('pg', 'metadata', 'extracted_concepts', paramIndex)}`;
+        params.push(JSON.stringify([{ type: options.entityType, value: options.entityValue }]));
+        paramIndex++;
+      }
     }
 
     // Sort
@@ -698,12 +710,10 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
    */
   async getRecentProjectMemories(projectId: string, limit: number = 20): Promise<Memory[]> {
     const pool = this.database.getPool();
-    const now = nowFn(this.database.dialect);
-    
     const result = await pool.query(
       `SELECT * FROM memories
        WHERE project_id = $1
-       ORDER BY ${now} DESC
+       ORDER BY created_at DESC, id DESC
        LIMIT $2`,
       [projectId, limit]
     );

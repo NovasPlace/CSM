@@ -51,7 +51,7 @@ export async function disposeAll(
     });
   }
   if (state.currentSessionId && config.workJournal?.persistOnDispose) {
-    workJournal.recordSessionEnd(state.currentSessionId, ctx.directory, state.messageCount);
+    await workJournal.recordSessionEnd(state.currentSessionId, ctx.directory, state.messageCount);
   }
 
   pluginCtx.lifecycleOrchestrator?.stop();
@@ -102,11 +102,16 @@ export async function disposeAll(
   gitWatcher.stop();
 
   await memoryManager.cleanup();
-  await database.disconnect();
+  await statsWriter.stopAndFlush();
+  await closeRuntime(pluginCtx);
   await flushDocUpdates(pluginCtx, ctx.directory);
 
-  await statsWriter.write().catch(() => {});
-  statsWriter.stop();
-
   logging.info('Disposed');
+}
+
+async function closeRuntime(pluginCtx: PluginContext): Promise<void> {
+  const errors: unknown[] = [];
+  try { await pluginCtx.workLedger?.dispose(); } catch (error) { errors.push(error); }
+  try { await pluginCtx.database.disconnect(); } catch (error) { errors.push(error); }
+  if (errors.length) throw new AggregateError(errors, 'Runtime cleanup failed');
 }

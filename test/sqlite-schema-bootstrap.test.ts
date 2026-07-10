@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync } from 'node:fs';
+import { buildOnboardingPacket } from '../dist/agent-onboarding.js';
 import { Database } from '../dist/database.js';
 import type { PluginConfig } from '../dist/types.js';
 
@@ -76,6 +77,10 @@ describe('Phase 3C — SQLite schema bootstrap', () => {
     assert.ok(sessionResult.rows[0].sql.includes('PRIMARY KEY'));
     assert.ok(sessionResult.rows[0].sql.includes('created_at'));
 
+    const projectResult = await pool.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='project_scopes'");
+    assert.ok(projectResult.rows.length > 0);
+    assert.ok(projectResult.rows[0].sql.includes('last_active_at'));
+
     // Check memories table
     const memoryResult = await pool.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='memories'");
     assert.ok(memoryResult.rows.length > 0);
@@ -93,6 +98,10 @@ describe('Phase 3C — SQLite schema bootstrap', () => {
     const mergeResult = await pool.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_merges'");
     assert.ok(mergeResult.rows.length > 0);
     assert.ok(mergeResult.rows[0].sql.includes('canonical_id'));
+
+    const graphResult = await pool.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_links'");
+    assert.ok(graphResult.rows.length > 0);
+    assert.ok(graphResult.rows[0].sql.includes('source_id'));
 
     // Check memory_quality_scores table
     const qualityResult = await pool.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_quality_scores'");
@@ -137,5 +146,63 @@ describe('Phase 3C — SQLite schema bootstrap', () => {
     assert.equal((result.rows[0] as { content: string }).content, 'test');
 
     await db.close();
+  });
+
+  it('counts SQLite experience packets from the previous 24 hours in onboarding', async () => {
+    const config: PluginConfig = {
+      databaseUrl: dbPath,
+      databaseProvider: 'sqlite',
+      sqlitePath: dbPath,
+      embeddingModel: 'nomic-embed-text',
+      embeddingApiUrl: 'http://localhost:11434',
+    };
+    const db = new Database(config);
+    await db.connect();
+    const pool = db.getPool();
+    const sessionId = 'sqlite-advisory-session';
+    const projectId = 'sqlite-advisory-project';
+
+    await pool.query('INSERT INTO sessions (id, title) VALUES ($1, $2)', [sessionId, 'Advisory test']);
+    await pool.query(
+      `INSERT INTO experience_packets (session_id, project_id, entry_type, created_at)
+       VALUES ($1, $2, $3, datetime('now', '-23 hours'))`,
+      [sessionId, projectId, 'tool_execution'],
+    );
+
+    const packet = await buildOnboardingPacket({
+      projectId,
+      sessionId,
+      workspacePath: process.cwd(),
+      pool,
+      config,
+    });
+    const advisories = packet.sections.find((section) => section.section === 'advisories');
+
+    assert.ok(advisories?.content.includes('Experience packets (24h): 1'));
+    await db.close();
+  });
+
+  it('records and replays the SQLite baseline migration once', async () => {
+    const config = {
+      databaseUrl: dbPath,
+      databaseProvider: 'sqlite',
+      sqlitePath: dbPath,
+      embeddingModel: 'nomic-embed-text',
+      embeddingApiUrl: 'http://localhost:11434',
+    } as PluginConfig;
+    const first = new Database(config);
+    await first.connect();
+    await first.close();
+
+    const second = new Database(config);
+    await second.connect();
+    const result = await second.getPool().query(
+      'SELECT migration_id, checksum, provider FROM csm_schema_migrations',
+    );
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0].migration_id, '20260709-001-sqlite-baseline');
+    assert.match(result.rows[0].checksum, /^[a-f0-9]{64}$/);
+    assert.equal(result.rows[0].provider, 'sqlite');
+    await second.close();
   });
 });

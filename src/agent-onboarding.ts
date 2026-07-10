@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { DatabasePool } from './types.js';
 import type { PluginConfig } from './types.js';
+import { dialectFromPool } from './db/query-dialect.js';
 import { getLogger } from './logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -350,10 +351,11 @@ async function provideMemories(ctx: OnboardingContext): Promise<OnboardingSectio
 
   try {
     const result = await ctx.pool.query(
-      `SELECT id, content, memory_type, importance
-       FROM memories
-       WHERE project_id = $1
-         AND is_active = true
+       `SELECT id, content, memory_type, importance
+        FROM memories
+        WHERE project_id = $1
+          AND archived_at IS NULL
+          AND superseded_by IS NULL
          AND importance >= 0.6
        ORDER BY importance DESC, created_at DESC
        LIMIT 8`,
@@ -393,9 +395,9 @@ async function provideBeliefs(ctx: OnboardingContext): Promise<OnboardingSection
 
   try {
     const result = await ctx.pool.query(
-      `SELECT belief_kind, subject, claim, stance, confidence, uncertainty
-       FROM belief_knowledge_store
-       WHERE status = 'active'
+       `SELECT belief_kind, subject, claim, stance, confidence, uncertainty
+        FROM belief_knowledge_store
+        WHERE status = 'promoted'
        ORDER BY confidence DESC
        LIMIT 10`,
     );
@@ -431,10 +433,14 @@ async function provideAdvisories(ctx: OnboardingContext): Promise<OnboardingSect
   const warnings: string[] = [];
 
   try {
+    const since = new Date(Date.now() - 86_400_000).toISOString();
+    const recentPacketClause = dialectFromPool(ctx.pool) === 'sqlite'
+      ? 'julianday(created_at) > julianday($2)'
+      : 'created_at > $2';
     const packetResult = await ctx.pool.query(
       `SELECT COUNT(*) as cnt FROM experience_packets
-       WHERE project_id = $1 AND created_at > NOW() - INTERVAL '24 hours'`,
-      [ctx.projectId],
+       WHERE project_id = $1 AND ${recentPacketClause}`,
+      [ctx.projectId, since],
     );
     const packetCount = Number((packetResult.rows[0] as PacketCountRow)?.cnt ?? 0);
     lines.push(`Experience packets (24h): ${packetCount}`);
@@ -533,6 +539,18 @@ async function provideToolGuidance(ctx: OnboardingContext): Promise<OnboardingSe
 // prior agent in this workspace, not a cold start.
 
 async function provideHandoff(ctx: OnboardingContext): Promise<OnboardingSection> {
+  if (dialectFromPool(ctx.pool) === 'sqlite') {
+    return {
+      section: 'handoff-state',
+      status: 'degraded',
+      source: 'SQLite core-memory mode',
+      content: [
+        'SQLite core-memory mode does not persist work-journal or transcript handoff.',
+        'Use the relevant-memories section for available prior context.',
+      ].join('\n'),
+    };
+  }
+
   const lines: string[] = [];
   const warnings: string[] = [];
   const scope = projectScopeKeys(ctx);
@@ -695,10 +713,11 @@ async function provideHandoff(ctx: OnboardingContext): Promise<OnboardingSection
     const primaryKey = scope[0] ?? ctx.projectId;
     const basenameKey = path.basename(ctx.workspacePath || primaryKey);
     const memResult = await ctx.pool.query(
-      `SELECT content, memory_type, created_at
-       FROM memories
-       WHERE is_active = true
-         AND (project_id = $1 OR project_id = $2 OR project_id LIKE $3 OR session_id = $4)
+       `SELECT content, memory_type, created_at
+        FROM memories
+        WHERE archived_at IS NULL
+          AND superseded_by IS NULL
+          AND (project_id = $1 OR project_id = $2 OR project_id LIKE $3 OR session_id = $4)
          AND memory_type IN ('conversation', 'episodic', 'lesson')
        ORDER BY created_at DESC
        LIMIT 8`,

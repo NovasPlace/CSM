@@ -6,7 +6,7 @@
 
 **Cross-Session Memory for [opencode](https://github.com/anomalyco/opencode).**
 
-[![Tests](https://img.shields.io/badge/tests-918-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-969-brightgreen)]()
 [![Lint](https://img.shields.io/badge/lint-0%20errors-blue)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)]()
 [![Node](https://img.shields.io/badge/node-20%2B-green)]()
@@ -34,7 +34,7 @@ It gives your assistant a durable memory layer — preferences, lessons, decisio
 | **Living State** | Real-time self-model tracks capability confidence with diminishing returns. Belief system consolidates patterns from experience packets. Advisory context brief keeps the agent honest about what it knows vs. what it's guessing. |
 | **Memory Governance** | Dedup detection (exact + embedding ANN), safe merge (supersede, never delete), archive (7,300+ entries archived), quality scoring, and candidate-driven maintenance. |
 | **Compaction** | Long tool outputs are distilled to references. 90%+ token savings. 2B+ tokens compacted in production. |
-| **Dual Backend** | PostgreSQL + pgvector for full vector search. SQLite for zero-dependency mode. Same API, same tests, same behavior. |
+| **Dual Backend** | PostgreSQL + pgvector for the full runtime. SQLite provides a zero-dependency core-memory mode with text-search fallback; PostgreSQL-only services are explicitly unavailable. |
 
 ---
 
@@ -45,7 +45,7 @@ git clone https://github.com/NovasPlace/CSM.git
 cd CSM
 npm install
 npm run build
-npm run verify    # 918 tests
+npm run verify    # 969 tests
 ```
 
 ### PostgreSQL (recommended)
@@ -55,7 +55,7 @@ npm run verify    # 918 tests
 CREATE EXTENSION vector;
 
 # Point CSM at your database
-export DATABASE_URL=postgresql://user:pass@localhost:5432/csm
+export CSM_DATABASE_URL=postgresql://user:pass@localhost:5432/csm
 
 # Done.
 npm run verify
@@ -75,19 +75,29 @@ npm run verify
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/cross_session_memory` | PostgreSQL connection string |
+| `CSM_DATABASE_URL` | `postgresql://localhost:5432/opencode_memory` | PostgreSQL connection string |
 | `CSM_DATABASE_PROVIDER` | `postgres` | `postgres` or `sqlite` |
-| `CSM_SQLITE_PATH` | `./csm.db` | SQLite database file path |
-| `EMBEDDING_PROVIDER` | `ollama` | `ollama` or `openai` |
-| `EMBEDDING_API_URL` | `http://localhost:11434/v1` | Embedding API endpoint |
-| `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model name |
-| `EMBEDDING_DIMENSIONS` | `768` | Vector dimensions |
+| `CSM_SQLITE_PATH` | `.data/csm-memory.db` | SQLite database file path |
+| `CSM_DB_POOL_MAX` | `20` | PostgreSQL connection-pool limit |
+| `CSM_DB_CONNECTION_TIMEOUT_MS` | `5000` | PostgreSQL connection timeout |
+| `CSM_DB_STATEMENT_TIMEOUT_MS` | `0` | Per-statement timeout; `0` disables it |
+| `CSM_DB_IDLE_TIMEOUT_MS` | `30000` | Idle pooled-connection timeout |
+| `CSM_DB_TLS_MODE` | `url` | `url`, `disable`, `require`, or `verify-full` |
+| `CSM_WORK_LEDGER_ENABLED` | `true` | Capture PostgreSQL run-level file provenance |
+| `CSM_WORK_LEDGER_MAX_FILE_BYTES` | `5000000` | Maximum file size captured by before/after hashing |
+| `CSM_RUN_ID` | generated UUID | Optional orchestrator-supplied run identity |
+| `CSM_MODEL_ID` | host-reported | Optional pinned `provider:model` identity |
+| `CSM_EMBEDDING_PROVIDER` | `ollama` | `ollama` or `openai` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama service URL |
+| `OPENAI_API_KEY` | unset | Required when the embedding provider is `openai` |
 | `CSM_REENTRY_PREVIEW_ONLY` | `false` | Set `true` to test re-entry without live injection |
 | `CSM_SELF_MODEL_CONFIDENCE_RATE` | `10` | Confidence increment rate (%) — diminishing returns after 20 evidence points |
 
 ---
 
-## Tool Surface — 33 Tools
+## Tool Surface — 34 Tools
+
+This table describes the full PostgreSQL surface. SQLite intentionally exposes a smaller core-memory surface and rejects PostgreSQL-only governance, vector, and living-state operations with explicit capability errors.
 
 | Category | Tools | What they do |
 |----------|-------|-------------|
@@ -99,6 +109,7 @@ npm run verify
 | **Continuity** | `reentry_preview`, `onboard_agent`, `memory_context` | Re-entry context builder, agent onboarding startup packet, session context |
 | **Experience** | `packets` | Browse the structured observation log (tool calls, errors, decisions, milestones) |
 | **Diagnostics** | `runtime_status`, `compaction_audit`, `recall_quality_report`, `continuity_report` | Health checks, performance audits, recall quality scoring |
+| **Work Ledger** | `work_ledger_surviving` | Recompute and report run-owned changes that still survive |
 
 ---
 
@@ -152,8 +163,8 @@ Every promotion has safety gates: confidence thresholds, dedup checks, contradic
 
 | Metric | Value |
 |--------|-------|
-| Tests | 918/918 |
-| Tools | 33 |
+| Tests | 969/969 |
+| Tools | 34 |
 | Database tables | 24+ |
 | Active memories (production) | 56,000+ |
 | Tokens compacted | 2B+ |
@@ -190,6 +201,7 @@ Every promotion has safety gates: confidence thresholds, dedup checks, contradic
 ## Deeper Reading
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Module flow and dependencies
+- [docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md) — Proven baseline, open production gates, and milestone order
 - [docs/PHASE3G_SQLITE_MVP.md](docs/PHASE3G_SQLITE_MVP.md) — SQLite adapter design
 - [docs/PHASE4FC_STAGED_ENABLEMENT.md](docs/PHASE4FC_STAGED_ENABLEMENT.md) — Living state advisory pipeline
 - [docs/PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md](docs/PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md) — Re-entry context builder
@@ -205,7 +217,7 @@ PRs welcome. Run these before pushing — all must pass:
 npm run build       # TypeScript compilation
 npm run typecheck   # Type checking (no emit)
 npm run lint:src    # ESLint (0 errors, 7 warnings max)
-npm test            # 918 tests
+npm test            # 969 tests
 ```
 
 ---

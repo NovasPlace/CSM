@@ -1,4 +1,9 @@
-import type { DatabasePool, PluginConfig } from './types.js';
+import type {
+  DatabaseDiagnostics,
+  DatabasePool,
+  DatabaseStartupState,
+  PluginConfig,
+} from './types.js';
 import { createDatabasePool } from './db/database-pool.js';
 import { initializeAllSchemas } from './schema/index.js';
 import { getLogger } from './logger.js';
@@ -8,6 +13,8 @@ import { dialectFromProvider } from './db/query-dialect.js';
 export class Database {
   private pool: DatabasePool | null = null;
   private config: PluginConfig;
+  private startupState: DatabaseStartupState = 'idle';
+  private startupError?: string;
   readonly dialect: QueryDialect;
 
   constructor(config: PluginConfig) {
@@ -16,23 +23,38 @@ export class Database {
   }
 
   async connect(): Promise<void> {
+    this.startupState = 'connecting';
+    this.startupError = undefined;
     try {
       this.pool = await createDatabasePool({
         provider: this.config.databaseProvider,
         databaseUrl: this.config.databaseUrl,
         sqlitePath: this.config.sqlitePath,
+        runtime: this.config.databaseRuntime,
       });
 
       const label = this.config.databaseProvider === 'sqlite' ? 'SQLite' : 'PostgreSQL';
       getLogger().info(`Connected to ${label}`);
-      try {
-        await this.initializeSchema();
-      } catch (error) {
-        getLogger().error('Schema initialization failed; continuing with existing database', error instanceof Error ? error : undefined);
-      }
+      this.startupState = 'migrating';
+      await this.initializeSchema();
+      this.startupState = 'ready';
     } catch (error) {
-      getLogger().error('Connection failed', error instanceof Error ? error : undefined);
+      this.startupState = 'failed';
+      this.startupError = formatDiagnosticError(error);
+      await this.closeFailedPool();
+      getLogger().error('Database startup failed', error instanceof Error ? error : undefined);
       throw error;
+    }
+  }
+
+  private async closeFailedPool(): Promise<void> {
+    if (!this.pool) return;
+    const failedPool = this.pool;
+    this.pool = null;
+    try {
+      await failedPool.end();
+    } catch {
+      // Preserve the original startup error.
     }
   }
 
@@ -40,6 +62,7 @@ export class Database {
     if (!this.pool) return;
     await this.pool.end();
     this.pool = null;
+    this.startupState = 'closed';
     getLogger().info('Database disconnected');
   }
 
@@ -59,8 +82,47 @@ export class Database {
   }
 
   async close(): Promise<void> {
-    if (!this.pool) return;
-    await this.pool.end();
+    if (this.pool) await this.pool.end();
     this.pool = null;
+    this.startupState = 'closed';
   }
+
+  async diagnose(): Promise<DatabaseDiagnostics> {
+    const checkedAt = new Date().toISOString();
+    const startedAt = performance.now();
+    const readiness = await this.probeReadiness(startedAt);
+    return {
+      provider: this.config.databaseProvider,
+      checkedAt,
+      startup: { state: this.startupState, ...(this.startupError ? { error: this.startupError } : {}) },
+      liveness: { status: 'pass' },
+      readiness,
+      ...(this.pool?.getStats ? { pool: this.pool.getStats() } : {}),
+    };
+  }
+
+  private async probeReadiness(startedAt: number): Promise<DatabaseDiagnostics['readiness']> {
+    if (!this.pool || this.startupState !== 'ready') {
+      return { status: 'fail', latencyMs: elapsedMs(startedAt), reason: 'not_connected' };
+    }
+    try {
+      await this.pool.query('SELECT 1 AS healthy');
+      return { status: 'pass', latencyMs: elapsedMs(startedAt) };
+    } catch (error) {
+      return {
+        status: 'fail',
+        latencyMs: elapsedMs(startedAt),
+        reason: 'probe_failed',
+        error: formatDiagnosticError(error),
+      };
+    }
+  }
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100);
+}
+
+function formatDiagnosticError(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }

@@ -47,6 +47,7 @@ function context(
     config: {
       workJournal: { enabled: true },
       distiller: { enabled: false },
+      contextCache: { enabled: true },
       logToolUsage: false,
     },
     state: {

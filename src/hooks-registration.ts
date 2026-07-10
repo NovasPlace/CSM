@@ -6,7 +6,8 @@ import { PluginInput, PluginOptions, Hooks } from '@opencode-ai/plugin';
 import { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { Redactor } from './redactor.js';
-import { validateAndReturnConfig } from './config.js';
+import { validateAndReturnConfig, validatePluginConfig } from './config.js';
+import { mergePluginConfig, normalizeProviderRuntimeConfig } from './provider-runtime-config.js';
 import { Logger } from './logger.js';
 import { MemoryManager } from './memory-manager.js';
 import { MemoryExtractor } from './memory-extractor.js';
@@ -45,6 +46,8 @@ import type { PluginContext } from './plugin-context.js';
 import type { CheckpointToolDeps } from './checkpoint-tool.js';
 import type { CheckpointInjectDeps } from './checkpoint-inject.js';
 import type { AutoCheckpointTrigger } from './helpers/auto-checkpoint.js';
+import { randomUUID } from 'node:crypto';
+import { WorkLedger } from './work-ledger.js';
 import { createAutoCheckpoint } from './helpers/auto-checkpoint.js';
 import { createSystemTransformHook } from './hooks/system-transform.js';
 import { createSessionCompactingHook, createAutocontinueHook } from './hooks/session-compaction.js';
@@ -59,25 +62,21 @@ export async function registerHooks(
   options?: PluginOptions,
   _defaultExports: unknown = {}
 ): Promise<Hooks> {
-  const config = validateAndReturnConfig();
-  const mergedConfig = { ...config, ...(options as unknown ?? {}) };
+  const mergedConfig = mergePluginConfig(validateAndReturnConfig(), options);
+  const config = normalizeProviderRuntimeConfig(validatePluginConfig(mergedConfig));
 
   const logging = new Logger({
     sessionId: undefined,
     projectId: ctx.directory ?? null,
-    verbose: mergedConfig.promptDebug,
+    verbose: config.promptDebug,
   });
 
   logging.info('Initializing AUTOMATED memory system...');
 
   const database = new Database(config);
 
-  try {
-    await database.connect();
-    logging.info('Database connected');
-  } catch (error) {
-    logging.error('Database connection failed', error as Error);
-  }
+  await database.connect();
+  logging.info('Database connected');
 
   const embeddings = new EmbeddingGenerator(config);
   const redactor = new Redactor(config.redactor);
@@ -99,6 +98,10 @@ export async function registerHooks(
 
   const sessionState = {
     currentSessionId: null as string | null,
+    runId: process.env.CSM_RUN_ID?.trim() || randomUUID(),
+    currentModelId: process.env.CSM_MODEL_ID?.trim() || 'unknown',
+    modelIdPinned: !!process.env.CSM_MODEL_ID?.trim(),
+    modelIdBySession: new Map<string, string>(),
     messageCount: 0,
     capturedMessageSizes: new Map<string, number>(),
     recentUserMessages: new Map<string, string>(),
@@ -134,6 +137,9 @@ export async function registerHooks(
   const _autoCheckpointCtx = { checkpointStore, config: config.checkpoint };
 
   const workJournal = new AgentWorkJournal(database.getPool(), config.workJournal, redactor);
+  const workLedger = config.workLedger.enabled
+    ? new WorkLedger(database.getPool(), config.workLedger)
+    : undefined;
   const experiencePackets = new ExperiencePacketCreator(database.getPool());
   const selfModel = new SelfModelUpdater(database.getPool(), config.selfModel);
   const beliefKnowledge = new BeliefKnowledgeConsolidator(database.getPool(), config.beliefKnowledge);
@@ -167,7 +173,7 @@ export async function registerHooks(
 
   logging.info('AUTOMATED memory system initialized');
 
-  const statsWriter = new StatsWriter(database.getPool());
+  const statsWriter = new StatsWriter(database.getPool(), undefined, config.databaseProvider === 'postgres');
   statsWriter.start();
 
   if (config.targetContextCap > 0) {
@@ -184,7 +190,7 @@ export async function registerHooks(
       createAutoCheckpoint({ checkpointStore, config: config.checkpoint }, sessionId, trigger, details),
     refreshActiveContext, syncActiveSession,
     lastCompileResult: null,
-    workJournal, experiencePackets, lessonTriggers, selfModel, beliefKnowledge, livingState, livingStateAdvisor,
+    workJournal, workLedger, experiencePackets, lessonTriggers, selfModel, beliefKnowledge, livingState, livingStateAdvisor,
     reEntryProtocol,
     vcmManager,
     contextCapSensor,

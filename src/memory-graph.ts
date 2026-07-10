@@ -2,7 +2,7 @@ import { Database } from "./database.js";
 import type { ExtractedConcept } from "./concept-extractor.js";
 import type { Memory } from "./types.js";
 import { getLogger } from "./logger.js";
-import { jsonExtractValue } from "./db/query-dialect.js";
+import { jsonExtractValue, parseArrayField, parseJsonField, toDate } from "./db/query-dialect.js";
 import { recordRecallBatch } from "./recall-telemetry.js";
 
 export type MemoryLink = {
@@ -23,13 +23,13 @@ export type RelatedMemory = {
 interface CandidateRow {
   id: number;
   content: string;
-  created_at: Date;
-  concepts: unknown[];
+  created_at: unknown;
+  concepts: unknown;
 }
 
 interface SourceRow {
   content: string;
-  created_at: Date;
+  created_at: unknown;
 }
 
 interface LinkRow {
@@ -39,7 +39,7 @@ interface LinkRow {
   link_type: "shared_entity" | "causal" | "temporal" | "reference";
   shared_entities: unknown;
   strength: number;
-  created_at: Date;
+  created_at: unknown;
 }
 
 interface RelatedRow {
@@ -49,7 +49,7 @@ interface RelatedRow {
   link_type: string;
   shared_entities: unknown;
   strength: number;
-  created_at: Date;
+  created_at: unknown;
   mem_id: number;
   session_id: string | null;
   project_id: string | null;
@@ -62,13 +62,29 @@ interface RelatedRow {
   tags: unknown;
   linked_memory_ids: unknown;
   metadata: unknown;
-  mem_created: Date;
-  mem_updated: Date;
-  accessed_at: Date;
+  mem_created: unknown;
+  mem_updated: unknown;
+  accessed_at: unknown;
   access_count: number;
 }
 
-export async function initializeGraphSchema(db: Database): Promise<void> {
+function parseCandidateConcepts(value: unknown): Array<{ value: string }> {
+  const parsed = typeof value === 'string' ? tryParseJson(value) : value;
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((item): item is { value: string } => (
+    typeof item === 'object' && item !== null && typeof (item as { value?: unknown }).value === 'string'
+  ));
+}
+
+function tryParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
+}
+
+export async function initializeGraphSchema(db: Pick<Database, 'getPool' | 'dialect'>): Promise<void> {
   const pool = db.getPool();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS memory_links (
@@ -133,7 +149,7 @@ export async function buildLinksForMemory(
   const links: MemoryLink[] = [];
 
   for (const candidate of memoryRows.rows as CandidateRow[]) {
-    const candidateConcepts = (candidate.concepts ?? []) as { value: string }[];
+    const candidateConcepts = parseCandidateConcepts(candidate.concepts);
     const shared = entityValues.filter(v =>
       candidateConcepts.some(c => c.value === v)
     );
@@ -145,13 +161,13 @@ export async function buildLinksForMemory(
       [memoryId]
     );
     const sourceContent = (sourceRow.rows as SourceRow[])[0]?.content ?? "";
-    const sourceDate = (sourceRow.rows as SourceRow[])[0]?.created_at ?? new Date();
+    const sourceDate = toDate(d, (sourceRow.rows as SourceRow[])[0]?.created_at);
 
     const linkType = inferLinkType(
       sourceContent,
       candidate.content,
       sourceDate,
-      candidate.created_at,
+      toDate(d, candidate.created_at),
       concepts.filter(c => shared.includes(c.value))
     );
 
@@ -174,9 +190,9 @@ export async function buildLinksForMemory(
           source_id: row.source_id,
           target_id: row.target_id,
           link_type: row.link_type,
-          shared_entities: row.shared_entities as string[],
+          shared_entities: parseArrayField(d, row.shared_entities).map(String),
           strength: row.strength,
-          created_at: row.created_at,
+          created_at: toDate(d, row.created_at),
         });
       }
      } catch (_err) {
@@ -194,6 +210,7 @@ export async function getRelatedMemories(
   telemetry?: { sessionId?: string; projectId?: string }
 ): Promise<RelatedMemory[]> {
   const pool = db.getPool();
+  const d = db.dialect;
 
   const linkRows = await pool.query(
     `SELECT ml.*, m.id AS mem_id, m.session_id, m.project_id, m.memory_type,
@@ -202,8 +219,11 @@ export async function getRelatedMemories(
             m.created_at AS mem_created, m.updated_at AS mem_updated,
             m.accessed_at, m.access_count
      FROM memory_links ml
-     JOIN memories m ON m.id = ml.target_id
-     WHERE ml.source_id = $1
+     JOIN memories m ON m.id = CASE
+       WHEN ml.source_id = $1 THEN ml.target_id
+       ELSE ml.source_id
+     END
+     WHERE ml.source_id = $1 OR ml.target_id = $1
      ORDER BY ml.strength DESC
      LIMIT $2`,
     [memoryId, limit]
@@ -220,12 +240,12 @@ export async function getRelatedMemories(
       emotion: row.emotion,
       confidence: row.confidence,
       source: row.source,
-      tags: (row.tags ?? []) as string[],
-      linkedMemoryIds: (row.linked_memory_ids ?? []) as number[],
-      metadata: (row.metadata ?? {}) as Record<string, unknown>,
-      createdAt: row.mem_created,
-      updatedAt: row.mem_updated,
-      accessedAt: row.accessed_at,
+      tags: parseArrayField(d, row.tags).map(String),
+      linkedMemoryIds: parseArrayField(d, row.linked_memory_ids).map(Number),
+      metadata: parseJsonField(d, row.metadata),
+      createdAt: toDate(d, row.mem_created),
+      updatedAt: toDate(d, row.mem_updated),
+      accessedAt: toDate(d, row.accessed_at),
       accessCount: row.access_count ?? 0,
     } as Memory,
     link: {
@@ -233,9 +253,9 @@ export async function getRelatedMemories(
       source_id: row.source_id,
       target_id: row.target_id,
       link_type: row.link_type as MemoryLink['link_type'],
-      shared_entities: (row.shared_entities ?? []) as string[],
+      shared_entities: parseArrayField(d, row.shared_entities).map(String),
       strength: row.strength,
-      created_at: row.created_at,
+      created_at: toDate(d, row.created_at),
     } as MemoryLink,
   }));
 
@@ -264,12 +284,15 @@ export async function findSharedEntities(
   memoryId: number
 ): Promise<ExtractedConcept[]> {
   const pool = db.getPool();
-  const result = await pool.query(
-    `SELECT DISTINCT jsonb_array_elements(ml.shared_entities) AS entity
-     FROM memory_links ml
-     WHERE ml.source_id = $1 OR ml.target_id = $1`,
-    [memoryId]
-  );
+  const d = db.dialect;
+  const sql = d === 'sqlite'
+    ? `SELECT DISTINCT json_each.value AS entity
+       FROM memory_links ml, json_each(ml.shared_entities)
+       WHERE ml.source_id = $1 OR ml.target_id = $1`
+    : `SELECT DISTINCT jsonb_array_elements(ml.shared_entities) AS entity
+       FROM memory_links ml
+       WHERE ml.source_id = $1 OR ml.target_id = $1`;
+  const result = await pool.query(sql, [memoryId]);
 
   return (result.rows as { entity: string }[]).map(row => ({
     type: "concept" as const,

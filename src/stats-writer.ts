@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { homedir, platform } from 'node:os';
 import type { DatabasePool } from './types.js';
 import { getLogger } from './logger.js';
-import { nowFn, dialectFromPool } from './db/query-dialect.js';
+import { dialectFromPool, jsonExtractText, nowFn } from './db/query-dialect.js';
 
 export type CsmMemory = {
   id: number;
@@ -122,16 +122,19 @@ export class StatsWriter {
   private pool: DatabasePool;
   private logger = getLogger();
   private timer: ReturnType<typeof setInterval> | null = null;
+  private pendingWrite: Promise<void> | null = null;
+  private enabled: boolean;
 
-  constructor(pool: DatabasePool, filePath?: string) {
+  constructor(pool: DatabasePool, filePath?: string, enabled: boolean = true) {
     this.pool = pool;
     this.filePath = filePath ?? defaultStatsPath();
+    this.enabled = enabled;
   }
 
   start(intervalMs = 5000): void {
-    if (this.timer) return;
-    this.write();
-    this.timer = setInterval(() => this.write(), intervalMs);
+    if (!this.enabled || this.timer) return;
+    void this.write();
+    this.timer = setInterval(() => void this.write(), intervalMs);
   }
 
   stop(): void {
@@ -142,6 +145,21 @@ export class StatsWriter {
   }
 
   async write(): Promise<void> {
+    if (!this.enabled) return;
+    if (this.pendingWrite) return this.pendingWrite;
+    this.pendingWrite = this.writeOnce().finally(() => {
+      this.pendingWrite = null;
+    });
+    return this.pendingWrite;
+  }
+
+  async stopAndFlush(): Promise<void> {
+    this.stop();
+    await this.write();
+    await this.write();
+  }
+
+  private async writeOnce(): Promise<void> {
     try {
       type RowN = { n: number };
       type RowCkpt = { created_at: string };
@@ -156,11 +174,12 @@ export class StatsWriter {
          this.pool.query("SELECT created_at FROM compaction_metrics ORDER BY created_at DESC LIMIT 1"),
        ]);
 
-      const recentMemResult = await this.pool.query(
+       const dialect = dialectFromPool(this.pool);
+       const recentMemResult = await this.pool.query(
         `SELECT id, left(content, 500) AS content, memory_type, source, session_id,
                 created_at, importance, COALESCE(confidence, 1.0) AS confidence,
                 COALESCE(emotion, 'neutral') AS emotion, tags, linked_memory_ids,
-                metadata, turn_id
+                metadata, ${jsonExtractText(dialect, 'metadata', 'turnId')} AS turn_id
          FROM memories ORDER BY created_at DESC LIMIT 10`,
       );
 

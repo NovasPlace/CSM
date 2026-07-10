@@ -204,7 +204,7 @@ export class CausalThreadHydrator {
 
   private async fetchMemory(id: number) {
     const result = await this.pool.query(
-      `SELECT id, content, type, session_id, project_id, created_at
+      `SELECT id, content, memory_type AS type, session_id, project_id, created_at
        FROM memories WHERE id = $1`,
       [id],
     );
@@ -216,15 +216,15 @@ export class CausalThreadHydrator {
   private async fetchLinkedMemories(rootId: number, radius: number) {
     const result = await this.pool.query(
       `WITH RECURSIVE chain AS (
-        SELECT m.id, m.content, m.type, m.created_at, ml.link_type, 1 AS depth
+        SELECT m.id, m.content, m.memory_type AS type, m.created_at, ml.link_type, 1 AS depth
         FROM memory_links ml
-        JOIN memories m ON m.id = ml.to_memory_id
-        WHERE ml.from_memory_id = $1
+        JOIN memories m ON m.id = ml.target_id
+        WHERE ml.source_id = $1
         UNION ALL
-        SELECT m.id, m.content, m.type, m.created_at, ml.link_type, c.depth + 1
+        SELECT m.id, m.content, m.memory_type AS type, m.created_at, ml.link_type, c.depth + 1
         FROM chain c
-        JOIN memory_links ml ON ml.from_memory_id = c.id
-        JOIN memories m ON m.id = ml.to_memory_id
+        JOIN memory_links ml ON ml.source_id = c.id
+        JOIN memories m ON m.id = ml.target_id
         WHERE c.depth < $2
       )
       SELECT DISTINCT ON (id) id, content, type, created_at, link_type
@@ -245,7 +245,7 @@ export class CausalThreadHydrator {
 
   private async fetchTemporalNeighbors(rootId: number, sessionId: string, radius: number) {
     const result = await this.pool.query(
-      `SELECT m.id, m.content, m.type, m.created_at
+      `SELECT m.id, m.content, m.memory_type AS type, m.created_at
        FROM memories m
        WHERE m.session_id = $1
        AND m.id != $2
@@ -288,7 +288,7 @@ export class CausalThreadHydrator {
     try {
       const result = await this.pool.query(
         `SELECT id, content, created_at FROM memories
-         WHERE type = 'lesson'
+         WHERE memory_type = 'lesson'
          AND id != $1
          ORDER BY created_at DESC
          LIMIT $2`,

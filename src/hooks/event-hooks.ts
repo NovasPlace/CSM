@@ -236,8 +236,16 @@ export function createEventHook(
 
 export function createChatMessageHook(
   pluginCtx: PluginContext,
-): (input: { sessionID: string }, output: { parts: unknown[] }) => Promise<void> {
+): (input: {
+  sessionID: string;
+  model?: { providerID: string; modelID: string };
+}, output: { parts: unknown[] }) => Promise<void> {
   return async (input, output) => {
+    if (input.model && !pluginCtx.state.modelIdPinned) {
+      const modelId = `${input.model.providerID}:${input.model.modelID}`;
+      pluginCtx.state.currentModelId = modelId;
+      pluginCtx.state.modelIdBySession?.set(input.sessionID, modelId);
+    }
     const userText = extractTextParts(output.parts);
     if (userText) rememberUserTurn(pluginCtx.state, input.sessionID, userText);
     if (!isReentrySourceOnlyTurn(userText)) return;
