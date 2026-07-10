@@ -5,7 +5,8 @@ import type { ToolCallRecord } from '../types.js';
 import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
 import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
-import { getLogger } from '../logger.js';
+
+
 
 /** Before-hook input shape (matches OpenCode plugin API). */
 interface ToolExecuteBeforeInput {
