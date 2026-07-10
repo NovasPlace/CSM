@@ -23,9 +23,15 @@ function sendError(id: JsonRpcId, message: string): void {
 }
 
 function textResult(payload: unknown) {
+  // MCP requires `structuredContent` to be a JSON object:
+  //   structuredContent?: { [key: string]: unknown }
+  // Several tools return a bare array (list_memories, recall_lessons), which
+  // schema-validating clients reject. Wrap any non-object payload under `result`.
+  const isPlainObject =
+    payload !== null && typeof payload === 'object' && !Array.isArray(payload);
   return {
     content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
-    structuredContent: payload,
+    structuredContent: isPlainObject ? (payload as Record<string, unknown>) : { result: payload },
   };
 }
 
