@@ -5,17 +5,31 @@
 ## Startup
 
 1. Ensure PostgreSQL is running.
-2. Set `DATABASE_URL`.
+2. Set `CSM_DATABASE_URL`.
 3. Ensure the `vector` extension exists.
-4. Start the plugin. Schema migration is additive and now covers `memory_recall_events` as well as the core memory tables.
+4. Start the plugin. PostgreSQL schema initialization is serialized with a transaction-scoped advisory lock and runs atomically. An unexpected schema failure rolls back and aborts startup.
 5. For Codex-hosted usage, import `dist/codex-bridge.js` instead of starting the OpenCode plugin hooks.
 
+PostgreSQL transport controls are `CSM_DB_POOL_MAX`, `CSM_DB_CONNECTION_TIMEOUT_MS`, `CSM_DB_STATEMENT_TIMEOUT_MS`, `CSM_DB_IDLE_TIMEOUT_MS`, and `CSM_DB_TLS_MODE`. TLS mode `url` preserves the connection string policy, `disable` forbids TLS, `require` encrypts without certificate verification, and `verify-full` requires certificate and hostname verification. Production should use `verify-full` with a trusted system CA or `sslrootcert` in `CSM_DATABASE_URL`.
+
 ## Health Checks
+
+### Machine-readable Diagnostics
+
+`Database.diagnose()` returns a JSON-safe object with the provider, startup state, liveness, readiness probe latency/reason, and PostgreSQL pool counts when available:
+
+```ts
+const diagnostic = await database.diagnose();
+if (diagnostic.readiness.status !== 'pass') process.exitCode = 1;
+process.stdout.write(`${JSON.stringify(diagnostic)}\n`);
+```
+
+Liveness passes when the diagnostic code can execute. Readiness passes only after schema startup reaches `ready` and a real `SELECT 1` probe succeeds. Startup states are `idle`, `connecting`, `migrating`, `ready`, `failed`, and `closed`.
 
 ### Database Connectivity
 
 ```bash
-node -e "const {Pool}=require('pg');new Pool({connectionString:process.env.DATABASE_URL}).query('SELECT 1').then(r=>console.log('OK:',r.rows)).catch(e=>console.error('FAIL:',e.message))"
+node -e "const {Pool}=require('pg');new Pool({connectionString:process.env.CSM_DATABASE_URL}).query('SELECT 1').then(r=>console.log('OK:',r.rows)).catch(e=>console.error('FAIL:',e.message))"
 ```
 
 ### Schema Integrity
@@ -51,6 +65,32 @@ SELECT COUNT(*) AS recall_events, COUNT(DISTINCT memory_id) AS recalled_memories
 FROM memory_recall_events;
 ```
 
+### Migration History
+
+```sql
+SELECT migration_id, checksum, provider, execution_ms, applied_at
+FROM csm_schema_migrations
+ORDER BY migration_id;
+```
+
+Startup rejects changed implementation checksums, migrations unknown to the running release, history copied from another provider, and every failed required migration including ownership failures. PostgreSQL applies pending migrations inside the advisory-locked schema transaction; SQLite applies its baseline inside `BEGIN IMMEDIATE`.
+
+### Work Ledger lineage
+
+Use `csm_work_ledger_surviving` to answer which changes from a run still survive. The query performs a live filesystem verification before returning active or partially-superseded rows.
+
+```sql
+SELECT change_id, run_id, model_id, tool_call_id, file_path, status,
+       superseded_by, supersedes, patch_hash, surviving_patch_hash
+FROM work_ledger_changes
+WHERE run_id = $1
+ORDER BY created_at;
+```
+
+See `WORK_LEDGER.md` for capture surfaces, status semantics, path containment, and the Codex two-phase adapter.
+
+The supported upgrade window and restore-based rollback procedure are defined in `SCHEMA_SUPPORT_MATRIX.md`. Never delete migration ledger rows or reverse production DDL manually.
+
 ## Common Operations
 
 ### Manual Embedding Backfill
@@ -69,7 +109,7 @@ Use `CodexMemoryBridge.connect({ databaseUrl, ...config })`.
 Recommended first call per task:
 
 ```ts
-const bridge = await CodexMemoryBridge.connect({ databaseUrl: process.env.DATABASE_URL });
+const bridge = await CodexMemoryBridge.connect({ databaseUrl: process.env.CSM_DATABASE_URL });
 const brief = await bridge.getContextBrief({
   projectRoot: process.cwd(),
   task: 'repair fresh schema contract drift',
@@ -85,6 +125,17 @@ Bridge operations:
 - `prune_memories_dry_run`
 - `backfill_missing_embeddings`
 - `get_compaction_report`
+
+The complete list above requires PostgreSQL. SQLite core mode supports save, search, list, context brief, and lesson recall; the bridge reports PostgreSQL-only operations as unavailable instead of attempting incompatible queries.
+
+### SQLite Core Mode
+
+```bash
+export CSM_DATABASE_PROVIDER=sqlite
+export CSM_SQLITE_PATH=.data/csm-memory.db
+```
+
+SQLite is a local core-memory adapter with text-search fallback. It does not provide PostgreSQL vector search, governance jobs, graph-wide maintenance, living-state services, or the PostgreSQL TUI dashboard.
 
 ### Safe Review Copy
 
@@ -112,14 +163,38 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DE
 ### Backup Memories
 
 ```bash
-pg_dump -Fc "$DATABASE_URL" > memories_backup.dump
+pg_dump -Fc "$CSM_DATABASE_URL" > memories_backup.dump
 ```
 
 ### Restore Memories
 
 ```bash
-pg_restore -Fc -d cross_session_memory memories_backup.dump
+pg_restore -Fc -d "$CSM_DATABASE_URL" memories_backup.dump
 ```
+
+### Isolated Backup/Restore Drill
+
+Run the destructive proof only against the temporary databases created by the drill:
+
+```bash
+npm run drill:backup-restore
+```
+
+The command requires `CSM_DATABASE_URL` and PostgreSQL client tools matching the server major version. It preserves connection URL TLS parameters, passes the decoded password through `PGPASSWORD`, creates uniquely named source and restore databases, verifies migration history and sentinel data after `pg_restore`, and reports success only after both databases and the temporary dump are confirmed removed. Set `CSM_PG_BIN` to the matching client `bin` directory when the tools are not on `PATH`; `CSM_PG_TOOL_TIMEOUT_MS` defaults to 120000.
+
+The complete local enterprise gate is:
+
+```bash
+npm run verify:enterprise
+```
+
+For a scale and recovery-objective run, set the record count and thresholds explicitly:
+
+```bash
+CSM_DRILL_MEMORY_COUNT=50000 CSM_DRILL_MAX_RTO_MS=30000 CSM_DRILL_MAX_DATA_LOSS=0 npm run drill:backup-restore
+```
+
+The drill emits a JSON report containing backup time, restore-and-validate RTO, record-loss RPO, source/restored counts, migration count, and cleanup status. On 2026-07-09, the local PostgreSQL 16 representative-scale run restored and validated 50,000 memories in 1,337.02 ms, lost 0 records, and removed both temporary databases and the dump. This is local engineering evidence, not a production-environment SLO.
 
 ## Monitoring Queries
 
@@ -160,6 +235,9 @@ LIMIT 20;
 | Prune is too aggressive | `SELECT COUNT(*) FROM memory_recall_events` | Verify recall telemetry is being written |
 | Codex starts cold every time | `npx tsx --test test/codex-bridge.test.ts` | Call `get_context_brief(projectRoot, task)` before task work |
 | Fresh install behaves differently | Run `test/fresh-schema-contract.test.ts` | Repair schema/runtime drift before release |
+| Startup fails during schema initialization | Read the named `SchemaStepError` step and database cause | Correct the failing DDL or ownership boundary; startup intentionally does not continue on a partial schema |
+
+Production-equivalent infrastructure must repeat and ratify the backup/RPO/RTO thresholds before certification; see `ENTERPRISE_READINESS.md`.
 
 ## Test Suites
 

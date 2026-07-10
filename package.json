@@ -59,6 +59,8 @@
     "typecheck": "tsc --noEmit",
     "test": "npx tsx --test test/*.test.ts",
     "verify": "npm run build && npm run typecheck && npx tsx --test test/*.test.ts",
+    "drill:backup-restore": "npm run build && npx tsx scripts/backup-restore-drill.ts",
+    "verify:enterprise": "npm run verify && npm run lint:src && npm run drill:backup-restore",
     "benchmark:long-session": "npx tsx src/benchmark.ts",
     "lint": "npm run lint:src",
     "lint:src": "eslint src --max-warnings=7",

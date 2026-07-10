@@ -1,12 +1,3 @@
-import { initializeCheckpointSchema } from '../checkpoint-schema.js';
-import { initializeCandidateSchema } from '../candidate-schema.js';
-import { initializeExperiencePacketSchema } from '../experience-packet-schema.js';
-import { initializeSelfModelSchema } from '../self-model-schema.js';
-import { initializeBeliefKnowledgeSchema } from '../belief-knowledge-schema.js';
-import { initializeContextCompilationSchema } from '../context-compilation-schema.js';
-import { initializeContextCacheSchema } from '../context-cache-schema.js';
-import { initializeRolloverSchema } from '../context-rollover-schema.js';
-import { initializeCrossSessionCausalSchema } from '../cross-session-causal-schema.js';
 import type { Database } from '../database.js';
 import type { DatabasePool } from '../types.js';
 import { initializeGoalSchema } from '../goal-schema.js';
@@ -22,6 +13,22 @@ import { isOwnershipLimitedSchemaError } from './schema-errors.js';
 import { initializeSessionSchema } from './session-schema.js';
 import { initializeMinimalSqliteSchema } from './sqlite/index.js';
 import { getLogger } from '../logger.js';
+import type { DatabaseClient, DatabasePool } from '../types.js';
+import {
+  ensureMigrationLedger,
+  type MigrationProvider,
+  readMigrationHistory,
+  recordMigration,
+  type SchemaMigration,
+  validateMigrationHistory,
+} from './migration-ledger.js';
+import { artifactsFor } from './migration-artifacts.js';
+import { buildPostgresMigrations } from './postgres-migrations.js';
+import { SchemaStepError } from './schema-errors.js';
+import { initializeMinimalSqliteSchema } from './sqlite/index.js';
+
+const SCHEMA_LOCK_KEY = 741_583_921;
+const SAVEPOINT = 'csm_schema_migration';
 
 /**
  * Bump this whenever a step in `initializeAllSchemas` changes what it creates.
@@ -63,13 +70,93 @@ async function recordSchemaVersion(pool: DatabasePool): Promise<void> {
 
 export async function initializeAllSchemas(database: Database): Promise<void> {
   const pool = database.getPool();
-  const provider = database.getProvider();
+  const provider = toMigrationProvider(database.getProvider());
+  await withSchemaTransaction(pool, provider, async (transactionPool) => {
+    if (provider === 'postgres') await lockPostgresSchema(transactionPool);
+    const migrations = buildMigrations(database, transactionPool, provider);
+    await migrateSchema(transactionPool, migrations, provider);
+  });
+  getLogger().info(`${provider === 'sqlite' ? 'SQLite' : 'PostgreSQL'} schema ready`);
+}
 
-  if (provider === 'sqlite') {
-    await initializeMinimalSqliteSchema(pool);
-    getLogger().info('SQLite minimal schema initialized');
-    return;
+function buildMigrations(
+  database: Database,
+  pool: DatabasePool,
+  provider: MigrationProvider,
+): SchemaMigration[] {
+  if (provider === 'postgres') return buildPostgresMigrations(database, pool);
+  return [{
+    id: '20260709-001-sqlite-baseline',
+    contract: 'csm-sqlite-v1:core memory, graph, recall, packets, self-model, and beliefs',
+    implementation: artifactsFor('20260709-001-sqlite-baseline'),
+    run: () => initializeMinimalSqliteSchema(pool),
+  }];
+}
+
+async function migrateSchema(
+  pool: DatabasePool,
+  migrations: SchemaMigration[],
+  provider: MigrationProvider,
+): Promise<void> {
+  await ensureMigrationLedger(pool, provider);
+  const applied = await readMigrationHistory(pool);
+  validateMigrationHistory(migrations, applied, provider);
+  const appliedIds = new Set(applied.map((migration) => migration.id));
+  for (const migration of migrations) {
+    if (!appliedIds.has(migration.id)) {
+      await applyMigration(pool, migration, provider);
+    }
   }
+}
+
+async function applyMigration(
+  pool: DatabasePool,
+  migration: SchemaMigration,
+  provider: MigrationProvider,
+): Promise<void> {
+  await pool.query(`SAVEPOINT ${SAVEPOINT}`);
+  const startedAt = Date.now();
+  try {
+    await migration.run();
+    await recordMigration(pool, migration, provider, Date.now() - startedAt);
+    await pool.query(`RELEASE SAVEPOINT ${SAVEPOINT}`);
+  } catch (error) {
+    const rollbackError = await rollbackMigration(pool);
+    throw new SchemaStepError(migration.id, error, rollbackError);
+  }
+}
+
+async function rollbackMigration(pool: DatabasePool): Promise<unknown | undefined> {
+  try {
+    await pool.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT}`);
+    await pool.query(`RELEASE SAVEPOINT ${SAVEPOINT}`);
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
+async function withSchemaTransaction<T>(
+  pool: DatabasePool,
+  provider: MigrationProvider,
+  task: (transactionPool: DatabasePool) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  let transactionOpen = false;
+  try {
+    await client.query(provider === 'sqlite' ? 'BEGIN IMMEDIATE' : 'BEGIN');
+    transactionOpen = true;
+    const result = await task(poolFromClient(client, provider));
+    await client.query('COMMIT');
+    transactionOpen = false;
+    return result;
+  } catch (error) {
+    if (transactionOpen) await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
   // Fast path. Every step below is idempotent, but together they issue ~147 statements,
   // each its own network round-trip, on EVERY process start — and one process is spawned
@@ -84,28 +171,17 @@ export async function initializeAllSchemas(database: Database): Promise<void> {
   const ownershipLimitedSteps: string[] = [];
   const failedSteps: string[] = [];
 
-  const steps: Array<[string, () => Promise<void>]> = [
-    ['extension.vector', () => provider === 'sqlite' ? Promise.resolve() : pool.query('CREATE EXTENSION IF NOT EXISTS vector').then(() => undefined)],
-    ['session', () => initializeSessionSchema(pool)],
-    ['memory', () => initializeMemorySchema(pool)],
-    ['core', () => initializeCoreSchema(pool)],
-    ['project-isolation', () => migrateProjectIsolation(pool)],
-    ['checkpoint', () => initializeCheckpointSchema(pool)],
-    ['context-compilation', () => initializeContextCompilationSchema(pool)],
-    ['context-cache', () => initializeContextCacheSchema(pool)],
-    ['rollover', () => initializeRolloverSchema(pool)],
-    ['goal', () => initializeGoalSchema(pool)],
-    ['recall-telemetry', () => initializeRecallTelemetrySchema(pool)],
-    ['self-continuity', () => initializeSelfContinuitySchema(pool)],
-    ['cross-session-causal', () => initializeCrossSessionCausalSchema(pool)],
-    ['trace-vault', () => initializeTraceVaultSchema(pool)],
-    ['graph', () => initializeGraphSchema(database)],
-    ['work-journal', () => initializeWorkJournalSchema(pool)],
-    ['candidate-queue', () => initializeCandidateSchema(pool)],
-    ['experience-packet', () => initializeExperiencePacketSchema(pool)],
-    ['self-model', () => initializeSelfModelSchema(pool)],
-    ['belief-knowledge', () => initializeBeliefKnowledgeSchema(pool)],
-  ];
+function poolFromClient(
+  client: DatabaseClient,
+  provider: MigrationProvider,
+): DatabasePool {
+  return {
+    query: (text, params) => client.query(text, params),
+    connect: async () => client,
+    end: async () => undefined,
+    getDialect: () => provider === 'postgres' ? 'pg' : 'sqlite',
+  };
+}
 
   for (const [name, step] of steps) {
     try {

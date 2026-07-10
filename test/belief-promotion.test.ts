@@ -548,6 +548,6 @@ describe('Phase 4G: tool registration', () => {
 
   it('tool count is 32 (31 + 1 reentry preview tool)', async () => {
     const { CSM_TOOL_NAMES } = await import('../dist/tool-names.js');
-    assert.equal(CSM_TOOL_NAMES.length, 33, `expected 33 tools, got ${CSM_TOOL_NAMES.length}`);
+    assert.equal(CSM_TOOL_NAMES.length, 34, `expected 34 tools, got ${CSM_TOOL_NAMES.length}`);
   });
 });

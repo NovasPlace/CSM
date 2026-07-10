@@ -1,9 +1,13 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pool } from 'pg';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { Database } from '../dist/database.js';
+import { buildOnboardingPacket } from '../dist/agent-onboarding.js';
+import { CausalThreadHydrator } from '../dist/self-continuity-causal-thread.js';
 import { MemoryManager } from '../dist/memory-manager.js';
 import { EmbeddingGenerator, EMBEDDING_DIMENSIONS } from '../dist/embeddings.js';
+import { StatsWriter } from '../dist/stats-writer.js';
 import type { PluginConfig } from '../dist/types.js';
 
 const BASE_DB_URL = process.env.DATABASE_URL
@@ -139,5 +143,77 @@ describe('Phase 19 — fresh schema contract repair', () => {
       matches.some((memory) => memory.content.includes('src/fresh-schema.ts')),
       'entity filter should match extracted_concepts metadata',
     );
+  });
+
+  it('writes dashboard stats against a fresh schema using metadata turn IDs', async () => {
+    const statsDir = `.tmp/fresh-schema-stats-${process.pid}`;
+    const statsPath = `${statsDir}/stats.json`;
+    mkdirSync(statsDir, { recursive: true });
+    try {
+      await memoryManager.createSession('fresh-stats-session', 'fresh-project');
+      await memoryManager.saveMemory({
+        sessionId: 'fresh-stats-session',
+        content: 'Saved with a metadata turn ID for fresh stats coverage.',
+        type: 'episodic',
+        source: 'manual',
+        metadata: { turnId: 'fresh-turn-1' },
+      });
+      await new StatsWriter(db.getPool(), statsPath).write();
+      assert.ok(existsSync(statsPath));
+      const stats = JSON.parse(readFileSync(statsPath, 'utf8')) as { recentMemories: Array<{ turnId: string | null }> };
+      assert.ok(stats.recentMemories.some((memory) => memory.turnId === 'fresh-turn-1'));
+    } finally {
+      rmSync(statsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hydrates an actual graph link through the causal-thread schema', async () => {
+    await memoryManager.createSession('fresh-causal-session', 'fresh-project');
+    const first = await memoryManager.saveMemory({
+      sessionId: 'fresh-causal-session',
+      content: 'Investigated src/causal-thread.ts before the repair.',
+      type: 'episodic',
+      source: 'manual',
+    });
+    const second = await memoryManager.saveMemory({
+      sessionId: 'fresh-causal-session',
+      content: 'Fixed src/causal-thread.ts after the investigation.',
+      type: 'episodic',
+      source: 'manual',
+    });
+    const result = await new CausalThreadHydrator(db.getPool()).hydrateCausalThread({
+      memoryId: second.id,
+      sessionId: 'fresh-causal-session',
+    });
+    assert.ok(result.thread.some((node) => node.memoryId === first.id));
+  });
+
+  it('includes active memories and promoted beliefs in a fresh-schema onboarding packet', async () => {
+    const projectId = 'fresh-onboarding-project';
+    await memoryManager.createSession('fresh-onboarding-session', projectId);
+    await memoryManager.saveMemory({
+      sessionId: 'fresh-onboarding-session',
+      content: 'Fresh onboarding memory must be visible.',
+      type: 'lesson',
+      importance: 0.9,
+      source: 'manual',
+    });
+    await db.getPool().query(
+      `INSERT INTO belief_knowledge_store
+       (belief_kind, subject, claim, stance, confidence, uncertainty, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      ['preference', 'verification', 'run real fresh-schema checks', 'supports', 0.9, 0.1, 'promoted'],
+    );
+    const packet = await buildOnboardingPacket({
+      projectId,
+      sessionId: 'fresh-onboarding-session',
+      workspacePath: process.cwd(),
+      pool: db.getPool(),
+      config: {} as PluginConfig,
+    });
+    const memories = packet.sections.find((section) => section.section === 'relevant-memories');
+    const beliefs = packet.sections.find((section) => section.section === 'promoted-beliefs');
+    assert.ok(memories?.content.includes('Fresh onboarding memory'));
+    assert.ok(beliefs?.content.includes('run real fresh-schema checks'));
   });
 });

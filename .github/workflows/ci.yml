@@ -6,13 +6,25 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    name: Test
+    name: Test (PostgreSQL ${{ matrix.postgres-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres-version: [14, 16]
+    env:
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/opencode_memory
+      CSM_DATABASE_URL: postgresql://postgres:test@localhost:5432/opencode_memory
+      CSM_PG_BIN: /usr/lib/postgresql/${{ matrix.postgres-version }}/bin
     services:
       postgres:
-        image: postgres:14-alpine
+        image: pgvector/pgvector:0.8.2-pg${{ matrix.postgres-version }}
         env:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: opencode_memory
@@ -35,21 +47,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install PostgreSQL client tools
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-${{ matrix.postgres-version }}
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Build
         run: npm run build
 
+      - name: Lint source
+        run: npm run lint:src
+
       - name: Run tests
         run: npm run test
-        env:
-          CSM_DATABASE_URL: postgresql://postgres:test@localhost:5432/opencode_memory
 
-      - name: Upload coverage
-        if: success()
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage/lcov.info
-          flags: unittests
-          name: codecov-umbrella
+      - name: Run isolated backup and restore drill
+        run: npm run drill:backup-restore

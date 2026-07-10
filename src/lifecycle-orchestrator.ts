@@ -121,15 +121,18 @@ export class LifecycleOrchestrator {
 
   private buildJobConfigs(): JobConfig[] {
     const config = this.ctx.config;
-    return [
-      {
+    const jobs: JobConfig[] = [];
+    if (config.selfModel?.enabled) {
+      jobs.push({
         name: 'self-model',
         intervalMs: config.selfModel?.updateIntervalMs ?? 60_000,
         run: async (ctx) => {
           await ctx.selfModel.updateAll();
         },
-      },
-      {
+      });
+    }
+    if (config.beliefKnowledge?.enabled) {
+      jobs.push({
         name: 'belief-consolidation',
         intervalMs: config.beliefKnowledge?.consolidationIntervalMs ?? 120_000,
         run: async (ctx) => {
@@ -139,16 +142,19 @@ export class LifecycleOrchestrator {
           }
           await ctx.beliefKnowledge.consolidate();
         },
-      },
-      {
+      });
+    }
+    if (config.livingState?.enabled) {
+      jobs.push({
         name: 'living-state',
         intervalMs: config.livingState?.updateIntervalMs ?? 60_000,
         run: async (ctx) => {
           if (!ctx.config.livingState?.enabled) return;
           await ctx.livingState.runPass();
         },
-      },
-    ];
+      });
+    }
+    return jobs;
   }
 
   getStatus(): Array<{

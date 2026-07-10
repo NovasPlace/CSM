@@ -1,14 +1,21 @@
-export interface PgLikeError {
-  code?: string;
-  message?: string;
+export class SchemaStepError extends Error {
+  readonly step: string;
+  readonly cause: unknown;
+
+  constructor(step: string, cause: unknown, rollbackError?: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const rollbackDetail = rollbackError === undefined
+      ? ''
+      : `; savepoint rollback failed: ${formatError(rollbackError)}`;
+    super(`Schema step failed (${step}): ${detail}${rollbackDetail}`);
+    this.name = 'SchemaStepError';
+    this.step = step;
+    this.cause = rollbackError === undefined
+      ? cause
+      : new AggregateError([cause, rollbackError], `Migration ${step} and rollback failed`);
+  }
 }
 
-export function isOwnershipLimitedSchemaError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const pgError = error as PgLikeError;
-  if (pgError.code !== '42501') return false;
-  const message = (pgError.message ?? '').toLowerCase();
-  return message.includes('must be owner of table')
-    || message.includes('must be owner of relation')
-    || message.includes('must be owner of index');
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

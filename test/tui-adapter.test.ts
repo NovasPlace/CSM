@@ -223,4 +223,24 @@ describe("tui adapter", () => {
     assert.ok(calls.includes("command"), "command registered");
     assert.ok(calls.includes("lifecycle"), "lifecycle registered");
   });
+
+  it("does not poll PostgreSQL when configured for SQLite", async () => {
+    const previous = process.env.CSM_DATABASE_PROVIDER;
+    process.env.CSM_DATABASE_PROVIDER = "sqlite";
+    let written: Record<string, unknown> | null = null;
+    try {
+      const imported = await import(`../dist/tui.js?sqlite-${Date.now()}`);
+      const mockApi = createApi({
+        kv: {
+          get: (_key: string, fallback: unknown) => fallback,
+          set: (_key: string, value: Record<string, unknown>) => { written = value; },
+        },
+      });
+      await imported.default.tui(mockApi as any, undefined, {} as any);
+      assert.match(String(written?.providerStatus), /SQLite core-memory mode/);
+    } finally {
+      if (previous === undefined) delete process.env.CSM_DATABASE_PROVIDER;
+      else process.env.CSM_DATABASE_PROVIDER = previous;
+    }
+  });
 });

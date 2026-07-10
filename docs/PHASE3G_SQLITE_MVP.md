@@ -30,6 +30,7 @@ When `CSM_DATABASE_PROVIDER=sqlite`, the `CSM_DATABASE_URL` env var is ignored e
 - **Recall telemetry**: read/write `memory_recall_events`
 - **Quality scores**: read/write `memory_quality_scores`
 - **Memory events**: write-only event log
+- **Memory graph**: extracted-entity links and related-memory lookup
 - **Embeddings**: stored in TEXT column (for PG compatibility), but unused for search
 
 All CRUD operations, list queries, and text-based search produce identical results to PostgreSQL for the same data (verified by 26 shared contract tests).
@@ -60,6 +61,7 @@ The degradation is **silent and safe** — no errors or crashes. Search results 
   - `csm_memory_prune` (uses interval/date arithmetic — not tested on SQLite)
 - **Data migration**: No tool exists to migrate a PG database to SQLite or vice versa.
 - **Interval-heavy analytics**: `EXTRACT(EPOCH ...)` / `age()` used in governance queries are PG-specific. SQLite uses `julianday()` equivalents but those code paths are not converted.
+- **Advanced runtime services**: context briefs, checkpoints, work journal, self-continuity, living state, re-entry, compaction persistence, context cache, stats export, and their dependent tools are capability-gated in SQLite mode. They require PostgreSQL schema/query support and are not silently started.
 
 ---
 

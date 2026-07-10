@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#58a6ff"/>
+      <stop offset="100%" stop-color="#bc8cff"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3fb950"/>
+      <stop offset="100%" stop-color="#56d364"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d29922"/>
+      <stop offset="100%" stop-color="#e3b341"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8957e5"/>
+      <stop offset="100%" stop-color="#bc8cff"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f85149"/>
+      <stop offset="100%" stop-color="#ff7b72"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="800" fill="url(#bg)"/>
+
+  <!-- Grid pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#21262d" stroke-width="0.5"/>
+  </pattern>
+  <rect width="1200" height="800" fill="url(#grid)" opacity="0.5"/>
+
+  <!-- Title -->
+  <text x="600" y="55" text-anchor="middle" font-size="32" font-weight="700" fill="url(#accent)" filter="url(#glow)">CSM — Cross-Session Memory</text>
+  <text x="600" y="80" text-anchor="middle" font-size="14" fill="#8b949e">Your AI coding assistant never forgets.</text>
+
+  <!-- ====== TOP: USER FLOW ====== -->
+  <text x="600" y="115" text-anchor="middle" font-size="11" fill="#484f58" letter-spacing="3">SESSION LIFECYCLE</text>
+
+  <!-- User icon -->
+  <circle cx="80" cy="160" r="22" fill="#21262d" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="80" y="165" text-anchor="middle" font-size="18">&#x1f464;</text>
+  <text x="80" y="195" text-anchor="middle" font-size="10" fill="#8b949e">User</text>
+
+  <!-- Arrow 1 -->
+  <line x1="110" y1="160" x2="190" y2="160" stroke="#30363d" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#58a6ff"/></marker></defs>
+
+  <!-- Session Start -->
+  <rect x="200" y="130" width="160" height="60" rx="8" fill="#21262d" stroke="#58a6ff" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="280" y="152" text-anchor="middle" font-size="11" font-weight="600" fill="#58a6ff">SESSION START</text>
+  <text x="280" y="170" text-anchor="middle" font-size="9" fill="#8b949e">New conversation begins</text>
+
+  <!-- Arrow 2 -->
+  <line x1="368" y1="160" x2="430" y2="160" stroke="#30363d" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Onboarding + Re-Entry -->
+  <rect x="440" y="118" width="200" height="36" rx="6" fill="#21262d" stroke="url(#green)" stroke-width="1.5"/>
+  <text x="540" y="141" text-anchor="middle" font-size="11" font-weight="600" fill="#3fb950">AGENT ONBOARDING</text>
+  <text x="540" y="153" text-anchor="middle" font-size="8" fill="#8b949e">Identity + Project Continuity</text>
+
+  <rect x="440" y="158" width="200" height="36" rx="6" fill="#21262d" stroke="url(#green)" stroke-width="1.5"/>
+  <text x="540" y="181" text-anchor="middle" font-size="11" font-weight="600" fill="#3fb950">RE-ENTRY CONTEXT</text>
+  <text x="540" y="193" text-anchor="middle" font-size="8" fill="#8b949e">8-Layer Context Block</text>
+
+  <!-- Arrow 3 -->
+  <line x1="648" y1="160" x2="710" y2="160" stroke="#30363d" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Agent works -->
+  <rect x="720" y="130" width="140" height="60" rx="8" fill="#21262d" stroke="url(#accent)" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="790" y="152" text-anchor="middle" font-size="11" font-weight="600" fill="#58a6ff">AGENT WORKS</text>
+  <text x="790" y="170" text-anchor="middle" font-size="9" fill="#8b949e">Tools, edits, tests</text>
+
+  <!-- Arrow 4 -->
+  <line x1="868" y1="160" x2="930" y2="160" stroke="#30363d" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Session End -->
+  <rect x="940" y="130" width="160" height="60" rx="8" fill="#21262d" stroke="#f85149" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1020" y="152" text-anchor="middle" font-size="11" font-weight="600" fill="#f85149">SESSION END</text>
+  <text x="1020" y="170" text-anchor="middle" font-size="9" fill="#8b949e">Memories persisted</text>
+
+  <!-- ====== MIDDLE: THE ENGINE ====== -->
+  <text x="600" y="240" text-anchor="middle" font-size="11" fill="#484f58" letter-spacing="3">CAPTURE &#8594; COMPRESS &#8594; OBSERVE &#8594; ADVISE</text>
+
+  <!-- Capture layer -->
+  <rect x="60" y="260" width="220" height="130" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <text x="170" y="282" text-anchor="middle" font-size="12" font-weight="600" fill="#f0883e">CAPTURE</text>
+  <text x="80" y="302" font-size="9" fill="#8b949e">&#8226; Tool calls (edit, bash, read)</text>
+  <text x="80" y="318" font-size="9" fill="#8b949e">&#8226; Errors and exit codes</text>
+  <text x="80" y="334" font-size="9" fill="#8b949e">&#8226; Decisions and milestones</text>
+  <text x="80" y="350" font-size="9" fill="#8b949e">&#8226; Session start/end events</text>
+  <text x="80" y="366" font-size="9" fill="#8b949e">&#8226; Memory extractions</text>
+  <text x="80" y="382" font-size="8" fill="#484f58">Hooks: tool.execute, chat.message</text>
+
+  <!-- Compress layer -->
+  <rect x="300" y="260" width="220" height="130" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <text x="410" y="282" text-anchor="middle" font-size="12" font-weight="600" fill="#d29922">COMPRESS</text>
+  <text x="320" y="302" font-size="9" fill="#8b949e">&#8226; Distill tool-call groups</text>
+  <text x="320" y="318" font-size="9" fill="#8b949e">&#8226; Old&#8594;New fix descriptions</text>
+  <text x="320" y="334" font-size="9" fill="#8b949e">&#8226; Token budget enforcement</text>
+  <text x="320" y="350" font-size="9" fill="#8b949e">&#8226; 90%+ compaction rate</text>
+  <text x="320" y="366" font-size="9" fill="#8b949e">&#8226; Structured summaries</text>
+  <text x="320" y="382" font-size="8" fill="#484f58">Module: tool-distiller.ts</text>
+
+  <!-- Observe layer -->
+  <rect x="540" y="260" width="220" height="130" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <text x="650" y="282" text-anchor="middle" font-size="12" font-weight="600" fill="#8957e5">OBSERVE</text>
+  <text x="560" y="302" font-size="9" fill="#8b949e">&#8226; Experience packets</text>
+  <text x="560" y="318" font-size="9" fill="#8b949e">&#8226; Self-model (capability scores)</text>
+  <text x="560" y="334" font-size="9" fill="#8b949e">&#8226; Belief pattern scanner</text>
+  <text x="560" y="350" font-size="9" fill="#8b949e">&#8226; Internal state derivation</text>
+  <text x="560" y="366" font-size="9" fill="#8b949e">&#8226; Frustration/energy/emotion</text>
+  <text x="560" y="382" font-size="8" fill="#484f58">Module: belief-knowledge-store.ts</text>
+
+  <!-- Advise layer -->
+  <rect x="780" y="260" width="220" height="130" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <text x="890" y="282" text-anchor="middle" font-size="12" font-weight="600" fill="#56d364">ADVISE</text>
+  <text x="800" y="302" font-size="9" fill="#8b949e">&#8226; Advisory context brief</text>
+  <text x="800" y="318" font-size="9" fill="#8b949e">&#8226; Promoted beliefs</text>
+  <text x="800" y="334" font-size="9" fill="#8b949e">&#8226; "Here's what I know"</text>
+  <text x="800" y="350" font-size="9" fill="#8b949e">&#8226; "Here's what I'm unsure about"</text>
+  <text x="800" y="366" font-size="9" fill="#8b949e">&#8226; Safety: untrusted, preview-only</text>
+  <text x="800" y="382" font-size="8" fill="#484f58">Module: living-state-advisor.ts</text>
+
+  <!-- Arrows between layers -->
+  <line x1="285" y1="325" x2="295" y2="325" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="525" y1="325" x2="535" y2="325" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="765" y1="325" x2="775" y2="325" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- ====== CENTER: MEMORY STORE ====== -->
+  <rect x="300" y="420" width="600" height="100" rx="12" fill="#0d1117" stroke="url(#accent)" stroke-width="2" filter="url(#glow)"/>
+  <text x="600" y="448" text-anchor="middle" font-size="16" font-weight="700" fill="url(#accent)">MEMORY STORE</text>
+
+  <text x="340" y="472" font-size="10" fill="#58a6ff">56,000+ memories</text>
+  <text x="340" y="488" font-size="10" fill="#58a6ff">84,000+ recall events</text>
+  <text x="340" y="504" font-size="10" fill="#58a6ff">31,000+ graph links</text>
+
+  <text x="570" y="472" font-size="10" fill="#bc8cff">24 database tables</text>
+  <text x="570" y="488" font-size="10" fill="#bc8cff">2B+ tokens compacted</text>
+  <text x="570" y="504" font-size="10" fill="#bc8cff">7,300+ archived</text>
+
+  <text x="790" y="472" font-size="10" fill="#3fb950">PostgreSQL + pgvector</text>
+  <text x="790" y="488" font-size="10" fill="#3fb950">SQLite adapter</text>
+  <text x="790" y="504" font-size="10" fill="#3fb950">Hybrid search</text>
+
+  <!-- Arrows to/from memory store -->
+  <line x1="410" y1="395" x2="410" y2="415" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="600" y1="395" x2="600" y2="415" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="790" y1="395" x2="790" y2="415" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- ====== BOTTOM: GOVERNANCE + TOOLS ====== -->
+  <text x="600" y="560" text-anchor="middle" font-size="11" fill="#484f58" letter-spacing="3">33 TOOLS &#8226; 918 TESTS &#8226; 7 WARNINGS</text>
+
+  <!-- Governance tools -->
+  <rect x="60" y="580" width="210" height="90" rx="8" fill="#21262d" stroke="#f85149" stroke-width="1"/>
+  <text x="165" y="600" text-anchor="middle" font-size="11" font-weight="600" fill="#f85149">GOVERNANCE</text>
+  <text x="80" y="618" font-size="8" fill="#8b949e">dedup_detect, merge,</text>
+  <text x="80" y="632" font-size="8" fill="#8b949e">candidate_generate,</text>
+  <text x="80" y="646" font-size="8" fill="#8b949e">governance_report,</text>
+  <text x="80" y="660" font-size="8" fill="#8b949e">archive_candidate_report</text>
+
+  <!-- Belief tools -->
+  <rect x="290" y="580" width="210" height="90" rx="8" fill="#21262d" stroke="#d29922" stroke-width="1"/>
+  <text x="395" y="600" text-anchor="middle" font-size="11" font-weight="600" fill="#d29922">BELIEFS</text>
+  <text x="310" y="618" font-size="8" fill="#8b949e">belief_scan,</text>
+  <text x="310" y="632" font-size="8" fill="#8b949e">belief_promote,</text>
+  <text x="310" y="646" font-size="8" fill="#8b949e">belief_knowledge,</text>
+  <text x="310" y="660" font-size="8" fill="#8b949e">belief_promotion_scan</text>
+
+  <!-- Living State tools -->
+  <rect x="520" y="580" width="210" height="90" rx="8" fill="#21262d" stroke="url(#purple)" stroke-width="1"/>
+  <text x="625" y="600" text-anchor="middle" font-size="11" font-weight="600" fill="#bc8cff">LIVING STATE</text>
+  <text x="540" y="618" font-size="8" fill="#8b949e">self_model,</text>
+  <text x="540" y="632" font-size="8" fill="#8b949e">living_state_preview,</text>
+  <text x="540" y="646" font-size="8" fill="#8b949e">living_state_debug,</text>
+  <text x="540" y="660" font-size="8" fill="#8b949e">packets</text>
+
+  <!-- Continuity tools -->
+  <rect x="750" y="580" width="210" height="90" rx="8" fill="#21262d" stroke="url(#green)" stroke-width="1"/>
+  <text x="855" y="600" text-anchor="middle" font-size="11" font-weight="600" fill="#3fb950">CONTINUITY</text>
+  <text x="770" y="618" font-size="8" fill="#8b949e">onboard_agent,</text>
+  <text x="770" y="632" font-size="8" fill="#8b949e">reentry_preview,</text>
+  <text x="770" y="646" font-size="8" fill="#8b949e">memory_context,</text>
+  <text x="770" y="660" font-size="8" fill="#8b949e">continuity_report</text>
+
+  <!-- Diagnostics -->
+  <rect x="980" y="580" width="160" height="90" rx="8" fill="#21262d" stroke="#484f58" stroke-width="1"/>
+  <text x="1060" y="600" text-anchor="middle" font-size="11" font-weight="600" fill="#8b949e">DIAGNOSTICS</text>
+  <text x="1000" y="618" font-size="8" fill="#8b949e">runtime_status,</text>
+  <text x="1000" y="632" font-size="8" fill="#8b949e">compaction_audit,</text>
+  <text x="1000" y="646" font-size="8" fill="#8b949e">recall_quality,</text>
+  <text x="1000" y="660" font-size="8" fill="#8b949e">memory_distill</text>
+
+  <!-- ====== SAFETY GATES (bottom) ====== -->
+  <rect x="60" y="700" width="1080" height="50" rx="8" fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+  <text x="600" y="720" text-anchor="middle" font-size="10" font-weight="600" fill="#484f58">SAFETY GATES</text>
+  <text x="600" y="738" text-anchor="middle" font-size="9" fill="#8b949e">Confidence thresholds &#8226; Dedup checks &#8226; Contradiction detection &#8226; Diminishing returns &#8226; Junk filtering &#8226; Approval required for destructive actions</text>
+
+  <!-- Version badge -->
+  <rect x="1060" y="10" width="130" height="28" rx="14" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+  <text x="1125" y="29" text-anchor="middle" font-size="10" fill="#8b949e">Phase 9A-Tune &#8226; MIT</text>
+</svg>
