@@ -182,6 +182,23 @@ describe('Redactor — paths', () => {
     assert.equal(result.text, input);
     assert.equal(result.audit.byCategory.path, 0);
   });
+
+  it('normalizes against the working directory when no workspaceRoot is configured', () => {
+    // Regression: DEFAULT_REDACTOR_CONFIG sets path: 'normalize' but supplies no
+    // workspaceRoot, so normalizePath() returned [REDACTED_PATH] for every path and
+    // 'normalize' silently behaved as 'redact'.
+    const r = new Redactor();
+    const result = r.redact(`Edited ${process.cwd()}/src/foo.ts`);
+    assert.ok(result.text.includes('[WORKSPACE]/src/foo.ts'), `expected [WORKSPACE]/src/foo.ts in: ${result.text}`);
+    assert.ok(!result.text.includes('[REDACTED_PATH]'));
+  });
+
+  it('still redacts paths outside the working directory when no workspaceRoot is configured', () => {
+    const r = new Redactor();
+    const result = r.redact('Config at /home/someone-else/secrets/.env');
+    assert.ok(result.text.includes('[REDACTED_PATH]'));
+    assert.ok(!result.text.includes('someone-else'));
+  });
 });
 
 describe('Redactor — audit metadata', () => {
