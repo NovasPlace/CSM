@@ -116,7 +116,13 @@ export class Redactor {
     if (config?.categories) {
       this.config.categories = { ...DEFAULT_REDACTOR_CONFIG.categories, ...config.categories };
     }
-    this.workspaceRoot = this.config.workspaceRoot ?? null;
+    // `path: 'normalize'` is meaningless without a root: normalizePath() falls straight
+    // through to the [REDACTED_PATH] marker for EVERY path when workspaceRoot is unset,
+    // silently turning the default 'normalize' mode into 'redact'. DEFAULT_REDACTOR_CONFIG
+    // ships 'normalize' but no default root, so that is what every caller which never sets
+    // one has been getting. Fall back to the process working directory so the documented
+    // behaviour holds out of the box. Paths outside the root are still redacted, as intended.
+    this.workspaceRoot = this.config.workspaceRoot || process.cwd();
   }
 
   /**
