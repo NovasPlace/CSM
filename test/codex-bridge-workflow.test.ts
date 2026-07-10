@@ -127,7 +127,8 @@ describe('Codex bridge workflow tools', () => {
     assert.ok(resumed.lessons[0]?.content.includes('raw command output'));
     assert.equal(resumed.workJournal?.sourceSessionId, 'prior-session');
     assert.match(resumed.workJournal?.nextStepInferred ?? '', /Fix error|Missing direct provenance/);
-    assert.equal(resumed.provenance.governanceEligibleCount >= 1, true);
+    assert.equal(resumed.provenance.governanceEligibleCount, 0);
+    assert.equal(resumed.provenance.contextOnlyCount >= 1, true);
     assert.match(resumed.sessionState?.activeGoal?.description ?? '', /richer continuity packet/);
     assert.match(resumed.recovery?.activeCheckpoint?.summaryExcerpt ?? '', /workflow recovery/);
     assert.match(resumed.recovery?.lastError?.summary ?? '', /latest cached error/);
