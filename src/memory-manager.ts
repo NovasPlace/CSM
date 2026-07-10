@@ -197,6 +197,14 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
 
       // Phase 5 — Apply per-type content quota (compress success/episodic, preserve errors/lessons)
       const quotaResult = applyTypeQuota(contentToProcess, options.type, options.emotion);
+      if (quotaResult.compressed) {
+        // The summary is what gets embedded and stored; the original never reaches the DB.
+        getLogger().warn(
+          `Memory of type '${options.type}' exceeded its quota and was COMPRESSED before embedding `
+          + `and storage: ${quotaResult.originalTokens} -> ${quotaResult.finalTokens} tokens. `
+          + `The original text is NOT recoverable. Use type='lesson' for long durable facts.`,
+        );
+      }
       contentToProcess = quotaResult.content;
       
       // Get project_id from session if available, or use directly-provided projectId
