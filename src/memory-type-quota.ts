@@ -4,11 +4,13 @@ import { estimateTokens } from './token-bucket-analyzer.js';
 export interface TypeQuotaConfig {
   maxTokens: number;
   preserveErrors: boolean;
+  /** Never compress this type, whatever its emotion or content. */
+  preserveAlways?: boolean;
   summaryPrefix: string;
 }
 
 const TYPE_QUOTAS: Record<MemoryType, TypeQuotaConfig> = {
-  lesson:           { maxTokens: 800, preserveErrors: true,  summaryPrefix: '[LESSON]' },
+  lesson:           { maxTokens: 800, preserveErrors: true,  preserveAlways: true, summaryPrefix: '[LESSON]' },
   self_continuity:  { maxTokens: 600, preserveErrors: true,  summaryPrefix: '[CONTINUITY]' },
   procedural:       { maxTokens: 500, preserveErrors: true,  summaryPrefix: '[PROC]' },
   preference:       { maxTokens: 400, preserveErrors: false, summaryPrefix: '[PREF]' },
@@ -30,6 +32,14 @@ export function applyTypeQuota(
   const originalTokens = estimateTokens(content);
 
   if (originalTokens <= quota.maxTokens) {
+    return { content, compressed: false, originalTokens, finalTokens: originalTokens };
+  }
+
+  // `lesson` is the designated home for long durable facts, so it is preserved whatever the
+  // emotion. Without this, a neutral lesson saved through save_memory is silently summarised,
+  // while identical content saved through memory_lesson survives only because that tool stamps
+  // emotion='frustration'. Same type, same content, different rows.
+  if (quota.preserveAlways) {
     return { content, compressed: false, originalTokens, finalTokens: originalTokens };
   }
 

@@ -49,4 +49,33 @@ describe('Memory Type Quota', () => {
     assert.equal(result.compressed, false);
     assert.equal(result.content, '');
   });
+
+  it('preserves a NEUTRAL lesson that is over quota and has no error markers', () => {
+    // Regression: `lesson` was only preserved when emotion === 'frustration' or the text
+    // happened to contain an error word. memory_lesson stamps 'frustration', so it always
+    // survived; save_memory({type:'lesson'}) defaults to 'neutral' and was silently summarised.
+    const long = `${'alpha beta gamma delta '.repeat(400)}`;
+    const result = applyTypeQuota(long, 'lesson');
+    assert.ok(result.originalTokens > 800, `fixture must exceed the 800-token lesson quota, got ${result.originalTokens}`);
+    assert.equal(result.compressed, false);
+    assert.equal(result.content, long);
+    assert.doesNotMatch(result.content, /\[LESSON\]|\[quota-compressed/);
+  });
+
+  it('preserves a neutral lesson identically to a frustration lesson', () => {
+    const long = `${'alpha beta gamma delta '.repeat(400)}`;
+    const neutral = applyTypeQuota(long, 'lesson', 'neutral');
+    const frustrated = applyTypeQuota(long, 'lesson', 'frustration');
+    assert.equal(neutral.content, frustrated.content);
+    assert.equal(neutral.compressed, frustrated.compressed);
+  });
+
+  it('still compresses other types over quota (preserveAlways is scoped to lesson)', () => {
+    const long = `${'alpha beta gamma delta '.repeat(400)}`;
+    for (const type of ['workspace', 'preference', 'episodic'] as const) {
+      const result = applyTypeQuota(long, type);
+      assert.equal(result.compressed, true, `${type} should still compress`);
+      assert.match(result.content, /\[quota-compressed/);
+    }
+  });
 });
