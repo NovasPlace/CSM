@@ -23,6 +23,7 @@ import { initializeMemorySchema } from './memory-schema.js';
 import { migrateProjectIsolation } from './project-isolation-schema.js';
 import { initializeSessionSchema } from './session-schema.js';
 import { initializeWorkLedgerSchema } from '../work-ledger-schema.js';
+import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
 
 export function buildPostgresMigrations(
   database: Database,
@@ -52,6 +53,7 @@ export function buildPostgresMigrations(
     migration('20260709-020-belief-knowledge', 'belief knowledge store', () => initializeBeliefKnowledgeSchema(pool)),
     migrationV2('20260710-021-work-ledger', 'run-level file change provenance and survival lineage', () => initializeWorkLedgerSchema(pool)),
     migrationV2('20260710-022-coordination-persistence', 'coordination state, audit events, and idempotency', () => initializeCoordinationPersistenceSchema(pool)),
+    migrationV2('20260711-023-capability-provenance-rewrite', 'rewrite capability promotion memories as immutable provenance snapshots', () => runCapabilityProvenanceMigration(pool).then(() => undefined)),
   ];
 }
 

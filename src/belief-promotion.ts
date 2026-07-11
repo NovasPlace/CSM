@@ -382,53 +382,6 @@ export class BeliefPromotionEngine {
     );
   }
 
-  async migrateCapabilityPromotionsToProvenance(): Promise<{ found: number; migrated: number }> {
-    const d = dialectFromPool(this.pool);
-    const metaExpr = jsonExtractText(d, 'metadata', 'candidate_type');
-    const sourceExpr = jsonExtractText(d, 'metadata', 'promotion_source');
-    const dedupExpr = jsonExtractText(d, 'metadata', 'dedup_key');
-    const now = nowFn(d);
-
-    const result = await this.pool.query(
-      `SELECT id, content, metadata FROM memories
-       WHERE ${metaExpr} = 'candidate_capability'
-         AND ${sourceExpr} = 'belief_promotion_engine'`,
-    );
-
-    let migrated = 0;
-    for (const rawRow of result.rows) {
-      const row = rawRow as { id: number; content: string; metadata: unknown };
-      const rowMeta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata as Record<string, unknown>;
-      const dedupKey = rowMeta?.dedup_key as string | undefined;
-      if (!dedupKey) continue;
-
-      const toolName = extractToolNameFromDedupKey(dedupKey);
-      const canonicalKey = toolName ? canonicalCapabilityKey(toolName) : null;
-      const reinforcedAt = rowMeta?.promoted_at as string | undefined;
-      const reinCount = rowMeta?.reinforcement_count as number | undefined;
-      const sessCount = rowMeta?.evidence_sessions as number | undefined;
-
-      const newContent = `[Capability provenance] Capability for ${canonicalKey ?? dedupKey} crossed promotion threshold at ${reinforcedAt ?? 'unknown'} based on ${reinCount ?? 0} reinforcements across ${sessCount ?? 0} sessions. [Snapshot — self-model holds current live state.]`;
-
-      const newMeta = {
-        ...rowMeta,
-        record_type: 'capability_provenance',
-        canonical_key: canonicalKey,
-      };
-
-      await this.pool.query(
-        `UPDATE memories
-         SET content = $1, metadata = $2, updated_at = ${now}
-         WHERE id = $3`,
-        [newContent, JSON.stringify(newMeta), row.id],
-      );
-      migrated++;
-    }
-
-    this.log.info(`Capability provenance migration: found ${result.rows.length}, migrated ${migrated}`);
-    return { found: result.rows.length, migrated };
-  }
-
   private emptyReport(dryRun: boolean): PromotionReport {
     return {
       dryRun,

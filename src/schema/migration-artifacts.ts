@@ -54,6 +54,9 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
   '20260711-002-sqlite-work-journal': [
     artifact('src/schema/sqlite/work-journal.ts', 'e7ec43457c0f8909dd50ee131effbe10111fc24d8881c72b86d04b42849d789e'),
   ],
+  '20260711-023-capability-provenance-rewrite': [
+    artifact('src/schema/capability-provenance-migration.ts', '5ba604adae9a9abd2ac2845941a3e9fbac005fdb8722922e7483df36c12aa3d7'),
+  ],
 };
 
 export function artifactsFor(migrationId: string): readonly string[] {

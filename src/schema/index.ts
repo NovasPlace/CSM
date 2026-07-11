@@ -14,6 +14,7 @@ import { buildPostgresMigrations } from './postgres-migrations.js';
 import { SchemaStepError } from './schema-errors.js';
 import { initializeMinimalSqliteSchema } from './sqlite/index.js';
 import { initializeSqliteWorkJournal } from './sqlite/work-journal.js';
+import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
 
 const SCHEMA_LOCK_KEY = 741_583_921;
 const SAVEPOINT = 'csm_schema_migration';
@@ -47,6 +48,12 @@ function buildMigrations(
       contract: 'csm-sqlite-v2:persistent agent work journal',
       implementation: artifactsFor('20260711-002-sqlite-work-journal'),
       run: () => initializeSqliteWorkJournal(pool),
+    },
+    {
+      id: '20260711-023-capability-provenance-rewrite',
+      contract: 'csm-sqlite-v2:rewrite capability promotion memories as immutable provenance snapshots',
+      implementation: artifactsFor('20260711-023-capability-provenance-rewrite'),
+      run: () => runCapabilityProvenanceMigration(pool).then(() => undefined),
     },
   ];
 }

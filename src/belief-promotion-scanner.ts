@@ -329,7 +329,14 @@ export class BeliefPromotionScanner {
           return null;
         }
 
-        return null;
+        return {
+          candidateType: 'candidate_capability',
+          dedupKey: `cap:${toolName}:ok`,
+          isReinforcement: true,
+          isContradiction: false,
+          reason: `${toolName} used successfully`,
+          sampleSignals: { toolName, outcome: 'ok' },
+        };
       }
 
       case 'error': {
