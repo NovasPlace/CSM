@@ -148,7 +148,7 @@ export class SubconsciousWatcher {
     const changes: FileChangeEvent[] = [];
     
      try {
-       await this.walkDirectory(dirPath, since, changes);
+       await this.walkDirectory(dirPath, since, changes, dirPath);
      } catch (error) {
        getLogger().error(`SubconsciousWatcher failed to walk ${dirPath}`, error instanceof Error ? error : undefined);
      }
@@ -162,7 +162,8 @@ export class SubconsciousWatcher {
   private async walkDirectory(
     dirPath: string,
     since: Date,
-    changes: FileChangeEvent[]
+    changes: FileChangeEvent[],
+    projectRoot: string
   ): Promise<void> {
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -188,10 +189,10 @@ export class SubconsciousWatcher {
           const dirLastChecked = this.watchedPaths.get(dirKey);
           if (!dirLastChecked) {
             // New directory detected - auto-generate docs
-            await this.handleNewDirectory(fullPath);
+            await this.handleNewDirectory(fullPath, projectRoot);
             this.watchedPaths.set(dirKey, new Date());
           }
-          await this.walkDirectory(fullPath, since, changes);
+          await this.walkDirectory(fullPath, since, changes, projectRoot);
         } else if (entry.isFile()) {
           // Skip build artifact files when filtering is enabled
           if (this.filterBuildArtifacts && this.isBuildArtifact(entry.name)) {
@@ -221,7 +222,7 @@ export class SubconsciousWatcher {
   /**
    * Handle newly detected directory - auto-generate documentation
    */
-  private async handleNewDirectory(dirPath: string): Promise<void> {
+  private async handleNewDirectory(dirPath: string, projectRoot: string): Promise<void> {
     try {
       // Skip structural directories and their subdirectories
       const dirName = path.basename(dirPath);
@@ -229,7 +230,7 @@ export class SubconsciousWatcher {
         return;
       }
       // Also skip if any ancestor path segment is a structural directory
-      const relative = path.relative(process.cwd(), dirPath);
+      const relative = path.relative(projectRoot, dirPath);
       const segments = relative.split(path.sep);
       if (segments.slice(0, -1).some(s => SubconsciousWatcher.STRUCTURAL_DIRS.has(s))) {
         return;
@@ -244,7 +245,15 @@ export class SubconsciousWatcher {
       } catch {
         // README doesn't exist, create it
       }
-      const relativePath = path.relative(process.cwd(), dirPath);
+      // Resolve relative to projectRoot, not process.cwd(), so that
+      // all auto-doc producers use one canonical project-relative identity.
+      const resolvedDir = path.resolve(projectRoot, dirPath);
+      const relativePath = path.relative(projectRoot, resolvedDir);
+      // Reject paths that escape the project boundary
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        getLogger().warn(`[SubconsciousWatcher] Directory ${dirPath} escapes project root ${projectRoot}, skipping`);
+        return;
+      }
       
       const readmeContent = `# ${dirName}
 
@@ -263,12 +272,15 @@ This README is maintained by the auto-docs system. When files are added to this 
 
       await fs.writeFile(readmePath, readmeContent, 'utf-8');
       
-      // Trigger auto-docs to capture this new file
-      await autoDocumentChange(readmePath, 'write', undefined, readmeContent);
+      // Trigger auto-docs to capture this new file.
+      // Pass the project-relative path so SYSTEM_MAP.md entries are consistent
+      // with normal file-change updates (which also use relative paths).
+      const relativeReadmePath = path.join(relativePath, 'README.md');
+      await autoDocumentChange(relativeReadmePath, 'write', undefined, readmeContent, projectRoot);
 
       getLogger().info(`Auto-generated README for new directory: ${relativePath}`);
     } catch (error) {
-      console.error(`[SubconsciousWatcher] Failed to auto-document new directory ${dirPath}:`, error);
+      getLogger().error(`[SubconsciousWatcher] Failed to auto-document new directory ${dirPath}`, error instanceof Error ? error : undefined);
     }
   }
 

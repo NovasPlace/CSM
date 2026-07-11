@@ -14,8 +14,8 @@ export async function handleSessionCreated(
   pluginCtx.syncActiveSession(session.id);
   pluginCtx.subconscious.watchPath(ctx.directory);
   const autoDocs = await import('./auto-docs.js');
-  autoDocs.resetInitializedProjects();
-  autoDocs.resetFlushedFlag();
+  autoDocs.invalidateProject(ctx.directory);
+  autoDocs.resetSessionFlushState(ctx.directory);
   if (ctx.worktree) pluginCtx.gitWatcher.watchRepo(ctx.worktree);
   if (pluginCtx.config.logSessionLifecycle) {
     await pluginCtx.memoryManager.saveMemory({

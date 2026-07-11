@@ -1,6 +1,7 @@
 import type { PluginInput } from '@opencode-ai/plugin';
 import type { PluginContext } from '../plugin-context.js';
 import { flushDocUpdates } from './auto-docs.js';
+import { clearAllFlushTimers } from './tool-execute-memory.js';
 import {
   persistExperiencePacket,
   persistFinalDistillation,
@@ -37,6 +38,9 @@ async function runDisposal(
   const logging = await import('../logger.js').then((module) => module.getLogger());
   const errors: Error[] = [];
   logging.info('Disposing...');
+  // Cancel all pending auto-docs timers FIRST, before any async work.
+  // A timer callback that fires mid-disposal would access a stale PluginContext.
+  clearAllFlushTimers();
   await capture(state, errors, 'final distillation', () => persistFinalDistillation(pluginCtx));
   await capture(state, errors, 'session snapshot', () => persistSessionSnapshot(pluginCtx));
   await capture(state, errors, 'work journal', () => persistWorkJournal(ctx, pluginCtx));
