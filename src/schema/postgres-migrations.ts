@@ -1,6 +1,7 @@
 import { initializeBeliefKnowledgeSchema } from '../belief-knowledge-schema.js';
 import { initializeCandidateSchema } from '../candidate-schema.js';
 import { initializeCheckpointSchema } from '../checkpoint-schema.js';
+import { initializeCoordinationPersistenceSchema } from '../coordination-persistence/schema.js';
 import { initializeContextCompilationSchema } from '../context-compilation-schema.js';
 import { initializeContextCacheSchema } from '../context-cache-schema.js';
 import { initializeRolloverSchema } from '../context-rollover-schema.js';
@@ -16,8 +17,8 @@ import { initializeTraceVaultSchema } from '../trace-vault-store.js';
 import type { DatabasePool } from '../types.js';
 import { initializeWorkJournalSchema } from '../work-journal-schema.js';
 import { initializeCoreSchema } from './core-schema.js';
-import { artifactsFor } from './migration-artifacts.js';
-import type { SchemaMigration } from './migration-ledger.js';
+import { artifactsFor, legacyArtifactsFor } from './migration-artifacts.js';
+import { migrationChecksum, type SchemaMigration } from './migration-ledger.js';
 import { initializeMemorySchema } from './memory-schema.js';
 import { migrateProjectIsolation } from './project-isolation-schema.js';
 import { initializeSessionSchema } from './session-schema.js';
@@ -50,6 +51,7 @@ export function buildPostgresMigrations(
     migration('20260709-019-self-model', 'self-model capabilities', () => initializeSelfModelSchema(pool)),
     migration('20260709-020-belief-knowledge', 'belief knowledge store', () => initializeBeliefKnowledgeSchema(pool)),
     migrationV2('20260710-021-work-ledger', 'run-level file change provenance and survival lineage', () => initializeWorkLedgerSchema(pool)),
+    migrationV2('20260710-022-coordination-persistence', 'coordination state, audit events, and idempotency', () => initializeCoordinationPersistenceSchema(pool)),
   ];
 }
 
@@ -59,12 +61,12 @@ function migration(
   run: () => Promise<void>,
   implementation: readonly string[] = artifactsFor(id),
 ): SchemaMigration {
-  return {
+  return withLegacyChecksum({
     id,
     contract: `csm-postgres-v1:${contract}`,
     implementation,
     run,
-  };
+  }, legacyArtifactsFor(id, implementation));
 }
 
 function vectorExtension(pool: DatabasePool): () => Promise<void> {
@@ -76,10 +78,20 @@ function migrationV2(
   contract: string,
   run: () => Promise<void>,
 ): SchemaMigration {
-  return {
+  return withLegacyChecksum({
     id,
     contract: `csm-postgres-v2:${contract}`,
     implementation: artifactsFor(id),
     run,
-  };
+  }, legacyArtifactsFor(id));
+}
+
+function withLegacyChecksum(
+  definition: SchemaMigration,
+  legacyImplementation: readonly string[],
+): SchemaMigration {
+  const legacy = { ...definition, implementation: legacyImplementation };
+  const legacyChecksum = migrationChecksum(legacy);
+  if (legacyChecksum === migrationChecksum(definition)) return definition;
+  return { ...definition, acceptedLegacyChecksums: [legacyChecksum] };
 }

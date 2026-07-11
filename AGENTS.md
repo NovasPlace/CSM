@@ -88,6 +88,7 @@
 ### Blocked
 - **`no-explicit-any` cleanup (~102 warnings)**: Typed-debt remains in checkpoint-store.ts (row mapper), agent-work-journal.ts, context-cache-runtime.ts, and other modules. Requires per-module typed DTOs and generic row mappers, not blanket replacement.
 - **`no-console` cleanup (~8 warnings)**: Remaining `eslint-disable-next-line no-console` annotations in auto-docs.ts, system-transform.ts, work-journal-inject.ts. Blocked by need for logger context support or structural refactors.
+- **Capability promotion (`candidate_capability` → promoted memory)**: 6 structural defects found during verification (2026-07-11, CSM #68554). Promotion creates a second immutable representation of info owned by the self-model. 5 capabilities already promoted (#68510-#68514: edit/write/read/bash/grep) — do not delete without migration plan. Further promotion BLOCKED until closure criteria met. See "Capability Promotion Closure Criteria" below.
 
 ### Pre-existing Test Debt
 - ~~**1 failing test**: `test/backfill-recall-telemetry.test.ts` line 209 — "protects old recalled memories while still surfacing old unrecalled ones" fails because prune-protection by recall count is not working for PG. Present since Phase 3B (`ae5e309`). Not caused by Phase 3D changes. Root cause: `pruneMemories`/`loadPruneRows` recall_count LATERAL join returns 0 even when `memory_recall_events` rows exist. Needs investigation in prune-scorer logic.~~
@@ -105,12 +106,15 @@
 - SQLite empty-result security: `LOWER(col) LIKE LOWER($N)` replaces `col ILIKE $N`
 - SQLite vector search: degraded to text search (no `<=>`/pgvector equivalent)
 - PostgreSQL `CREATE UNIQUE INDEX IF NOT EXISTS` does not upgrade existing non-unique indexes — must DROP INDEX IF EXISTS first (CSM #55513)
+- **Capability ownership boundary (2026-07-11, CSM #68554)**: Self-model = authoritative live capability state. Belief knowledge = revisable claims/preferences/worldviews. Memories = evidence/provenance/lessons/snapshots — not competing live truth. `candidate_capability` should produce provenance records ("crossed threshold at time T"), not "succeeds reliably" assertions.
+- **Promotion must not double-count evidence**: experience packets already update self-model; promotion should change status/provenance/eligibility only, not confidence.
+- **`isJunkBelief()` over-broad filter**: `subject.startsWith('tool:')` discards both success AND failure tool beliefs. Should inspect polarity/specificity, not blanket-reject `tool:` subjects.
 
 ## Next Steps
 1. Phase L4+: continue typed-DTO pass on `checkpoint-store.ts`, `agent-work-journal.ts`, `context-cache-runtime.ts`
 2. Fix remaining `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
 3. Remaining L3 cleanup is done — consider L4 planning
-4. Phase 4G+: belief promotion pipeline (auto-promote high-confidence candidates to memories)
+4. ~~Phase 4G+: belief promotion pipeline (auto-promote high-confidence candidates to memories)~~ — BLOCKED, see Capability Promotion Closure Criteria below
 
 ## Critical Context
 - Windows/PowerShell environment: `grep`→`rg`, `wc`→manual count, `&&`/`||`→PowerShell syntax
@@ -158,3 +162,25 @@
 - Goal: reduce `no-explicit-any` warnings module by module
 - Rule: no broad `any` replacement; each PR must pass typecheck/build/tests/lint
 - Approach: (a) typed row-mapping DTOs for DB query results, (b) `eslint-disable-next-line` with documented rationale for interface-level `any`, (c) targeted `as unknown as T` only where provably safe
+
+## Capability Promotion Closure Criteria
+Before resuming `candidate_capability` promotion, prove all seven:
+
+1. **Failure lowers self-model without second source of truth** — a capability failure packet must decrement self-model confidence without creating a contradictory promoted memory entry.
+2. **Failure packets survive filtering** — `isJunkBelief()` must not discard `tool:X:fail` subjects. Fix: inspect polarity/specificity, not blanket-reject `tool:` subjects.
+3. **Success and failure reconcile under one canonical proposition** — opposing claims (`tool:edit:succeeds` vs `tool:edit:fails`) must attach positive/negative evidence to a single record keyed by canonical proposition (e.g. `tool:edit:reliability`), not coexist as independent entries.
+4. **Historical promotion records are snapshots, not current assertions** — promoted records must say "crossed threshold at time T based on N reinforcements" not "succeeds reliably."
+5. **Promotion does not double-count evidence** — promotion must not update self-model confidence; packets already do that. Promotion changes status/provenance/eligibility only.
+6. **Repeated promotion blocked by structural key** — use `dedup_key` with DB constraint, not `LOWER(content) LIKE` fuzzy matching on first 100 chars.
+7. **Confidence can recover after later successes** — self-model confidence must rise after failures when subsequent successes arrive, not just degrade monotonically.
+
+### Existing Promoted Capabilities (do not delete without migration)
+| Memory ID | Capability | Candidate ID | Confidence | Reinforcements |
+|---|---|---|---|---|
+| #68510 | edit | 20977 | 0.80 | 7 |
+| #68511 | write | — | 0.70 | 6 |
+| #68512 | read | — | 0.70 | 6 |
+| #68513 | bash | — | 0.70 | 6 |
+| #68514 | grep | — | 0.70 | 6 |
+
+These are the wrong shape under the new ownership model (they assert current truth rather than historical snapshots). A migration should reframe them as provenance records or supersede them once the new promotion path is built.

@@ -7,6 +7,7 @@ import {
   ensureMigrationLedger,
   recordMigration,
 } from '../src/schema/migration-ledger.js';
+import { legacyArtifactsFor } from '../src/schema/migration-artifacts.js';
 import { buildPostgresMigrations } from '../src/schema/postgres-migrations.js';
 import type { DatabasePool } from '../src/types.js';
 
@@ -42,7 +43,11 @@ before(async () => {
     for (const migration of buildPostgresMigrations(database, target).slice(0, 20)) {
       const startedAt = performance.now();
       await migration.run();
-      await recordMigration(target, migration, 'postgres', performance.now() - startedAt);
+      const historical = {
+        ...migration,
+        implementation: legacyArtifactsFor(migration.id, migration.implementation),
+      };
+      await recordMigration(target, historical, 'postgres', performance.now() - startedAt);
     }
     await pool.query('COMMIT');
   } catch (error) {
@@ -64,7 +69,7 @@ after(async () => {
   if (errors.length) throw new AggregateError(errors, 'Work Ledger upgrade cleanup failed');
 });
 
-it('upgrades csm-postgres-v1 to v2 with only migration 21', async () => {
+it('upgrades csm-postgres-v1 through migrations 21 and 22', async () => {
   const beforePool = new Pool({ connectionString: config.databaseUrl });
   const before = await beforePool.query(
     `SELECT COUNT(*)::int AS count,
@@ -78,13 +83,19 @@ it('upgrades csm-postgres-v1 to v2 with only migration 21', async () => {
   await current.connect();
   const afterResult = await current.getPool().query(
     `SELECT COUNT(*)::int AS count,
-            to_regclass('public.work_ledger_changes') AS ledger_table
+            to_regclass('public.work_ledger_changes') AS ledger_table,
+            to_regclass('public.coordination_events') AS coordination_table
      FROM csm_schema_migrations`,
   );
-  assert.equal(afterResult.rows[0].count, 21);
+  assert.equal(afterResult.rows[0].count, 22);
   assert.equal(afterResult.rows[0].ledger_table, 'work_ledger_changes');
+  assert.equal(afterResult.rows[0].coordination_table, 'coordination_events');
   const migration = await current.getPool().query(
-    'SELECT migration_id FROM csm_schema_migrations ORDER BY applied_at DESC LIMIT 1',
+    `SELECT migration_id FROM csm_schema_migrations
+     WHERE migration_id IN ('20260710-021-work-ledger', '20260710-022-coordination-persistence')
+     ORDER BY migration_id`,
   );
-  assert.equal(migration.rows[0].migration_id, '20260710-021-work-ledger');
+  assert.deepEqual(migration.rows.map((row) => row.migration_id), [
+    '20260710-021-work-ledger', '20260710-022-coordination-persistence',
+  ]);
 });

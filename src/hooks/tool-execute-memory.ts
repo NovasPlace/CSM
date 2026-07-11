@@ -2,6 +2,7 @@ import type { PluginContext } from '../plugin-context.js';
 import { flushDocUpdates, getPendingUpdates } from './auto-docs.js';
 import { packageCommandEvidence, packageToolEvidence } from './tool-execute-budget.js';
 import { ToolExecuteRuntimeDedup } from '../tool-execute-runtime-dedup.js';
+import { getLogger } from '../logger.js';
 
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const FLUSH_DELAY_MS = 2000;
@@ -15,7 +16,9 @@ export function scheduleDocFlushLocal(ctx: PluginContext): void {
     try {
       await flushDocUpdates(ctx, ctx.directory);
     } catch (err) {
-      console.error('[CrossSessionMemory] Auto-doc flush error:', err);
+      getLogger().error('Auto-doc background flush failed', toError(err), {
+        projectId: ctx.directory,
+      });
     }
   }, FLUSH_DELAY_MS);
 }
@@ -42,11 +45,18 @@ export async function autoDistill(ctx: PluginContext, sid: string): Promise<void
     groupCount: summary.groups.length,
     totalCallsSummarized: summary.totalCallsSummarized,
     compressedPreview: summary.compressed,
-  }).catch((_err: unknown) => {
-    /* non-critical */
+  }).catch((error: unknown) => {
+    getLogger().error('Experience packet background write failed', toError(error), {
+      projectId: ctx.directory,
+      sessionId: sid,
+    });
   });
 
   await ctx.refreshActiveContext(sid);
+}
+
+function toError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
 }
 
 function shouldLogTool(tool: string): boolean {

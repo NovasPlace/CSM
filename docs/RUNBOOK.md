@@ -75,6 +75,8 @@ ORDER BY migration_id;
 
 Startup rejects changed implementation checksums, migrations unknown to the running release, history copied from another provider, and every failed required migration including ownership failures. PostgreSQL applies pending migrations inside the advisory-locked schema transaction; SQLite applies its baseline inside `BEGIN IMMEDIATE`.
 
+Artifact verification is cross-platform: uniform CRLF text is canonicalized to LF before SHA-256 comparison, while mixed LF/CRLF or bare-CR text is rejected. Unrecognized and binary artifacts are hashed byte-for-byte. A `sourceSha256` pin freezes an evolved current source and is included in the checksum recorded by fresh databases. The manifest separately derives and accepts the original artifact-set checksum for historical PostgreSQL ledgers; no arbitrary checksum is accepted.
+
 ### Work Ledger lineage
 
 Use `csm_work_ledger_surviving` to answer which changes from a run still survive. The query performs a live filesystem verification before returning active or partially-superseded rows.

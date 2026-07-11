@@ -853,6 +853,12 @@ export interface LivingStateConfig {
   updateIntervalMs: number;
 }
 
+export const CAPABILITY_PROVENANCE_TAG = 'capability-provenance';
+
+export function canonicalCapabilityKey(toolName: string): string {
+  return `tool:${toolName}:reliability`;
+}
+
 export const DEFAULT_PRUNE_CONFIG: PruneConfig = {
   dryRun: true,
   maxAgeDays: 90,

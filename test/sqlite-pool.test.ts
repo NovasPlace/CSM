@@ -2,7 +2,7 @@ import { it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { createSqlitePool } from '../src/db/sqlite-pool.js';
+import { createSqlitePool, initializeSqliteConnection } from '../src/db/sqlite-pool.js';
 
 const TMP_DIR = join(process.cwd(), '.tmp');
 const DB_PATH = join(TMP_DIR, 'test-sqlite-pool.db');
@@ -142,4 +142,46 @@ const DB_PATH = join(TMP_DIR, 'test-sqlite-pool.db');
     const result = await pool.query('SELECT val FROM t WHERE id = $1::bigint', [1]);
     assert.equal(result.rows.length, 1);
     await pool.end();
+  });
+
+  it('makes end idempotent and rejects post-close operations explicitly', async () => {
+    const pool = await createSqlitePool(':memory:');
+    await Promise.all([pool.end(), pool.end(), pool.end()]);
+    await assert.rejects(pool.query('SELECT 1'), /SQLite pool is closed/);
+    await assert.rejects(pool.connect(), /SQLite pool is closed/);
+  });
+
+  it('uses statement reader metadata for WITH, VALUES, and EXPLAIN forms', async () => {
+    const pool = await createSqlitePool(':memory:');
+    await pool.query('CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)');
+    await pool.query('INSERT INTO t (value) VALUES ($1)', ['before']);
+    const update = await pool.query(`WITH chosen AS (SELECT 1)
+      UPDATE t SET value = $1 WHERE id IN (SELECT * FROM chosen)`, ['after']);
+    assert.equal(update.rowCount, 1);
+    const values = await pool.query('VALUES ($1), ($2)', ['a', 'b']);
+    assert.equal(values.rows.length, 2);
+    const explain = await pool.query('EXPLAIN SELECT * FROM t');
+    assert.ok(explain.rows.length > 0);
+    await pool.end();
+  });
+
+  it('closes a partially initialized connection after a PRAGMA failure', () => {
+    const original = new Error('foreign_keys unavailable');
+    let closeCalls = 0;
+    let pragmaCalls = 0;
+    const connection = {
+      pragma: () => { pragmaCalls += 1; if (pragmaCalls === 2) throw original; },
+      close: () => { closeCalls += 1; },
+    };
+    assert.throws(() => initializeSqliteConnection(connection), (error) => error === original);
+    assert.equal(closeCalls, 1);
+  });
+
+  it('preserves the PRAGMA error when initialization cleanup also fails', () => {
+    const original = new Error('journal mode unavailable');
+    const connection = {
+      pragma: () => { throw original; },
+      close: () => { throw new Error('close failed'); },
+    };
+    assert.throws(() => initializeSqliteConnection(connection), (error) => error === original);
   });

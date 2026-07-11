@@ -10,13 +10,24 @@ export function createPostgresPool(
   runtime: DatabaseRuntimeConfig = DEFAULT_DATABASE_RUNTIME_CONFIG,
 ): Promise<DatabasePool> {
   const pool = new Pool(buildPostgresPoolConfig(databaseUrl, runtime));
+  let endPromise: Promise<void> | null = null;
+  let closed = false;
+  const requireOpen = (): void => {
+    if (closed) throw new Error('PostgreSQL pool is closed');
+  };
   const wrapped: DatabasePool = {
     async query(text: string, params?: unknown[]) {
+      requireOpen();
       const result = await pool.query(text, params as unknown[]);
       return { rows: result.rows as unknown[], rowCount: result.rowCount ?? null };
     },
     async connect() {
+      requireOpen();
       const client = await pool.connect();
+      if (closed) {
+        client.release();
+        throw new Error('PostgreSQL pool closed during client acquisition');
+      }
       return {
         async query(text: string, params?: unknown[]) {
           const result = await client.query(text, params as unknown[]);
@@ -28,7 +39,13 @@ export function createPostgresPool(
       };
     },
     async end() {
-      await pool.end();
+      if (endPromise) return endPromise;
+      closed = true;
+      endPromise = pool.end().catch((error) => {
+        endPromise = null;
+        throw error;
+      });
+      return endPromise;
     },
     getStats() {
       return {

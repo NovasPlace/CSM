@@ -7,6 +7,7 @@ export interface SchemaMigration {
   id: string;
   contract: string;
   implementation: readonly string[];
+  acceptedLegacyChecksums?: readonly string[];
   run: () => Promise<void>;
 }
 
@@ -120,7 +121,11 @@ function validateAppliedMigration(
   if (entry.provider !== provider) {
     throw new MigrationHistoryError(`Migration provider mismatch for ${entry.id}`);
   }
-  if (entry.checksum !== migrationChecksum(migration)) {
+  const accepted = new Set([
+    migrationChecksum(migration),
+    ...(migration.acceptedLegacyChecksums ?? []),
+  ]);
+  if (!accepted.has(entry.checksum)) {
     throw new MigrationHistoryError(`Migration checksum mismatch for ${entry.id}`);
   }
 }

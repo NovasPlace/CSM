@@ -13,6 +13,7 @@ import { artifactsFor } from './migration-artifacts.js';
 import { buildPostgresMigrations } from './postgres-migrations.js';
 import { SchemaStepError } from './schema-errors.js';
 import { initializeMinimalSqliteSchema } from './sqlite/index.js';
+import { initializeSqliteWorkJournal } from './sqlite/work-journal.js';
 
 const SCHEMA_LOCK_KEY = 741_583_921;
 const SAVEPOINT = 'csm_schema_migration';
@@ -34,12 +35,20 @@ function buildMigrations(
   provider: MigrationProvider,
 ): SchemaMigration[] {
   if (provider === 'postgres') return buildPostgresMigrations(database, pool);
-  return [{
-    id: '20260709-001-sqlite-baseline',
-    contract: 'csm-sqlite-v1:core memory, graph, recall, packets, self-model, and beliefs',
-    implementation: artifactsFor('20260709-001-sqlite-baseline'),
-    run: () => initializeMinimalSqliteSchema(pool),
-  }];
+  return [
+    {
+      id: '20260709-001-sqlite-baseline',
+      contract: 'csm-sqlite-v1:core memory, graph, recall, packets, self-model, and beliefs',
+      implementation: artifactsFor('20260709-001-sqlite-baseline'),
+      run: () => initializeMinimalSqliteSchema(pool),
+    },
+    {
+      id: '20260711-002-sqlite-work-journal',
+      contract: 'csm-sqlite-v2:persistent agent work journal',
+      implementation: artifactsFor('20260711-002-sqlite-work-journal'),
+      run: () => initializeSqliteWorkJournal(pool),
+    },
+  ];
 }
 
 async function migrateSchema(

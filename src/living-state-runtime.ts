@@ -263,7 +263,7 @@ export class LivingStateRuntime {
     if (!this.config.enabled) return null;
     try {
       const result = await this.pool.query(
-        'SELECT entry_type, internal_state, outcome FROM experience_packets ORDER BY created_at DESC LIMIT 1',
+        'SELECT entry_type, internal_state FROM experience_packets ORDER BY created_at DESC LIMIT 1',
       );
       const row = result.rows[0] as Record<string, unknown> | undefined;
       if (!row) return null;
@@ -274,7 +274,7 @@ export class LivingStateRuntime {
         entryType: String(row.entry_type ?? ''),
         dominantEmotion: String(rawState.dominantEmotion ?? 'neutral'),
         stance: String(rawState.stance ?? 'exploratory'),
-        outcome: row.outcome ? String(row.outcome) : null,
+        outcome: null,
       };
     } catch {
       return null;

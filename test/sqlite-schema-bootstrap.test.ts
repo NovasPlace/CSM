@@ -182,7 +182,7 @@ describe('Phase 3C — SQLite schema bootstrap', () => {
     await db.close();
   });
 
-  it('records and replays the SQLite baseline migration once', async () => {
+  it('records and replays the SQLite migration manifest once', async () => {
     const config = {
       databaseUrl: dbPath,
       databaseProvider: 'sqlite',
@@ -197,12 +197,42 @@ describe('Phase 3C — SQLite schema bootstrap', () => {
     const second = new Database(config);
     await second.connect();
     const result = await second.getPool().query(
-      'SELECT migration_id, checksum, provider FROM csm_schema_migrations',
+      `SELECT migration_id, checksum, provider
+       FROM csm_schema_migrations ORDER BY migration_id`,
     );
-    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows.length, 2);
     assert.equal(result.rows[0].migration_id, '20260709-001-sqlite-baseline');
-    assert.match(result.rows[0].checksum, /^[a-f0-9]{64}$/);
-    assert.equal(result.rows[0].provider, 'sqlite');
+    assert.equal(result.rows[1].migration_id, '20260711-002-sqlite-work-journal');
+    for (const row of result.rows) {
+      assert.match(row.checksum, /^[a-f0-9]{64}$/);
+      assert.equal(row.provider, 'sqlite');
+    }
     await second.close();
+  });
+
+  it('upgrades a baseline-only SQLite database with the work journal', async () => {
+    const config = {
+      databaseUrl: dbPath,
+      databaseProvider: 'sqlite',
+      sqlitePath: dbPath,
+      embeddingModel: 'nomic-embed-text',
+      embeddingApiUrl: 'http://localhost:11434',
+    } as PluginConfig;
+    const legacy = new Database(config);
+    await legacy.connect();
+    await legacy.getPool().query('DROP TABLE agent_work_journal');
+    await legacy.getPool().query(
+      'DELETE FROM csm_schema_migrations WHERE migration_id = $1',
+      ['20260711-002-sqlite-work-journal'],
+    );
+    await legacy.close();
+
+    const upgraded = new Database(config);
+    await upgraded.connect();
+    const table = await upgraded.getPool().query(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_work_journal'",
+    );
+    assert.equal(table.rows.length, 1);
+    await upgraded.close();
   });
 });

@@ -1,117 +1,82 @@
 import type { PluginInput } from '@opencode-ai/plugin';
 import type { PluginContext } from '../plugin-context.js';
-import { SelfContinuityGenerator } from '../self-continuity-generator.js';
 import { flushDocUpdates } from './auto-docs.js';
+import {
+  persistExperiencePacket,
+  persistFinalDistillation,
+  persistSelfContinuity,
+  persistSessionSnapshot,
+  persistWorkJournal,
+} from './dispose-persistence.js';
 
-export async function disposeAll(
+interface DisposalState {
+  completed: Set<string>;
+  promise: Promise<void> | null;
+  done: boolean;
+}
+
+const DISPOSALS = new WeakMap<object, DisposalState>();
+
+export function disposeAll(ctx: PluginInput, pluginCtx: PluginContext): Promise<void> {
+  const state = DISPOSALS.get(pluginCtx) ?? { completed: new Set(), promise: null, done: false };
+  DISPOSALS.set(pluginCtx, state);
+  if (state.done) return Promise.resolve();
+  if (state.promise) return state.promise;
+  state.promise = runDisposal(ctx, pluginCtx, state).then(
+    () => { state.promise = null; state.done = true; },
+    (error) => { state.promise = null; throw error; },
+  );
+  return state.promise;
+}
+
+async function runDisposal(
   ctx: PluginInput,
   pluginCtx: PluginContext,
+  state: DisposalState,
 ): Promise<void> {
-  const { config, database, memoryManager, toolDistiller, redactor,
-    contextRecall, subconscious, gitWatcher, workJournal, statsWriter,
-    state, directory } = pluginCtx;
-  const logging = await import('../logger.js').then(m => m.getLogger());
-
+  const logging = await import('../logger.js').then((module) => module.getLogger());
+  const errors: Error[] = [];
   logging.info('Disposing...');
-
-  if (config.distiller.enabled && state.currentSessionId) {
-    const summary = toolDistiller.distill();
-    if (summary.groups.length > 0) {
-      try {
-        const pool = database.getPool();
-        const redactedCompressed = redactor.redact(summary.compressed).text;
-        const redactedGroups = redactor.redact(JSON.stringify(summary.groups)).text;
-        await pool.query(
-          `INSERT INTO distilled_summaries (id, session_id, groups, compressed, total_calls_summarized)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (session_id, md5(compressed)) DO NOTHING`,
-          [
-            summary.id,
-            state.currentSessionId,
-            redactedGroups,
-            redactedCompressed,
-            summary.totalCallsSummarized,
-          ],
-        );
-      } catch (error) {
-        logging.error('Final distillation failed', error as Error);
-      }
-    }
+  await capture(state, errors, 'final distillation', () => persistFinalDistillation(pluginCtx));
+  await capture(state, errors, 'session snapshot', () => persistSessionSnapshot(pluginCtx));
+  await capture(state, errors, 'work journal', () => persistWorkJournal(ctx, pluginCtx));
+  await capture(state, errors, 'experience packet', () => persistExperiencePacket(pluginCtx));
+  await capture(state, errors, 'self continuity', () => persistSelfContinuity(pluginCtx));
+  await stopRuntimeServices(pluginCtx, state, errors);
+  await capture(state, errors, 'memory cleanup', () => pluginCtx.memoryManager.cleanup());
+  await capture(state, errors, 'stats flush', () => pluginCtx.statsWriter.stopAndFlush());
+  await capture(state, errors, 'work ledger', async () => pluginCtx.workLedger?.dispose());
+  await capture(state, errors, 'documentation flush', () => flushDocUpdates(pluginCtx, ctx.directory));
+  if (errors.length === 0) {
+    await capture(state, errors, 'database disconnect', () => pluginCtx.database.disconnect());
   }
-
-  if (state.currentSessionId && config.logSessionLifecycle) {
-    await memoryManager.saveMemory({
-      content: `Session ended after ${state.messageCount} messages. Final context snapshot.`,
-      type: 'episodic',
-      importance: 0.3,
-      source: 'auto',
-      tags: ['session-end', 'final-snapshot'],
-      metadata: { sessionId: state.currentSessionId, messageCount: state.messageCount },
-      sessionId: state.currentSessionId,
-    });
-  }
-  if (state.currentSessionId && config.workJournal?.persistOnDispose) {
-    await workJournal.recordSessionEnd(state.currentSessionId, ctx.directory, state.messageCount);
-  }
-
-  pluginCtx.lifecycleOrchestrator?.stop();
-
-  if (state.currentSessionId) {
-    try {
-      await pluginCtx.experiencePackets.recordToolPacket({
-        sessionId: state.currentSessionId,
-        projectId: directory,
-        toolName: 'session_end',
-        exitCode: 0,
-        args: { messageCount: state.messageCount },
-        signals: {
-          _schemaVersion: 2,
-          _sourceHook: 'dispose-hooks',
-          messageCount: state.messageCount,
-        },
-      });
-    } catch {
-      /* experience packet recording non-critical */
-    }
-  }
-
-  if (state.currentSessionId && config.selfContinuity.enabled) {
-    try {
-      const generator = new SelfContinuityGenerator(
-        database.getPool(),
-        state.currentSessionId,
-        directory,
-      );
-      await generator.writeRecord('session_end', {
-        recalledSessionIds: [],
-        recalledMemoryIds: [],
-        evidenceAnchors: [],
-        selfObservation: `Session ended after ${state.messageCount} messages.`,
-        feltGap: undefined,
-        goalContinued: false,
-        alchemistInjected: false,
-        checkpointResumed: false,
-      });
-    } catch (error) {
-      logging.error('Self-continuity record failed', error as Error);
-    }
-  }
-
-  contextRecall.stop();
-  subconscious.stop();
-  gitWatcher.stop();
-
-  await memoryManager.cleanup();
-  await statsWriter.stopAndFlush();
-  await closeRuntime(pluginCtx);
-  await flushDocUpdates(pluginCtx, ctx.directory);
-
+  if (errors.length > 0) throw new AggregateError(errors, 'Runtime cleanup failed');
   logging.info('Disposed');
 }
 
-async function closeRuntime(pluginCtx: PluginContext): Promise<void> {
-  const errors: unknown[] = [];
-  try { await pluginCtx.workLedger?.dispose(); } catch (error) { errors.push(error); }
-  try { await pluginCtx.database.disconnect(); } catch (error) { errors.push(error); }
-  if (errors.length) throw new AggregateError(errors, 'Runtime cleanup failed');
+async function stopRuntimeServices(
+  pluginCtx: PluginContext,
+  state: DisposalState,
+  errors: Error[],
+): Promise<void> {
+  await capture(state, errors, 'lifecycle stop', async () => pluginCtx.lifecycleOrchestrator?.stop());
+  await capture(state, errors, 'context recall stop', async () => pluginCtx.contextRecall.stop());
+  await capture(state, errors, 'subconscious stop', async () => pluginCtx.subconscious.stop());
+  await capture(state, errors, 'git watcher stop', async () => pluginCtx.gitWatcher.stop());
+}
+
+async function capture(
+  state: DisposalState,
+  errors: Error[],
+  label: string,
+  task: () => Promise<unknown>,
+): Promise<void> {
+  if (state.completed.has(label)) return;
+  try {
+    await task();
+    state.completed.add(label);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    errors.push(new Error(`${label}: ${message}`, { cause: error }));
+  }
 }

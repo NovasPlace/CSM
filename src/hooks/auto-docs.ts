@@ -1,6 +1,6 @@
 import { PluginContext } from "../plugin-context.js";
 import { promises as fs } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { autoDocumentChange, reconcileSystemMap, initializeDocsForProject } from "./doc-analyzer.js";
 import { reconcileArchitectureDoc } from "./architecture-doc.js";
 import { getLogger } from "../logger.js";
@@ -94,6 +94,11 @@ export async function flushDocUpdates(context?: PluginContext, workspaceDir?: st
     await fs.mkdir(docsDir, { recursive: true });
 
     for (const update of pendingUpdates) {
+      const resolvedPath = resolve(update.filePath);
+      if (!resolvedPath.startsWith(projectDir)) {
+        getLogger().warn(`flushDocUpdates: skipping path outside workspace: ${update.filePath}`);
+        continue;
+      }
       let content = "";
       try {
         content = await fs.readFile(update.filePath, "utf-8");

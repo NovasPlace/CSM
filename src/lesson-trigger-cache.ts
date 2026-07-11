@@ -120,7 +120,7 @@ export class LessonTriggerCache {
       let argMatch = Object.keys(trigger.argPatterns).length === 0;
       if (!argMatch) {
         argMatch = Object.entries(trigger.argPatterns).every(([key, pattern]) => {
-          const val = String(args?.[key] ?? '');
+          const val = String(args?.[key] ?? '').slice(0, 500);
           try {
             return new RegExp(pattern, 'i').test(val);
           } catch {
