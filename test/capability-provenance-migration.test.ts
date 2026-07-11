@@ -198,7 +198,7 @@ describe('Capability provenance migration — PostgreSQL', { skip: !PG_URL }, ()
   beforeEach(async () => {
     if (!pgPool) return;
     await pgPool.query(
-      "DELETE FROM memories WHERE metadata->>'promotion_source' = 'belief_promotion_engine' AND metadata->>'candidate_type' = 'candidate_capability'",
+      "DELETE FROM memories WHERE metadata->>'dedup_key' IN ('cap:edit:ok', 'cap:write:ok', 'cap:read:ok', 'cap:bash:ok', 'cap:grep:ok', 'cap:closure-test:ok')",
     ).catch(() => {});
   });
 
