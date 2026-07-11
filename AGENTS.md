@@ -88,7 +88,7 @@
 ### Blocked
 - **`no-explicit-any` cleanup (~102 warnings)**: Typed-debt remains in checkpoint-store.ts (row mapper), agent-work-journal.ts, context-cache-runtime.ts, and other modules. Requires per-module typed DTOs and generic row mappers, not blanket replacement.
 - **`no-console` cleanup (~8 warnings)**: Remaining `eslint-disable-next-line no-console` annotations in auto-docs.ts, system-transform.ts, work-journal-inject.ts. Blocked by need for logger context support or structural refactors.
-- **Capability promotion (`candidate_capability` → promoted memory)**: 6 structural defects found during verification (2026-07-11, CSM #68554). Promotion creates a second immutable representation of info owned by the self-model. 5 capabilities already promoted (#68510-#68514: edit/write/read/bash/grep) — do not delete without migration plan. Further promotion BLOCKED until closure criteria met. See "Capability Promotion Closure Criteria" below.
+- **Capability promotion (`candidate_capability` → promoted memory)**: All 7 closure criteria implemented, independently reviewed, and cross-database verified (SQLite + PostgreSQL, 109/109 tests pass). Promotion pipeline is **administratively blocked** pending AGENTS.md unblock — the technical defect is closed. See "Capability Promotion Closure Criteria" below for the verified status of each criterion.
 
 ### Pre-existing Test Debt
 - ~~**1 failing test**: `test/backfill-recall-telemetry.test.ts` line 209 — "protects old recalled memories while still surfacing old unrecalled ones" fails because prune-protection by recall count is not working for PG. Present since Phase 3B (`ae5e309`). Not caused by Phase 3D changes. Root cause: `pruneMemories`/`loadPruneRows` recall_count LATERAL join returns 0 even when `memory_recall_events` rows exist. Needs investigation in prune-scorer logic.~~
@@ -164,17 +164,17 @@
 - Approach: (a) typed row-mapping DTOs for DB query results, (b) `eslint-disable-next-line` with documented rationale for interface-level `any`, (c) targeted `as unknown as T` only where provably safe
 
 ## Capability Promotion Closure Criteria
-Before resuming `candidate_capability` promotion, prove all seven:
+All seven criteria are **implemented, independently reviewed, and cross-database verified** (SQLite + PostgreSQL, 109/109 tests pass, 2026-07-11).
 
-1. **Failure lowers self-model without second source of truth** — a capability failure packet must decrement self-model confidence without creating a contradictory promoted memory entry.
-2. **Failure packets survive filtering** — `isJunkBelief()` must not discard `tool:X:fail` subjects. Fix: inspect polarity/specificity, not blanket-reject `tool:` subjects.
-3. **Success and failure reconcile under one canonical proposition** — opposing claims (`tool:edit:succeeds` vs `tool:edit:fails`) must attach positive/negative evidence to a single record keyed by canonical proposition (e.g. `tool:edit:reliability`), not coexist as independent entries.
-4. **Historical promotion records are snapshots, not current assertions** — promoted records must say "crossed threshold at time T based on N reinforcements" not "succeeds reliably."
-5. **Promotion does not double-count evidence** — promotion must not update self-model confidence; packets already do that. Promotion changes status/provenance/eligibility only.
-6. **Repeated promotion blocked by structural key** — use `dedup_key` with DB constraint, not `LOWER(content) LIKE` fuzzy matching on first 100 chars.
-7. **Confidence can recover after later successes** — self-model confidence must rise after failures when subsequent successes arrive, not just degrade monotonically.
+1. **Failure lowers self-model without second source of truth** — ✅ PASS. `self-model-updater.ts:209-212` decreases confidence and increments failureCount. SelfModelUpdater writes only to `self_model_capabilities`, never to `memories`. Test: `capability-promotion-closure.test.ts:138-161`.
+2. **Failure packets survive filtering** — ✅ PASS. `isJunkBelief()` junks only `tool:*:ok` (polarity check), not `tool:*:fail`. Test: `capability-promotion-closure.test.ts:169-213`.
+3. **Success and failure reconcile under one canonical proposition** — ✅ PASS. `deriveSubject()` maps both `tool:edit:ok` and `tool:edit:fail` to `tool:edit:reliability`. `deriveStance()`: `:ok`→supports, `:fail`→opposes. Test: `capability-promotion-closure.test.ts:221-266`.
+4. **Historical promotion records are snapshots, not current assertions** — ✅ PASS. Promotion content: `[Capability provenance] Capability for X crossed promotion threshold at TIME based on N reinforcements across S sessions. [Snapshot — self-model holds current live state.]`. Metadata includes `record_type: 'capability_provenance'`. Test: `capability-promotion-closure.test.ts:274-335`.
+5. **Promotion does not double-count evidence** — ✅ PASS. `createMemoryFromCandidate()` calls only `memoryManager.saveMemory()` and `markCandidateApplied()`. No SQL against `self_model_capabilities`. Test: `capability-promotion-closure.test.ts:342-389`.
+6. **Repeated promotion blocked by structural key** — ✅ PASS. `findDuplicate()` queries `metadata->>'dedup_key'` structurally, not `LOWER(content) LIKE`. Migration 023 idempotent via `record_type` metadata marker. Tests: `capability-promotion-closure.test.ts:396-451`, `capability-provenance-migration.test.ts`.
+7. **Confidence can recover after later successes** — ✅ PASS. Success adds `(1 - confidence) * incrementRate` (monotonic increase). Test: `capability-promotion-closure.test.ts:458-501` — failure drops confidence, three subsequent successes each produce strictly increasing values, final > post-failure, respects 0.9 cap.
 
-### Existing Promoted Capabilities (do not delete without migration)
+### Existing Promoted Capabilities (migrated to provenance by migration 023)
 | Memory ID | Capability | Candidate ID | Confidence | Reinforcements |
 |---|---|---|---|---|
 | #68510 | edit | 20977 | 0.80 | 7 |
@@ -183,4 +183,4 @@ Before resuming `candidate_capability` promotion, prove all seven:
 | #68513 | bash | — | 0.70 | 6 |
 | #68514 | grep | — | 0.70 | 6 |
 
-These are the wrong shape under the new ownership model (they assert current truth rather than historical snapshots). A migration should reframe them as provenance records or supersede them once the new promotion path is built.
+Migration 023 (`20260711-023-capability-provenance-rewrite`) rewrites these records to provenance snapshot format with `record_type: 'capability_provenance'` and `canonical_key: 'tool:X:reliability'`. Migration is idempotent — second run reports `alreadyMigrated: 5, migrated: 0`.
