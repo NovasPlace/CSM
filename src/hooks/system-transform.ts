@@ -819,27 +819,30 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         }
       }
 
-      // --- Living Mind Cortex: inject cognitive state ---
-      try {
-        const res = await fetch('http://localhost:8008/api/agent/context', {
-          signal: AbortSignal.timeout(500),
-        });
-        if (res.ok) {
-          const cortex = await res.json() as LivingMindCortex;
-          const lines = ['<living_mind_context>'];
-          lines.push(`Cognitive stance: ${cortex.cognitive_stance}`);
-          lines.push(`Urgency: ${(cortex.urgency ?? 0).toFixed(2)} | Creative pressure: ${(cortex.creative_pressure ?? 0).toFixed(2)}`);
-          if (cortex.phase_gate?.current_phase) lines.push(`Circadian phase: ${cortex.phase_gate.current_phase}`);
-          if (cortex.hormones?.dominant_emotion && cortex.hormones.dominant_emotion !== 'neutral') lines.push(`Dominant emotion: ${cortex.hormones.dominant_emotion}`);
-          if (cortex.system_load) {
-            const load = cortex.system_load;
-            lines.push(`Energy: ${(load.energy_budget ?? 0).toFixed(2)} | Pain: ${(load.pain ?? 0).toFixed(2)} | Load: ${(load.cognitive_load ?? 0).toFixed(2)} | Status: ${load.status}`);
+      // --- Living Mind Cortex: inject cognitive state (disabled by default) ---
+      const cortexUrl = process.env.CSM_LIVING_MIND_URL;
+      if (cortexUrl) {
+        try {
+          const res = await fetch(`${cortexUrl}/api/agent/context`, {
+            signal: AbortSignal.timeout(500),
+          });
+          if (res.ok) {
+            const cortex = await res.json() as LivingMindCortex;
+            const lines = ['<living_mind_context>'];
+            lines.push(`Cognitive stance: ${cortex.cognitive_stance}`);
+            lines.push(`Urgency: ${(cortex.urgency ?? 0).toFixed(2)} | Creative pressure: ${(cortex.creative_pressure ?? 0).toFixed(2)}`);
+            if (cortex.phase_gate?.current_phase) lines.push(`Circadian phase: ${cortex.phase_gate.current_phase}`);
+            if (cortex.hormones?.dominant_emotion && cortex.hormones.dominant_emotion !== 'neutral') lines.push(`Dominant emotion: ${cortex.hormones.dominant_emotion}`);
+            if (cortex.system_load) {
+              const load = cortex.system_load;
+              lines.push(`Energy: ${(load.energy_budget ?? 0).toFixed(2)} | Pain: ${(load.pain ?? 0).toFixed(2)} | Load: ${(load.cognitive_load ?? 0).toFixed(2)} | Status: ${load.status}`);
+            }
+            if ((cortex.phase_gate?.blocked?.length ?? 0) > 0) lines.push(`Phase blocked: ${cortex.phase_gate!.blocked!.join(', ')}`);
+            lines.push('</living_mind_context>');
+            output.system.push(lines.join('\n'));
           }
-          if ((cortex.phase_gate?.blocked?.length ?? 0) > 0) lines.push(`Phase blocked: ${cortex.phase_gate!.blocked!.join(', ')}`);
-          lines.push('</living_mind_context>');
-          output.system.push(lines.join('\n'));
-        }
-      } catch { /* cortex offline */ }
+        } catch { /* cortex offline */ }
+      }
 
       // --- Phase 5 Layer 1: Context compiler status line (at END of prompt) ---
       if (ctx.config.contextCompiler?.statusInjection && ctx.lastCompileResult) {

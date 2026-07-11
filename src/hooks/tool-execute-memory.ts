@@ -2,22 +2,59 @@ import type { PluginContext } from '../plugin-context.js';
 import { flushDocUpdates, getPendingUpdates } from './auto-docs.js';
 import { packageCommandEvidence, packageToolEvidence } from './tool-execute-budget.js';
 import { ToolExecuteRuntimeDedup } from '../tool-execute-runtime-dedup.js';
+import { getLogger } from '../logger.js';
+import { projectKey } from './doc-project-key.js';
 
-let flushTimer: ReturnType<typeof setTimeout> | null = null;
+// Per-workfolder flush timers — keyed by projectKey(ctx.directory)
+const flushTimersByKey = new Map<string, ReturnType<typeof setTimeout>>();
 const FLUSH_DELAY_MS = 2000;
 const toolDedup = new ToolExecuteRuntimeDedup(60_000);
 
 export function scheduleDocFlushLocal(ctx: PluginContext): void {
-  if (flushTimer) clearTimeout(flushTimer);
-  flushTimer = setTimeout(async () => {
-    flushTimer = null;
-    if (getPendingUpdates().length === 0) return;
+  const key = projectKey(ctx.directory);
+  // Rescheduling the same project cancels its previous timer
+  const existing = flushTimersByKey.get(key);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(async () => {
+    // Delete ourselves only if we are still the active timer for this key
+    const current = flushTimersByKey.get(key);
+    if (current === timer) {
+      flushTimersByKey.delete(key);
+    }
+    if (getPendingUpdates(ctx.directory).length === 0) return;
     try {
       await flushDocUpdates(ctx, ctx.directory);
     } catch (err) {
-      console.error('[CrossSessionMemory] Auto-doc flush error:', err);
+      getLogger().error('Auto-doc background flush failed', toError(err), {
+        projectId: ctx.directory,
+      });
     }
   }, FLUSH_DELAY_MS);
+  flushTimersByKey.set(key, timer);
+}
+
+/**
+ * Manually flush a specific project's pending docs and clear its timer.
+ * Only clears the timer for that project — other projects' timers are untouched.
+ */
+export function manualFlushProject(ctx: PluginContext): Promise<void> {
+  const key = projectKey(ctx.directory);
+  const existing = flushTimersByKey.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    flushTimersByKey.delete(key);
+  }
+  return flushDocUpdates(ctx, ctx.directory);
+}
+
+/**
+ * Clear all timers (for testing / full teardown).
+ */
+export function clearAllFlushTimers(): void {
+  for (const timer of flushTimersByKey.values()) {
+    clearTimeout(timer);
+  }
+  flushTimersByKey.clear();
 }
 
 export async function autoDistill(ctx: PluginContext, sid: string): Promise<void> {
@@ -42,11 +79,18 @@ export async function autoDistill(ctx: PluginContext, sid: string): Promise<void
     groupCount: summary.groups.length,
     totalCallsSummarized: summary.totalCallsSummarized,
     compressedPreview: summary.compressed,
-  }).catch((_err: unknown) => {
-    /* non-critical */
+  }).catch((error: unknown) => {
+    getLogger().error('Experience packet background write failed', toError(error), {
+      projectId: ctx.directory,
+      sessionId: sid,
+    });
   });
 
   await ctx.refreshActiveContext(sid);
+}
+
+function toError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
 }
 
 function shouldLogTool(tool: string): boolean {

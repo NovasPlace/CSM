@@ -32,4 +32,13 @@ describe('PostgresPool factory', () => {
 
     await pool.end();
   });
+
+  it('makes end idempotent and rejects post-close operations explicitly', async () => {
+    const pool = await createPostgresPool(
+      'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory',
+    );
+    await Promise.all([pool.end(), pool.end(), pool.end()]);
+    await assert.rejects(pool.query('SELECT 1'), /PostgreSQL pool is closed/);
+    await assert.rejects(pool.connect(), /PostgreSQL pool is closed/);
+  });
 });

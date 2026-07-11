@@ -13,7 +13,7 @@ As of 2026-07-09, local verification proves:
 - Source lint passes with zero errors and seven locked external-declaration warnings.
 - PostgreSQL schema startup is transaction-bound, advisory-lock serialized, and fail-fast.
 - Schema step failures report the exact failed initializer and roll back the transaction.
-- PostgreSQL and SQLite record immutable migration identifiers and SHA-256 checksums over their contracts and executable migration artifacts.
+- PostgreSQL and SQLite record immutable migration identifiers and SHA-256 checksums over their contracts and executable migration artifacts. Verification hashes recognized UTF-8 text with canonical LF line endings, rejects mixed or bare-CR forms, and keeps binary artifacts byte-exact.
 - Startup rejects checksum drift, unknown future migrations, and cross-provider history.
 - Every unapplied required migration is fail-fast, including ownership failures.
 - Real PostgreSQL tests prove transaction rollback after DDL failure and concurrent-startup serialization.

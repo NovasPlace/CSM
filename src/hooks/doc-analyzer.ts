@@ -32,21 +32,21 @@ const STUB_CONTENT_THRESHOLD = 20;
 const MIN_EXPORTS_FOR_ENTRY = 1;
 const MIN_IMPORTS_FOR_ENTRY = 1;
 
-function getDocsDir(): string {
-  return join(process.cwd(), DOCS_DIR);
+function docsDirFor(projectDir: string): string {
+  return join(projectDir, DOCS_DIR);
 }
 
-async function readDoc(fileName: string): Promise<string> {
+async function readDoc(fileName: string, projectDir: string): Promise<string> {
   try {
-    return await fs.readFile(join(getDocsDir(), fileName), "utf-8");
+    return await fs.readFile(join(docsDirFor(projectDir), fileName), "utf-8");
   } catch {
     return "";
   }
 }
 
-async function writeDoc(fileName: string, content: string): Promise<void> {
-  await fs.mkdir(getDocsDir(), { recursive: true });
-  await fs.writeFile(join(getDocsDir(), fileName), content, "utf-8");
+async function writeDoc(fileName: string, content: string, projectDir: string): Promise<void> {
+  await fs.mkdir(docsDirFor(projectDir), { recursive: true });
+  await fs.writeFile(join(docsDirFor(projectDir), fileName), content, "utf-8");
 }
 
 export function isIgnoredForAnalysis(filePath: string): boolean {
@@ -282,60 +282,61 @@ export function shouldSkipEntry(exports: string[], imports: string[]): boolean {
   return exports.length < MIN_EXPORTS_FOR_ENTRY && imports.length < MIN_IMPORTS_FOR_ENTRY;
 }
 
-async function applyDocUpdate(plan: DocUpdatePlan): Promise<void> {
+async function applyDocUpdate(plan: DocUpdatePlan, projectDir: string): Promise<void> {
   if (plan.systemMap) {
-    let content = await readDoc("SYSTEM_MAP.md");
+    let content = await readDoc("SYSTEM_MAP.md", projectDir);
     if (plan.systemMap.action === "remove") {
       content = removeExistingEntry(content, plan.systemMap.content);
     } else {
       const filePath = plan.systemMap.content.split("\n")[0].replace(/\*\*/g, "").trim();
       content = updateDocContent(content, plan.systemMap.section, plan.systemMap.content, filePath);
     }
-    await writeDoc("SYSTEM_MAP.md", content);
+    await writeDoc("SYSTEM_MAP.md", content, projectDir);
   }
 
   if (plan.decisions) {
-    let content = await readDoc("DECISIONS.md");
+    let content = await readDoc("DECISIONS.md", projectDir);
     const filePath = plan.decisions.content.split("\n")[0].replace(/\*\*/g, "").trim();
     content = updateDocContent(content, plan.decisions.section, plan.decisions.content, filePath);
-    await writeDoc("DECISIONS.md", content);
+    await writeDoc("DECISIONS.md", content, projectDir);
   }
 
   if (plan.debugNotes) {
-    let content = await readDoc("DEBUG_NOTES.md");
+    let content = await readDoc("DEBUG_NOTES.md", projectDir);
     const filePath = plan.debugNotes.content.split("\n")[0].replace(/\*\*/g, "").trim();
     content = updateDocContent(content, plan.debugNotes.section, plan.debugNotes.content, filePath);
-    await writeDoc("DEBUG_NOTES.md", content);
+    await writeDoc("DEBUG_NOTES.md", content, projectDir);
   }
 
   if (plan.agentMemory) {
-    let content = await readDoc("AGENT_MEMORY.md");
+    let content = await readDoc("AGENT_MEMORY.md", projectDir);
     const filePath = plan.agentMemory.content.split("\n")[0].replace(/\*\*/g, "").trim();
     content = updateDocContent(content, plan.agentMemory.section, plan.agentMemory.content, filePath);
-    await writeDoc("AGENT_MEMORY.md", content);
+    await writeDoc("AGENT_MEMORY.md", content, projectDir);
   }
 
   if (plan.runbook) {
-    let content = await readDoc("RUNBOOK.md");
+    let content = await readDoc("RUNBOOK.md", projectDir);
     const filePath = plan.runbook.content.split("\n")[0].replace(/\*\*/g, "").trim();
     content = updateDocContent(content, plan.runbook.section, plan.runbook.content, filePath);
-    await writeDoc("RUNBOOK.md", content);
+    await writeDoc("RUNBOOK.md", content, projectDir);
   }
 }
 
 export async function autoDocumentChange(
   filePath: string,
   changeType: "write" | "edit" | "delete",
-  oldContent?: string,
-  newContent?: string
+  oldContent: string | undefined,
+  newContent: string | undefined,
+  projectDir: string,
 ): Promise<void> {
   const change: CodeChange = { filePath, changeType, oldContent, newContent };
   const plan = await analyzeChange(change);
-  await applyDocUpdate(plan);
+  await applyDocUpdate(plan, projectDir);
 }
 
-export async function reconcileSystemMap(docsDir?: string, projectDir?: string): Promise<{ added: number; updated: number; removed: number }> {
-  const dir = docsDir ?? getDocsDir();
+export async function reconcileSystemMap(docsDir: string, projectDir?: string): Promise<{ added: number; updated: number; removed: number }> {
+  const dir = docsDir;
   const cwd = projectDir ?? process.cwd();
   let added = 0, updated = 0, removed = 0;
 
@@ -343,7 +344,8 @@ export async function reconcileSystemMap(docsDir?: string, projectDir?: string):
   try {
     systemMapContent = await fs.readFile(join(dir, "SYSTEM_MAP.md"), "utf-8");
   } catch {
-    return { added: 0, updated: 0, removed: 0 };
+    // Bootstrap: create a minimal SYSTEM_MAP.md so reconciliation can proceed
+    systemMapContent = "# System Map\n\n> Auto-generated architecture reference. Updated on file edits via `auto-docs` hook.\n\n";
   }
 
   const sourceDirs = await detectSourceDirs(cwd);
@@ -381,7 +383,9 @@ export async function reconcileSystemMap(docsDir?: string, projectDir?: string):
     const newRow = `| \`${relativePath}\` | ${exports.join(", ") || "none"} | ${modType} | ${role} |`;
 
     if (!existing) {
-      const insertPoint = findTableInsertPoint(systemMapContent, tableHeader);
+      // Ensure a table exists for this source dir; repair in-place if heading lacks a table
+      systemMapContent = ensureTableSection(systemMapContent, sf.dirPrefix, tableHeader);
+      const insertPoint = findTableInsertPoint(systemMapContent, tableHeader, sf.dirPrefix);
       if (insertPoint !== -1) {
         systemMapContent = systemMapContent.slice(0, insertPoint) + newRow + "\n" + systemMapContent.slice(insertPoint);
         added++;
@@ -412,6 +416,62 @@ export async function reconcileSystemMap(docsDir?: string, projectDir?: string):
   }
 
   return { added, updated, removed };
+}
+
+/**
+ * Ensure that a table section exists for the given source-dir prefix.
+ * If a `## {SectionTitle}` heading already exists but lacks a table
+ * header, insert the table directly under that heading (repair in place).
+ * If no heading exists at all, append a new section with the table header.
+ * Returns the (possibly modified) content.
+ */
+function ensureTableSection(content: string, dirPrefix: string, tableHeader: string): string {
+  const sectionTitle = dirPrefix.charAt(0).toUpperCase() + dirPrefix.slice(1);
+  const range = findSectionRange(content, sectionTitle);
+  if (range) {
+    // Heading exists — check if the table header follows it
+    const sectionContent = content.slice(range.start, range.end);
+    if (sectionContent.includes(tableHeader)) {
+      // Table already exists under this heading — nothing to do
+      return content;
+    }
+    // Heading exists but no table — insert table right after the heading line
+    const tableBlock = `\n\n${tableHeader}\n|------|---------|------|------|\n`;
+    return content.slice(0, range.start) + tableBlock + content.slice(range.start);
+  }
+  // No heading exists — append a new section at the end
+  const sectionBlock = `\n## ${sectionTitle}\n\n${tableHeader}\n|------|---------|------|------|\n`;
+  return content.trimEnd() + "\n" + sectionBlock;
+}
+
+interface SectionRange {
+  start: number;
+  end: number;
+}
+
+function findSectionRange(content: string, sectionTitle: string): SectionRange | null {
+  const headings = /^([#]{1,6})\s+(.+?)\s*$/gm;
+  let target: RegExpExecArray | null = null;
+  let heading: RegExpExecArray | null;
+  while ((heading = headings.exec(content)) !== null) {
+    if (heading[2] === sectionTitle) {
+      target = heading;
+      break;
+    }
+  }
+  if (!target || target.index === undefined) return null;
+  const start = target.index + target[0].length;
+  const level = target[1].length;
+  while ((heading = headings.exec(content)) !== null) {
+    if (heading[1].length <= level && heading.index !== undefined) {
+      return { start, end: heading.index };
+    }
+  }
+  return { start, end: content.length };
+}
+
+function sectionTitleFor(dirPrefix: string): string {
+  return dirPrefix.charAt(0).toUpperCase() + dirPrefix.slice(1);
 }
 
 interface SourceFile {
@@ -501,15 +561,18 @@ function parseSystemMapEntries(content: string): SystemMapEntry[] {
   return entries;
 }
 
-function findTableInsertPoint(content: string, tableHeader: string): number {
-  const headerIdx = content.indexOf(tableHeader);
+function findTableInsertPoint(content: string, tableHeader: string, dirPrefix: string): number {
+  const range = findSectionRange(content, sectionTitleFor(dirPrefix));
+  if (!range) return -1;
+  const section = content.slice(range.start, range.end);
+  const headerIdx = section.indexOf(tableHeader);
   if (headerIdx === -1) return -1;
   let afterHeader = headerIdx + tableHeader.length;
-  const separatorLine = content.indexOf("\n", afterHeader);
+  const separatorLine = section.indexOf("\n", afterHeader);
   if (separatorLine === -1) return -1;
-  afterHeader = content.indexOf("\n", separatorLine + 1);
+  afterHeader = section.indexOf("\n", separatorLine + 1);
   if (afterHeader === -1) return -1;
-  return afterHeader + 1;
+  return range.start + afterHeader + 1;
 }
 
 function guessModuleType(relativePath: string): string {

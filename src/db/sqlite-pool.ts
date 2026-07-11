@@ -1,20 +1,16 @@
 import Database from 'better-sqlite3';
 import type { DatabasePool, DatabaseClient } from '../types.js';
-
-const CAST_REGEX = /::\w+(?:\[\])?/g;
-const PARAM_REGEX = /\$(\d+)/g;
+import { rewriteSqliteSql } from './sqlite-sql-rewriter.js';
 
 export function createSqlitePool(filepath: string): Promise<DatabasePool> {
   const db = new Database(filepath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('busy_timeout = 5000');
+  let closed = false;
+  initializeSqliteConnection(db);
   const execQuery = (text: string, params?: unknown[]): { rows: unknown[]; rowCount: number | null } => {
-    const cleaned = stripCasts(text);
-    const { sql: translated, params: mappedParams } = translateParams(cleaned, params);
+    if (closed) throw new Error('SQLite pool is closed');
+    const { sql: translated, params: mappedParams } = rewriteSqliteSql(text, params);
     const stmt = db.prepare(translated);
-    const isReturning = /^\s*(SELECT|WITH|PRAGMA)\b/i.test(translated) || /\bRETURNING\b/i.test(translated);
-    if (isReturning) {
+    if (stmt.reader) {
       const rows = mappedParams.length > 0 ? stmt.all(...mappedParams) : stmt.all();
       return { rows: rows as unknown[], rowCount: rows.length };
     }
@@ -22,15 +18,19 @@ export function createSqlitePool(filepath: string): Promise<DatabasePool> {
     return { rows: [], rowCount: info.changes };
   };
   const makeClient = (): DatabaseClient => ({
-    query: (text: string, params?: unknown[]) => Promise.resolve(execQuery(text, params)),
+    query: async (text: string, params?: unknown[]) => execQuery(text, params),
     release: () => {},
   });
   const wrapped: DatabasePool = {
-    query: (text: string, params?: unknown[]) => Promise.resolve(execQuery(text, params)),
-    connect: () => Promise.resolve(makeClient()),
-    end: () => {
+    query: async (text: string, params?: unknown[]) => execQuery(text, params),
+    connect: async () => {
+      if (closed) throw new Error('SQLite pool is closed');
+      return makeClient();
+    },
+    end: async () => {
+      if (closed) return;
       db.close();
-      return Promise.resolve();
+      closed = true;
     },
     getDialect() {
       return 'sqlite';
@@ -39,21 +39,18 @@ export function createSqlitePool(filepath: string): Promise<DatabasePool> {
   return Promise.resolve(wrapped);
 }
 
-function stripCasts(sql: string): string {
-  return sql.replace(CAST_REGEX, '');
+export interface SqlitePragmaConnection {
+  pragma(source: string): unknown;
+  close(): void;
 }
 
-function translateParams(sql: string, params?: unknown[]): { sql: string; params: unknown[] } {
-  if (!params || params.length === 0) {
-    return { sql: sql.replace(PARAM_REGEX, '?'), params: [] };
+export function initializeSqliteConnection(db: SqlitePragmaConnection): void {
+  try {
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    db.pragma('busy_timeout = 5000');
+  } catch (error) {
+    try { db.close(); } catch { /* preserve initialization error */ }
+    throw error;
   }
-
-  const mapped: unknown[] = [];
-  const replaced = sql.replace(PARAM_REGEX, (_, numStr: string) => {
-    const idx = parseInt(numStr, 10) - 1;
-    mapped.push(params[idx]);
-    return '?';
-  });
-
-  return { sql: replaced, params: mapped };
 }

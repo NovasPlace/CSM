@@ -1,6 +1,7 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { contentHash } from './work-ledger-lineage.js';
+import { extractPatchPaths } from './work-ledger-patch-paths.js';
 
 export interface WorkLedgerFileState {
   exists: boolean;
@@ -97,7 +98,14 @@ async function canonicalizeWorkLedgerPath(
     || relativePath.startsWith(`..\\`) || relativePath.startsWith('../')) {
     throw new Error(`Work Ledger path resolves outside project root: ${absolutePath}`);
   }
-  return { absolutePath: canonicalPath, relativePath: relativePath.replace(/\\/g, '/') };
+  return {
+    absolutePath: canonicalPath,
+    relativePath: normalizeFileIdentity(relativePath.replace(/\\/g, '/')),
+  };
+}
+
+function normalizeFileIdentity(filePath: string): string {
+  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
 }
 
 function addPath(paths: Set<string>, value: unknown): void {
@@ -116,33 +124,7 @@ function addPathsFromArray(paths: Set<string>, value: unknown): void {
 }
 
 function addPathsFromPatch(paths: Set<string>, value: unknown): void {
-  if (typeof value !== 'string' || value.length === 0) return;
-  // Linear scanner: avoids regex DoS from untrusted patch text.
-  // Three passes to match historical regex ordering:
-  //   Pass 1: *** Add/Update/Delete File: <path>
-  //   Pass 2: *** Move to: <path>
-  //   Pass 3: --- a/<path> / +++ b/<path>
-  const lines = value.split('\n');
-  for (const line of lines) {
-    if (!line.startsWith('*** ')) continue;
-    const rest = line.slice(4);
-    if (!rest.startsWith('Add File:') && !rest.startsWith('Update File:') && !rest.startsWith('Delete File:')) continue;
-    const extracted = rest.slice(rest.indexOf(':') + 1).trim();
-    if (extracted && extracted !== '/dev/null') addPath(paths, extracted);
-  }
-  for (const line of lines) {
-    if (!line.startsWith('*** Move to:')) continue;
-    const extracted = line.slice('*** Move to:'.length).trim();
-    if (extracted && extracted !== '/dev/null') addPath(paths, extracted);
-  }
-  for (const line of lines) {
-    if (line.length < 4 || (line[0] !== '-' || line[1] !== '-' || line[2] !== '-' || line[3] !== ' ') && (line[0] !== '+' || line[1] !== '+' || line[2] !== '+' || line[3] !== ' ')) continue;
-    const extracted = line.slice(4).trim();
-    if (!extracted || extracted === '/dev/null') continue;
-    if (extracted.startsWith('a/')) addPath(paths, extracted.slice(2));
-    else if (extracted.startsWith('b/')) addPath(paths, extracted.slice(2));
-    else addPath(paths, extracted);
-  }
+  for (const path of extractPatchPaths(value)) addPath(paths, path);
 }
 
 function isMissingFile(error: unknown): boolean {

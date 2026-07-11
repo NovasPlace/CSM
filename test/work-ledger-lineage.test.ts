@@ -114,6 +114,39 @@ it('extracts multi-file patch paths and rejects root escapes', () => {
   );
 });
 
+it('parses timestamped unified create and delete headers', () => {
+  const paths = extractWorkLedgerPaths({
+    patch: [
+      '--- /dev/null\t1970-01-01 00:00:00 +0000',
+      '+++ b/src/new file.ts\t2026-07-10 12:00:00 +0000',
+      '--- a/src/old.ts\t2026-07-10 12:00:00 +0000',
+      '+++ /dev/null\t1970-01-01 00:00:00 +0000',
+    ].join('\n'),
+  });
+  assert.deepEqual(paths, ['src/new file.ts', 'src/old.ts']);
+});
+
+it('decodes quoted and Git-escaped unified paths', () => {
+  const paths = extractWorkLedgerPaths({
+    patch: [
+      '--- "a/src/file with space.ts"\t2026-07-10 12:00:00 +0000',
+      '+++ "b/src/caf\\303\\251.ts"\t2026-07-10 12:00:00 +0000',
+    ].join('\n'),
+  });
+  assert.deepEqual(paths, ['src/file with space.ts', 'src/café.ts']);
+});
+
+it('rejects malformed Git-quoted unified paths', () => {
+  const malformed = [
+    '+++ "b/src/escaped-closing\\"',
+    '+++ "b/src/invalid-utf8\\377.ts"',
+    '+++ "b/src/unknown\\q.ts"',
+  ];
+  for (const header of malformed) {
+    assert.deepEqual(extractWorkLedgerPaths({ patch: header }), []);
+  }
+});
+
 it('rejects an in-root symlink that resolves outside the project', async () => {
   const base = resolve(`.tmp/work-ledger-symlink-${process.pid}`);
   const root = resolve(base, 'root');

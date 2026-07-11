@@ -31,7 +31,7 @@ Terminal `superseded` and `reverted` rows never become active again merely becau
 
 ## Capture surfaces
 
-OpenCode `edit`, `write`, `multiedit`, `patch`, and `apply_patch` calls with recognized path arguments are captured automatically through tool before/after hooks. Recognized shapes include `filePath`, `path`, `files`, `edits`, OpenAI patch headers including `Move to`, and unified-diff file headers. A plugin-process UUID becomes `run_id` unless `CSM_RUN_ID` is supplied. Host `chat.message` metadata supplies `provider:model`; `CSM_MODEL_ID` pins an orchestrator-provided identity.
+OpenCode `edit`, `write`, `multiedit`, `patch`, and `apply_patch` calls with recognized path arguments are captured automatically through tool before/after hooks. Recognized shapes include `filePath`, `path`, `files`, `edits`, OpenAI patch headers including `Move to`, and unified-diff file headers with optional timestamps or Git-style quoting/escapes. A plugin-process UUID becomes `run_id` unless `CSM_RUN_ID` is supplied. Host `chat.message` metadata supplies `provider:model`; `CSM_MODEL_ID` pins an orchestrator-provided identity.
 
 Host model identity is tracked per session so interleaved sessions cannot inherit each other's model. If a tool call arrives before the host has supplied model metadata, `model_id` is the explicit sentinel `unknown`; query metadata counts that row as a `provenanceGaps` entry instead of implying exact attribution. Idempotency is scoped by run, tool call, project root, and relative path, so identical call IDs in separate repositories remain distinct.
 
@@ -40,6 +40,8 @@ Codex bridge hosts must call `beginWorkChange()` before the filesystem mutation 
 SQLite core-memory mode does not create or advertise the Work Ledger. PostgreSQL full runtime is required.
 
 Capture windows take PostgreSQL advisory session locks in canonical file order, so overlapping supported edits are serialized across plugin processes before either tool mutates the file. Supported before-capture failures fail closed. An after-capture failure is surfaced to the host, but the filesystem mutation has already happened and requires operator reconciliation.
+
+On Windows, canonical project-relative file identities are case-folded before lock, idempotency, and lineage operations. This makes differently cased aliases—including concurrent creates—share one ledger identity on the normal case-insensitive Windows filesystem. Case-sensitive Windows directories are outside this version's supported Work Ledger boundary because Node does not expose a reliable non-mutating per-directory sensitivity probe.
 
 This adapter is not run-complete: shell commands, tools without recognized paths, external processes, missing after-hooks, and process crashes are not durably represented. Query metadata therefore reports `captureScope=supported_file_tools_only` and `runComplete=false`. It must not be presented as proof that every mutation by a run was captured.
 

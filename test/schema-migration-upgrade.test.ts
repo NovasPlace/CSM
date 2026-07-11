@@ -4,6 +4,8 @@ import { Pool } from 'pg';
 import { Database } from '../dist/database.js';
 import { EmbeddingGenerator } from '../dist/embeddings.js';
 import { MemoryManager } from '../dist/memory-manager.js';
+import { migrationChecksum } from '../dist/schema/migration-ledger.js';
+import { buildPostgresMigrations } from '../dist/schema/postgres-migrations.js';
 import type { PluginConfig } from '../dist/types.js';
 
 const BASE_DB_URL = process.env.CSM_DATABASE_URL
@@ -91,13 +93,17 @@ async function cleanupUpgradeDatabase(
   });
 
   it('records every baseline migration with immutable checksums', async () => {
-    const result = await requireDatabase(database).getPool().query(
+    const connected = requireDatabase(database);
+    const result = await connected.getPool().query(
       `SELECT migration_id, checksum, provider
        FROM csm_schema_migrations ORDER BY migration_id`,
     );
-    assert.equal(result.rows.length, 21);
+    const expected = new Map(buildPostgresMigrations(connected, connected.getPool())
+      .map((migration) => [migration.id, migrationChecksum(migration)]));
+    assert.equal(result.rows.length, 23);
     for (const row of result.rows) {
       assert.match(row.checksum, /^[a-f0-9]{64}$/);
+      assert.equal(row.checksum, expected.get(row.migration_id));
       assert.equal(row.provider, 'postgres');
     }
   });
@@ -113,6 +119,26 @@ async function cleanupUpgradeDatabase(
     assert.ok(saved.id > 0);
   });
 
+  it('adds the PostgreSQL-only Coordination persistence migration on upgrade', async () => {
+    const result = await requireDatabase(database).getPool().query(
+      `SELECT migration_id FROM csm_schema_migrations
+       WHERE migration_id = '20260710-022-coordination-persistence'`,
+    );
+    assert.equal(result.rows.length, 1);
+    const table = await requireDatabase(database).getPool().query(
+      `SELECT to_regclass('coordination_events')::text AS name`,
+    );
+    assert.equal(table.rows[0].name, 'coordination_events');
+  });
+
+  it('preserves pre-migration session data after Coordination schema installation', async () => {
+    const result = await requireDatabase(database).getPool().query(
+      'SELECT project_id, title FROM sessions WHERE id = $1',
+      ['legacy-session'],
+    );
+    assert.deepEqual(result.rows[0], { project_id: 'legacy-project', title: 'Legacy session' });
+  });
+
   it('supported matrix: replays csm-postgres-v1 without duplicating history', async () => {
     await requireDatabase(database).close();
     database = new Database(config);
@@ -120,5 +146,5 @@ async function cleanupUpgradeDatabase(
     const result = await requireDatabase(database).getPool().query(
       'SELECT COUNT(*)::int AS count FROM csm_schema_migrations',
     );
-    assert.equal(result.rows[0].count, 21);
+    assert.equal(result.rows[0].count, 23);
   });

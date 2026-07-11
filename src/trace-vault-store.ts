@@ -93,9 +93,17 @@ export function formatTraceVaultForInjection(capture: TraceVaultCaptureResult): 
 
 function mapRow(row: Record<string, unknown>): TraceVaultCaptureResult {
   const cardsValue = row.cards;
-  const cards = typeof cardsValue === 'string'
-    ? JSON.parse(cardsValue)
-    : (cardsValue as TraceVaultCaptureResult['cards']);
+  let cards: TraceVaultCaptureResult['cards'];
+  try {
+    cards = typeof cardsValue === 'string'
+      ? JSON.parse(cardsValue)
+      : (cardsValue as TraceVaultCaptureResult['cards']);
+  } catch {
+    cards = [];
+  }
+  const createdAt = row.created_at instanceof Date
+    ? row.created_at
+    : new Date(String(row.created_at ?? Date.now()));
   return {
     id: row.id as number,
     sessionId: row.session_id as string,
@@ -106,7 +114,7 @@ function mapRow(row: Record<string, unknown>): TraceVaultCaptureResult {
     rawTokens: row.raw_tokens as number,
     condensedTokens: row.condensed_tokens as number,
     cards,
-    capturedAt: (row.created_at as Date).toISOString(),
+    capturedAt: createdAt.toISOString(),
   };
 }
 

@@ -107,7 +107,7 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
         setAutoDocsEnabled(ctx.config?.autoDocs?.enabled !== false);
         const args = (input as { args?: { filePath?: string; path?: string } }).args;
         const filePath = args?.filePath ?? args?.path ?? 'unknown';
-        queueDocUpdate(filePath, input.tool === 'write' ? 'write' : 'edit');
+        queueDocUpdate(filePath, input.tool === 'write' ? 'write' : 'edit', ctx.directory);
         scheduleDocFlushLocal(ctx);
       }
     } catch (error) {
@@ -203,8 +203,7 @@ async function storeLoopLesson(
 }
 
 async function ensureDocsInitialized(ctx: PluginContext): Promise<void> {
-  if (!ctx.directory || ctx.state._docsInitialized) return;
-  ctx.state._docsInitialized = true;
+  if (!ctx.directory) return;
   await ensureProjectDocsInitialized(ctx.directory).catch(() => {});
 }
 

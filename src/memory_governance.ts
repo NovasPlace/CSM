@@ -1,5 +1,10 @@
 import type { DatabasePool } from './types.js';
 
+function sanitizeGovField(value: string): string {
+  const capped = (value ?? '').slice(0, 500);
+  return capped.replace(/[<>]/g, '');
+}
+
 export interface GovernanceVeto {
   memoryId: number;
   failureMode: string;
@@ -83,9 +88,9 @@ export class MemoryGovernance {
 
         vetoes.push({
           memoryId: r.id as number,
-          failureMode: gov.failure_mode as string,
-          vetoAction: gov.veto_action as string,
-          requiredAction: gov.required_action as string,
+          failureMode: sanitizeGovField(gov.failure_mode as string),
+          vetoAction: sanitizeGovField(gov.veto_action as string),
+          requiredAction: sanitizeGovField(gov.required_action as string),
           content: (r.content as string) ?? '',
           importance: r.importance as number,
           confidence: (r.confidence as number) ?? 0.7,

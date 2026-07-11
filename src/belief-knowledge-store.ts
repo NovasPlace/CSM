@@ -65,31 +65,30 @@ function deriveSubject(dedupKey: string, _beliefKind: BeliefKind): string {
   if (!dedupKey) return 'unknown';
   const parts = dedupKey.split(':');
   if (parts.length >= 2) {
-    // e.g. "tool:read:ok" → the tool/subject is "tool:read"
+    if (parts[0] === 'tool') {
+      return `tool:${parts[1]}:reliability`;
+    }
     return `${parts[0]}:${parts[1]}`;
   }
   return dedupKey;
 }
 
 function deriveClaim(dedupKey: string, beliefKind: BeliefKind, reason: string): string {
-  // For preference: "tool:read:ok" → claim is "reads successfully"
-  // For opinion: "dec:creation" → claim is from reason
-  // For worldview: "ms:completion" → claim is "completes tasks"
   if (!dedupKey) return reason.slice(0, 120);
+
+  if (dedupKey.startsWith('tool:') && beliefKind === 'preference') {
+    return 'reliability';
+  }
 
   const parts = dedupKey.split(':');
   const outcomePart = parts[parts.length - 1];
 
   if (beliefKind === 'preference') {
-    if (outcomePart === 'ok') return 'succeeds reliably';
-    if (outcomePart === 'fail') return 'fails frequently';
-    // Use reason but strip "(N events/milestones/etc)" count suffixes for cleaner claims
     const cleaned = reason.replace(/\s*\(\d+\s+\w+\)\s*$/, '').trim();
     return cleaned || outcomePart;
   }
 
   if (beliefKind === 'opinion') {
-    // Use subject + stance from reason
     return reason.length > 120 ? reason.slice(0, 120) : reason;
   }
 
@@ -108,26 +107,29 @@ function deriveClaim(dedupKey: string, beliefKind: BeliefKind, reason: string): 
 
 function deriveStance(beliefKind: BeliefKind, dedupKey: string): 'supports' | 'opposes' | 'neutral' {
   if (beliefKind === 'preference') {
+    if (dedupKey.startsWith('tool:')) {
+      const parts = dedupKey.split(':');
+      const outcome = parts[parts.length - 1];
+      if (outcome === 'ok') return 'supports';
+      if (outcome === 'fail') return 'opposes';
+      return 'neutral';
+    }
     const parts = dedupKey.split(':');
     const outcome = parts[parts.length - 1];
     if (outcome === 'ok') return 'supports';
     if (outcome === 'fail') return 'opposes';
   }
-  if (beliefKind === 'worldview') return 'supports'; // worldviews are positive by default
-  if (beliefKind === 'opinion') return 'neutral'; // opinions are contextual/neutral
+  if (beliefKind === 'worldview') return 'supports';
+  if (beliefKind === 'opinion') return 'neutral';
   return 'neutral';
 }
 
 function isJunkBelief(subject: string, claim: string, dedupKey: string): boolean {
-  // Trivially true: "tool:bash succeeds reliably" — any tool that doesn't crash
-  if (subject.startsWith('tool:')) return true;
-  // Test data pollution: candidates from test sessions leaked into prod DB
+  if (subject.startsWith('tool:') && dedupKey.endsWith(':ok')) return true;
   if (/^(live-test|test-dedup|scan-test|checks-test|relaxed-test|low-conf-default|phase-test)/.test(subject)) return true;
   if (/^(live-test|test-dedup|scan-test|checks-test|relaxed-test|low-conf-default|phase-test)/.test(dedupKey)) return true;
-  // Empty taxonomy: "ms:other other" or "pref:decision: other" = "something happened"
   if (subject === 'ms:other' || (subject === 'ms' && claim === 'other')) return true;
   if (subject === 'pref:decision' && (claim === 'other' || claim.includes('category: other'))) return true;
-  // Auto-taxonomy noise: "User decision — category: X (Nx, NR/0C)"
   if (claim.includes('User decision — category:')) return true;
   return false;
 }
@@ -430,7 +432,7 @@ export class BeliefKnowledgeConsolidator {
          SET status = 'stale', updated_at = ${now}
          WHERE status != 'stale'
            AND (
-             subject LIKE 'tool:%'
+             (subject LIKE 'tool:%' AND stance = 'supports')
              OR subject LIKE 'live-test%'
              OR subject LIKE 'test-dedup%'
              OR subject LIKE 'scan-test%'

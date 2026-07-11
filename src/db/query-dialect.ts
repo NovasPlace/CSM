@@ -21,6 +21,9 @@ export function ilikeExpr(d: QueryDialect, col: string, paramIndex: number): str
 }
 
 export function ilikeLiteralExpr(d: QueryDialect, col: string, literal: string): string {
+  if (literal.includes("'") || literal.includes('"') || literal.includes(';') || literal.includes('--')) {
+    throw new Error(`ilikeLiteralExpr: rejected unsafe literal: ${literal.slice(0, 50)}`);
+  }
   if (d === 'sqlite') {
     return `LOWER(${col}) LIKE LOWER('${literal}')`;
   }

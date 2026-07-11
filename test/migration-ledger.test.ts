@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MigrationHistoryError,
@@ -31,7 +31,6 @@ function applied(
   };
 }
 
-describe('migration ledger history validation', () => {
   it('creates a stable SHA-256 checksum from contract and implementation', () => {
     const definition = migration();
     const first = migrationChecksum(definition);
@@ -57,6 +56,18 @@ describe('migration ledger history validation', () => {
     const definition = migration();
     assert.doesNotThrow(() => {
       validateMigrationHistory([definition], [applied(definition)], 'postgres');
+    });
+  });
+
+  it('accepts only an explicitly registered legacy checksum', () => {
+    const definition = migration();
+    const changed = {
+      ...definition,
+      implementation: ['CREATE TABLE example (id TEXT PRIMARY KEY)'],
+      acceptedLegacyChecksums: [migrationChecksum(definition)],
+    };
+    assert.doesNotThrow(() => {
+      validateMigrationHistory([changed], [applied(definition)], 'postgres');
     });
   });
 
@@ -105,4 +116,3 @@ describe('migration ledger history validation', () => {
     await recordMigration(pool, migration(), 'postgres', 63.503);
     assert.equal(calls[0][3], 64);
   });
-});

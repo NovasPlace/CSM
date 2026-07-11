@@ -1,5 +1,6 @@
 import type { DatabasePool, MemoryType, BeliefPromotionConfig } from './types.js';
-import { dialectFromPool, type QueryDialect } from './db/query-dialect.js';
+import { CAPABILITY_PROVENANCE_TAG, canonicalCapabilityKey } from './types.js';
+import { dialectFromPool, jsonExtractText, nowFn, type QueryDialect } from './db/query-dialect.js';
 import { getLogger } from './logger.js';
 import { BELIEF_CANDIDATE_TYPES, type BeliefCandidateType } from './candidate-schema.js';
 import type { MemoryManager } from './memory-manager.js';
@@ -73,8 +74,14 @@ function candidateTypeToMemoryType(ct: BeliefCandidateType): MemoryType {
     case 'candidate_worldview': return 'repo';
     case 'candidate_opinion': return 'conversation';
     case 'candidate_drift_warning': return 'lesson';
+    case 'candidate_capability': return 'workspace';
     default: return 'preference';
   }
+}
+
+function extractToolNameFromDedupKey(dedupKey: string): string | null {
+  const match = dedupKey.match(/^cap:(.+):ok$/);
+  return match ? match[1] : null;
 }
 
 export class BeliefPromotionEngine {
@@ -235,8 +242,8 @@ export class BeliefPromotionEngine {
       return this.decision(c, 'skip_low_session_diversity', targetMemoryType, undefined, thresholdChecks);
     }
 
-    // Rule: dedup against existing memories
-    const dedupMatch = await this.findDuplicate(c.reason, targetMemoryType, opts.d);
+    // Rule: dedup against existing memories (structural key, not fuzzy content match)
+    const dedupMatch = await this.findDuplicate(c.dedupKey, targetMemoryType, opts.d);
     if (dedupMatch) {
       return {
         ...this.decision(c, 'skip_dedup_match', targetMemoryType, sessionCount, thresholdChecks),
@@ -289,18 +296,17 @@ export class BeliefPromotionEngine {
   }
 
   private async findDuplicate(
-    reason: string,
+    dedupKey: string,
     memoryType: MemoryType,
-    _d: QueryDialect,
+    d: QueryDialect,
   ): Promise<{ id: number; content: string } | null> {
-    // Search for memories with similar content (first 100 chars of reason)
-    const prefix = reason.slice(0, 100).replace(/'/g, "''");
+    const metaExpr = jsonExtractText(d, 'metadata', 'dedup_key');
     const result = await this.pool.query(
       `SELECT id, content FROM memories
        WHERE memory_type = $1
-         AND LOWER(content) LIKE LOWER($2)
+         AND ${metaExpr} = $2
        LIMIT 1`,
-      [memoryType, `%${prefix}%`],
+      [memoryType, dedupKey],
     );
     if (result.rows.length > 0) {
       const row = result.rows[0] as { id: number; content: string };
@@ -315,8 +321,17 @@ export class BeliefPromotionEngine {
     _d: QueryDialect,
   ): Promise<number | null> {
     const importance = Math.min(1.0, c.confidence * 0.8 + (c.reinforcementCount / 10) * 0.2);
-    const content = `[Promoted from candidate ${c.id}] ${c.reason}`;
-    const metadata = {
+    const promotedAt = new Date().toISOString();
+
+    const isCapability = c.candidateType === 'candidate_capability';
+    const toolName = isCapability ? extractToolNameFromDedupKey(c.dedupKey) : null;
+    const canonicalKey = toolName ? canonicalCapabilityKey(toolName) : null;
+
+    const content = isCapability
+      ? `[Capability provenance] Capability for ${canonicalKey ?? c.dedupKey} crossed promotion threshold at ${promotedAt} based on ${c.reinforcementCount} reinforcements across ${decision.evidenceSessions ?? 0} sessions. [Snapshot — self-model holds current live state.]`
+      : `[Promoted from candidate ${c.id}] ${c.reason}`;
+
+    const metadata: Record<string, unknown> = {
       promotion_source: 'belief_promotion_engine',
       candidate_id: c.id,
       candidate_type: c.candidateType,
@@ -326,11 +341,20 @@ export class BeliefPromotionEngine {
       confidence: c.confidence,
       reinforcement_count: c.reinforcementCount,
       event_count: c.eventCount,
-      promoted_at: new Date().toISOString(),
+      promoted_at: promotedAt,
       source_kind: 'belief_promotion',
       evidence_strength: 'derived_pattern',
       source_agent_id: 'csmt',
     };
+
+    if (isCapability) {
+      metadata.record_type = 'capability_provenance';
+      metadata.canonical_key = canonicalKey;
+    }
+
+    const tags = isCapability
+      ? [CAPABILITY_PROVENANCE_TAG, 'auto-promoted']
+      : [c.candidateType, 'auto-promoted'];
 
     try {
       const memory = await this.memoryManager.saveMemory({
@@ -339,8 +363,8 @@ export class BeliefPromotionEngine {
         importance,
         confidence: c.confidence,
         source: 'auto',
-        tags: [c.candidateType, 'auto-promoted'],
-        metadata: metadata as Record<string, unknown>,
+        tags,
+        metadata,
       });
       return memory.id;
     } catch (err) {
@@ -349,10 +373,10 @@ export class BeliefPromotionEngine {
     }
   }
 
-  private async markCandidateApplied(candidateId: number, _d: QueryDialect): Promise<void> {
+  private async markCandidateApplied(candidateId: number, d: QueryDialect): Promise<void> {
     await this.pool.query(
       `UPDATE memory_candidate_queue
-       SET status = 'applied', updated_at = now()
+       SET status = 'applied', updated_at = ${nowFn(d)}
        WHERE id = $1`,
       [candidateId],
     );

@@ -54,7 +54,6 @@ export interface PluginState {
   sourceOnlySessions?: Set<string>;
   sourceOnlyUntilMs?: number;
   stateChangeTracker?: Record<string, unknown>;
-  _docsInitialized?: boolean;
   pendingFileContext?: import('./file-context-primer.js').FileContextBlock | null;
   pendingMilestonePrompt?: import('./milestone-tracker.js').MilestonePromptBlock | null;
   reentryInjected: Set<string>;

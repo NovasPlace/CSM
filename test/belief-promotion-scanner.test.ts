@@ -333,7 +333,8 @@ describe('BeliefPromotionScanner', () => {
           rows: Array.from({ length: 6 }, (_, i) =>
             makePacketRow({
               id: i + 1,
-              signals: JSON.stringify({ toolName: i < 3 ? 'read' : 'write' }),
+              entry_type: 'milestone',
+              signals: JSON.stringify({ intent: i < 3 ? 'exploration' : 'verification' }),
             }),
           ),
           rowCount: 6,
@@ -344,8 +345,8 @@ describe('BeliefPromotionScanner', () => {
     const scanner = makeScanner(pool);
     const report = await scanner.scan({ dryRun: false, maxPerType: 1, minPacketCount: 1, minReinforcement: 1 });
 
-    const capCount = report.byType['candidate_capability'] ?? 0;
-    assert.equal(capCount, 1, 'should only produce 1 candidate with maxPerType=1');
+    const wvCount = report.byType['candidate_worldview'] ?? 0;
+    assert.equal(wvCount, 1, 'should only produce 1 candidate with maxPerType=1');
   });
 
   it('filters by allowed types', async () => {
@@ -353,12 +354,12 @@ describe('BeliefPromotionScanner', () => {
       if (sql.includes('FROM experience_packets')) {
         return {
           rows: [
-            makePacketRow({ id: 1, signals: JSON.stringify({ toolName: 'read' }) }),
-            makePacketRow({ id: 2, signals: JSON.stringify({ toolName: 'read' }) }),
+            makePacketRow({ id: 1, entry_type: 'milestone', signals: JSON.stringify({ intent: 'exploration' }) }),
+            makePacketRow({ id: 2, entry_type: 'milestone', signals: JSON.stringify({ intent: 'exploration' }) }),
             makePacketRow({
               id: 3,
               entry_type: 'milestone',
-              signals: JSON.stringify({ intent: 'all done' }),
+              signals: JSON.stringify({ intent: 'exploration' }),
             }),
           ],
           rowCount: 3,
@@ -369,13 +370,13 @@ describe('BeliefPromotionScanner', () => {
     const scanner = makeScanner(pool);
     const report = await scanner.scan({
       dryRun: true,
-      types: ['candidate_capability'],
+      types: ['candidate_worldview'],
       minPacketCount: 1,
       minReinforcement: 1,
     });
 
     assert.equal(report.candidates.length, 1);
-    assert.equal(report.candidates[0].candidateType, 'candidate_capability');
+    assert.equal(report.candidates[0].candidateType, 'candidate_worldview');
   });
 
   it('report aggregates counts by type and status', async () => {
