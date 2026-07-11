@@ -30,6 +30,12 @@ export async function initializeAllSchemas(database: Database): Promise<void> {
   getLogger().info(`${provider === 'sqlite' ? 'SQLite' : 'PostgreSQL'} schema ready`);
 }
 
+export const SQLITE_MIGRATION_IDS: readonly string[] = [
+  '20260709-001-sqlite-baseline',
+  '20260711-002-sqlite-work-journal',
+  '20260711-023-capability-provenance-rewrite',
+];
+
 function buildMigrations(
   database: Database,
   pool: DatabasePool,
@@ -38,19 +44,19 @@ function buildMigrations(
   if (provider === 'postgres') return buildPostgresMigrations(database, pool);
   return [
     {
-      id: '20260709-001-sqlite-baseline',
+      id: SQLITE_MIGRATION_IDS[0],
       contract: 'csm-sqlite-v1:core memory, graph, recall, packets, self-model, and beliefs',
       implementation: artifactsFor('20260709-001-sqlite-baseline'),
       run: () => initializeMinimalSqliteSchema(pool),
     },
     {
-      id: '20260711-002-sqlite-work-journal',
+      id: SQLITE_MIGRATION_IDS[1],
       contract: 'csm-sqlite-v2:persistent agent work journal',
       implementation: artifactsFor('20260711-002-sqlite-work-journal'),
       run: () => initializeSqliteWorkJournal(pool),
     },
     {
-      id: '20260711-023-capability-provenance-rewrite',
+      id: SQLITE_MIGRATION_IDS[2],
       contract: 'csm-sqlite-v2:rewrite capability promotion memories as immutable provenance snapshots',
       implementation: artifactsFor('20260711-023-capability-provenance-rewrite'),
       run: () => runCapabilityProvenanceMigration(pool).then(() => undefined),

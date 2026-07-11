@@ -55,7 +55,7 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
     artifact('src/schema/sqlite/work-journal.ts', 'e7ec43457c0f8909dd50ee131effbe10111fc24d8881c72b86d04b42849d789e'),
   ],
   '20260711-023-capability-provenance-rewrite': [
-    artifact('src/schema/capability-provenance-migration.ts', '5ba604adae9a9abd2ac2845941a3e9fbac005fdb8722922e7483df36c12aa3d7'),
+    artifact('src/schema/capability-provenance-migration.ts', 'f42646c5e692d7011f7517d9401903f332b4fde9c5a7492d6e1383e862732cb4'),
   ],
 };
 

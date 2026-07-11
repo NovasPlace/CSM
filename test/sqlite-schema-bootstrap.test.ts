@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdirSync, rmSync } from 'node:fs';
 import { buildOnboardingPacket } from '../dist/agent-onboarding.js';
 import { Database } from '../dist/database.js';
+import { SQLITE_MIGRATION_IDS } from '../dist/schema/index.js';
 import type { PluginConfig } from '../dist/types.js';
+
+const EXPECTED_SQLITE_MIGRATION_IDS = [
+  '20260709-001-sqlite-baseline',
+  '20260711-002-sqlite-work-journal',
+  '20260711-023-capability-provenance-rewrite',
+] as const;
 
 describe('Phase 3C — SQLite schema bootstrap', () => {
   const tmpDir = '.tmp/sqlite-bootstrap';
@@ -183,6 +190,11 @@ describe('Phase 3C — SQLite schema bootstrap', () => {
   });
 
   it('records and replays the SQLite migration manifest once', async () => {
+    assert.deepEqual(SQLITE_MIGRATION_IDS, EXPECTED_SQLITE_MIGRATION_IDS,
+      'SQLITE_MIGRATION_IDS must match the test-owned expected ledger');
+    assert.equal(new Set(EXPECTED_SQLITE_MIGRATION_IDS).size, EXPECTED_SQLITE_MIGRATION_IDS.length,
+      'expected migration IDs must be unique');
+
     const config = {
       databaseUrl: dbPath,
       databaseProvider: 'sqlite',
@@ -200,9 +212,9 @@ describe('Phase 3C — SQLite schema bootstrap', () => {
       `SELECT migration_id, checksum, provider
        FROM csm_schema_migrations ORDER BY migration_id`,
     );
-    assert.equal(result.rows.length, 2);
-    assert.equal(result.rows[0].migration_id, '20260709-001-sqlite-baseline');
-    assert.equal(result.rows[1].migration_id, '20260711-002-sqlite-work-journal');
+    assert.equal(result.rows.length, EXPECTED_SQLITE_MIGRATION_IDS.length);
+    const persistedIds = result.rows.map((row) => row.migration_id);
+    assert.deepEqual(persistedIds, [...EXPECTED_SQLITE_MIGRATION_IDS]);
     for (const row of result.rows) {
       assert.match(row.checksum, /^[a-f0-9]{64}$/);
       assert.equal(row.provider, 'sqlite');
