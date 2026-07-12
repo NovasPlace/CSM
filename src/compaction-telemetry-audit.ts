@@ -1,4 +1,18 @@
 import type { DatabasePool } from './types.js';
+import { dialectFromPool } from './db/query-dialect.js';
+
+export type AuditAvailability =
+  | {
+      available: true;
+      passed: boolean;
+      summary: string;
+      result: AuditResult;
+    }
+  | {
+      available: false;
+      reason: 'table_missing' | 'schema_incomplete' | 'query_unsupported';
+      passed: null;
+    };
 
 export interface AuditResult {
   totalRows: number;
@@ -105,7 +119,56 @@ interface SessionBreakdownRow {
   last: string;
 }
 
-export async function auditCompactionTelemetry(pool: DatabasePool): Promise<AuditResult> {
+export async function auditCompactionTelemetry(pool: DatabasePool): Promise<AuditAvailability> {
+  const dialect = dialectFromPool(pool);
+
+  // 1. Table existence precheck
+  const tableExistsQuery = dialect === 'sqlite'
+    ? "SELECT name FROM sqlite_master WHERE type='table' AND name='compaction_metrics'"
+    : "SELECT to_regclass('compaction_metrics') AS name";
+  const tableResult = await pool.query(tableExistsQuery);
+  const tableRow = tableResult.rows[0] as { name: string | null } | undefined;
+  if (!tableRow || !tableRow.name) {
+    return { available: false, reason: 'table_missing', passed: null };
+  }
+
+  // 2. Schema-completeness check (all 15 non-id columns must exist)
+  const schemaQuery = dialect === 'sqlite'
+    ? 'PRAGMA table_info(compaction_metrics)'
+    : `SELECT column_name FROM information_schema.columns WHERE table_name = 'compaction_metrics'`;
+  const schemaResult = await pool.query(schemaQuery);
+  const existingColumns = dialect === 'sqlite'
+    ? (schemaResult.rows as { name: string }[]).map((r) => r.name)
+    : (schemaResult.rows as { column_name: string }[]).map((r) => r.column_name);
+  const requiredColumns = [
+    'session_id', 'total_tool_parts', 'compacted_parts', 'skipped_parts',
+    'before_chars', 'after_chars', 'before_tokens', 'after_tokens',
+    'tokens_saved', 'saved_percent', 'semantic_signal_count_preserved',
+    'context_brief_chars', 'discard_marker_present', 'status', 'created_at',
+  ];
+  const missingColumns = requiredColumns.filter((c) => !existingColumns.includes(c));
+  if (missingColumns.length > 0) {
+    return { available: false, reason: 'schema_incomplete', passed: null };
+  }
+
+  // 3. Window-function execution probe (feature detection, not version string)
+  try {
+    await pool.query('SELECT ROW_NUMBER() OVER (ORDER BY value) AS rn FROM (SELECT 1 AS value)');
+  } catch {
+    return { available: false, reason: 'query_unsupported', passed: null };
+  }
+
+  // 4. Run the actual audit logic
+  const result = await runAuditLogic(pool);
+  return {
+    available: true,
+    passed: result.passed,
+    summary: result.summary,
+    result,
+  };
+}
+
+async function runAuditLogic(pool: DatabasePool): Promise<AuditResult> {
   const anomalies_neg = await pool.query(`
     SELECT id, session_id,
       'before_tokens=' || before_tokens || ' after_tokens=' || after_tokens || ' tokens_saved=' || tokens_saved as detail
@@ -313,6 +376,28 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
 }
 
 export function formatAuditReport(result: AuditResult): string {
+  return formatAuditReportInner(result);
+}
+
+export function formatAuditAvailability(availability: AuditAvailability): { title: string; output: string } {
+  if (!availability.available) {
+    const reasonMessages: Record<string, string> = {
+      table_missing: 'Compaction audit unavailable: compaction_metrics table does not exist',
+      schema_incomplete: 'Compaction audit unavailable: compaction_metrics schema is incomplete (columns missing)',
+      query_unsupported: 'Compaction audit unavailable: database runtime does not support window functions required for duplicate detection',
+    };
+    return {
+      title: 'Compaction Audit UNAVAILABLE',
+      output: reasonMessages[availability.reason] ?? `Compaction audit unavailable: ${availability.reason}`,
+    };
+  }
+  return {
+    title: availability.passed ? 'Compaction Audit PASSED' : 'Compaction Audit ISSUES FOUND',
+    output: formatAuditReportInner(availability.result),
+  };
+}
+
+function formatAuditReportInner(result: AuditResult): string {
   const lines: string[] = [];
 
   lines.push('=== Compaction Telemetry Audit Report ===');

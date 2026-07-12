@@ -112,5 +112,9 @@ export async function runtimeStatusOp(deps: CodexBridgeExtraDeps, sessionId?: st
 }
 
 export async function compactionAuditOp(deps: CodexBridgeExtraDeps) {
-  return { output: formatAuditReport(await auditCompactionTelemetry(deps.database.getPool())) };
+  const availability = await auditCompactionTelemetry(deps.database.getPool());
+  if (!availability.available) {
+    return { output: `Compaction audit unavailable: ${availability.reason}` };
+  }
+  return { output: formatAuditReport(availability.result) };
 }
