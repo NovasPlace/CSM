@@ -57,6 +57,10 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
   '20260711-023-capability-provenance-rewrite': [
     artifact('src/schema/capability-provenance-migration.ts', 'f42646c5e692d7011f7517d9401903f332b4fde9c5a7492d6e1383e862732cb4'),
   ],
+  '20260711-024-sqlite-compaction-metrics': [
+    artifact('src/schema/sqlite/compaction-metrics.ts', '11ad9b60093c9795e5fe48df0819ddbaaf707d2d3d632d24e4ec70051ff94498'),
+    artifact('src/schema/sqlite/compaction-metrics-migration.ts', '6ecc2ba2c371e344acbb81f61ade02dea27a75855ae659ab2fb13a4181cb5a64'),
+  ],
 };
 
 export function artifactsFor(migrationId: string): readonly string[] {

@@ -13,6 +13,7 @@ import { artifactsFor } from './migration-artifacts.js';
 import { buildPostgresMigrations } from './postgres-migrations.js';
 import { SchemaStepError } from './schema-errors.js';
 import { initializeMinimalSqliteSchema } from './sqlite/index.js';
+import { migrateCompactionMetricsSqlite } from './sqlite/compaction-metrics-migration.js';
 import { initializeSqliteWorkJournal } from './sqlite/work-journal.js';
 import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
 
@@ -34,6 +35,7 @@ export const SQLITE_MIGRATION_IDS: readonly string[] = [
   '20260709-001-sqlite-baseline',
   '20260711-002-sqlite-work-journal',
   '20260711-023-capability-provenance-rewrite',
+  '20260711-024-sqlite-compaction-metrics',
 ];
 
 function buildMigrations(
@@ -60,6 +62,12 @@ function buildMigrations(
       contract: 'csm-sqlite-v2:rewrite capability promotion memories as immutable provenance snapshots',
       implementation: artifactsFor('20260711-023-capability-provenance-rewrite'),
       run: () => runCapabilityProvenanceMigration(pool).then(() => undefined),
+    },
+    {
+      id: SQLITE_MIGRATION_IDS[3],
+      contract: 'csm-sqlite-v2:compaction telemetry metrics table with partial-schema repair',
+      implementation: artifactsFor('20260711-024-sqlite-compaction-metrics'),
+      run: () => migrateCompactionMetricsSqlite(pool),
     },
   ];
 }
