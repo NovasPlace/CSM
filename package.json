@@ -58,6 +58,7 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "npx tsx --test test/*.test.ts",
+    "test:wip": "npx tsx --test wip-tests/*.test.ts",
     "verify": "npm run build && npm run typecheck && npx tsx --test test/*.test.ts",
     "drill:backup-restore": "npm run build && npx tsx scripts/backup-restore-drill.ts",
     "verify:enterprise": "npm run verify && npm run lint:src && npm run drill:backup-restore",
