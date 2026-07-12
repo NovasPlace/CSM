@@ -5,6 +5,7 @@ import type { ToolCallRecord } from '../types.js';
 import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
 import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
+import { getLogger } from '../logger.js';
 
 
 
@@ -76,7 +77,7 @@ export function createToolExecuteBeforeHook(ctx: PluginContext) {
       await maybeCreateRiskyEditCheckpoint(ctx, input, output);
       if (result.loop) await storeLoopLesson(ctx, input.tool, result.callCount, result.mayday);
     } catch (error) {
-      console.error('[CrossSessionMemory] Loop detection error:', error);
+      getLogger().error('Loop detection error', error instanceof Error ? error : new Error(String(error)));
     }
   };
 }
@@ -111,7 +112,7 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
         scheduleDocFlushLocal(ctx);
       }
     } catch (error) {
-      console.error('[CrossSessionMemory] Tool tracking error:', error);
+      getLogger().error('Tool tracking error', error instanceof Error ? error : new Error(String(error)));
     }
   };
 }
@@ -158,7 +159,7 @@ async function injectLessonWarning(ctx: PluginContext, input: ToolExecuteBeforeI
   try {
     await ctx.lessonTriggers.refresh();
     const warning = ctx.lessonTriggers.buildInjection(input.tool, output.args ?? {});
-    if (warning) console.warn(`[LessonTriggers] Matched lesson for tool "${input.tool}":\n${warning}`);
+      if (warning) getLogger().warn(`Matched lesson for tool "${input.tool}":\n${warning}`);
   } catch { /* lesson refresh failed, skip */ }
 }
 
@@ -177,7 +178,7 @@ async function maybeCreateRiskyEditCheckpoint(
 
   const filePath = (output.args?.filePath as string) ?? (output.args?.path as string) ?? undefined;
   await ctx.autoCheckpoint(sid, 'risky_edit', { tool: input.tool, filePath }).catch((error: unknown) =>
-    console.error('[CrossSessionMemory] Auto-checkpoint (risky_edit) failed:', error),
+    getLogger().error('Auto-checkpoint (risky_edit) failed', error instanceof Error ? error : new Error(String(error))),
   );
 }
 

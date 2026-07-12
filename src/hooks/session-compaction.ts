@@ -1,6 +1,11 @@
 import type { PluginContext } from '../plugin-context.js';
 import { getRolloverRecord, clearHardRolloverFlag } from '../context-rollover-schema.js';
 import { estimateTokens } from '../token-bucket-analyzer.js';
+import { getLogger } from '../logger.js';
+
+function boxErr(e: unknown): Error {
+  return e instanceof Error ? e : new Error(String(e));
+}
 
 /**
  * Phase 4B/4C — Session compaction hooks.
@@ -17,25 +22,23 @@ export function createSessionCompactingHook(ctx: PluginContext) {
       const sid = ctx.state.currentSessionId;
       if (!ctx.config.checkpoint.auto?.enabled || !sid) return;
 
-      // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
-      console.log('[CrossSessionMemory] Pre-compaction auto-checkpoint triggered');
+      getLogger().info('Pre-compaction auto-checkpoint triggered');
       await ctx.autoCheckpoint(sid, 'pre_compaction', {
         reason: 'opencode_builtin_compaction_starting',
-      }).catch(e => console.error('[CrossSessionMemory] Auto-checkpoint (pre_compaction) failed:', e));
+      }).catch(e => getLogger().error('Auto-checkpoint (pre_compaction) failed', boxErr(e)));
 
       if (!ctx.config.checkpoint.enabled) return;
       try {
         const latest = await ctx.checkpointStore.getActiveCheckpoint(sid);
         if (latest) {
           output.prompt = buildDenseCompactionPrompt(latest.summaryMarkdown, latest.nextSteps, latest.risks);
-          // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
-          console.log('[CrossSessionMemory] Injected dense compaction prompt + checkpoint context');
+          getLogger().info('Injected dense compaction prompt + checkpoint context');
         }
       } catch (e) {
-        console.error('[CrossSessionMemory] Failed to inject checkpoint context:', e);
+        getLogger().error('Failed to inject checkpoint context', boxErr(e));
       }
     } catch (e) {
-      console.error('[CrossSessionMemory] session.compacting hook error:', e);
+      getLogger().error('session.compacting hook error', boxErr(e));
     }
   };
 }
@@ -82,14 +85,11 @@ export function createAutocontinueHook(ctx: PluginContext) {
 
       // Standard post-compaction checkpoint
       if (ctx.config.checkpoint.auto?.enabled) {
-        // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
-        console.log('[CrossSessionMemory] Post-compaction auto-checkpoint triggered', {
-          overflow: input.overflow,
-        });
+        getLogger().info(`Post-compaction auto-checkpoint triggered (overflow=${String(input.overflow)})`);
         await ctx.autoCheckpoint(sid, 'post_compaction', {
           reason: 'opencode_builtin_compaction_completed',
           overflow: input.overflow,
-        }).catch(e => console.error('[CrossSessionMemory] Auto-checkpoint (post_compaction) failed:', e));
+        }).catch(e => getLogger().error('Auto-checkpoint (post_compaction) failed', boxErr(e)));
       }
 
       // Phase 2: Hard rollover — detect flag, create brief checkpoint, halt
@@ -97,8 +97,7 @@ export function createAutocontinueHook(ctx: PluginContext) {
         const pool = ctx.database.getPool();
         const record = await getRolloverRecord(pool, sid);
         if (record.needs_hard_rollover && record.last_brief_text) {
-          // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
-          console.log('[CrossSessionMemory] Hard rollover triggered — creating continuation brief checkpoint');
+          getLogger().info('Hard rollover triggered — creating continuation brief checkpoint');
           const briefText = record.last_brief_text;
           const briefTokens = estimateTokens(briefText);
           await ctx.checkpointStore.createCheckpoint({
@@ -115,12 +114,11 @@ export function createAutocontinueHook(ctx: PluginContext) {
             rawCaptures: [],
           });
           await clearHardRolloverFlag(pool, sid);
-          // eslint-disable-next-line no-console -- hook lifecycle logging is intentional
-          console.log(`[CrossSessionMemory] Hard rollover checkpoint created (${briefTokens} tokens), flag cleared`);
+          getLogger().info(`Hard rollover checkpoint created (${briefTokens} tokens), flag cleared`);
         }
       }
     } catch (e) {
-      console.error('[CrossSessionMemory] compaction.autocontinue hook error:', e);
+      getLogger().error('compaction.autocontinue hook error', boxErr(e));
     }
   };
 }
