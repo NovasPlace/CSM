@@ -1,10 +1,10 @@
-# AgentBook — Current State
+# AgentBook - Current State
 
 ## Project
 cross-session-memory
 
 ## Active Goal
-AgentBook operational — verify auto-regeneration after restart
+AgentBook operational - verify auto-regeneration after restart
 
 ## Current State
 - Phase: AgentBook
