@@ -81,7 +81,7 @@ let dbPool: DatabasePool;
 
 before(async () => {
   pool = new Pool({
-    connectionString: 'postgresql://postgres:postgres@localhost:5432/cross_session_memory',
+    connectionString: process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/cross_session_memory',
     max: 2,
   });
   dbPool = {
