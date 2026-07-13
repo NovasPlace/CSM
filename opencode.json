@@ -10,5 +10,11 @@
     "reserved": 81072,
     "tail_turns": 2,
     "preserve_recent_tokens": 6000
-  }
+  },
+  "plugin": [
+    [
+      "file:///C:/Users/Donovan/Desktop/cross-session-memory/dist/index.js",
+      {}
+    ]
+  ]
 }
