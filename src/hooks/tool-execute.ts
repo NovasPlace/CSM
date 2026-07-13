@@ -6,7 +6,7 @@ import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
 import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
 import { getLogger } from '../logger.js';
-import type { AgentBookEventInput } from '../agentbook-types.js';
+import { buildAgentBookToolEventInput } from '../agentbook-tool-event.js';
 import { generateFrontPage, writeFrontPageFile } from '../agentbook-frontpage.js';
 
 
@@ -129,19 +129,16 @@ async function captureAgentBookEvent(
   if (!ctx.agentBookEvents) return;
   try {
     const projectId = (ctx.config as { projectId?: string }).projectId ?? 'cross-session-memory';
-    const toolOutput = summarizeToolOutput(output.output);
-    const eventInput: AgentBookEventInput = {
+    const eventInput = buildAgentBookToolEventInput({
       projectId,
       sessionId: sid,
-      eventType: input.tool === 'bash' || input.tool === 'bash' ? 'command_run' : 'file_modified',
-      summary: `${input.tool}: ${toolOutput.slice(0, 200)}`,
-      command: input.tool === 'bash' ? String((input as { args?: { command?: string } }).args?.command ?? '') : null,
-      result: (output as { error?: unknown }).error ? 'error' : 'success',
-      metadata: { tool: input.tool, callId: input.callID },
-    };
-    if (input.tool === 'write') eventInput.eventType = 'file_created';
-    if (input.tool === 'edit' || input.tool === 'multiedit') eventInput.eventType = 'file_modified';
-    if ((output as { error?: unknown }).error) eventInput.eventType = 'failed_approach';
+      tool: input.tool,
+      callId: input.callID,
+      args: input.args,
+      title: output.title,
+      output: summarizeToolOutput(output.output),
+      metadata: output.metadata,
+    });
     await ctx.agentBookEvents.append(eventInput);
     await regenerateAgentBookFrontPage(ctx, projectId);
   } catch (agentBookError) {
@@ -151,6 +148,7 @@ async function captureAgentBookEvent(
 
 async function regenerateAgentBookFrontPage(ctx: PluginContext, projectId: string): Promise<void> {
   if (!ctx.agentBookState || !ctx.agentBookEvents || !ctx.agentBookRules || !ctx.agentBookSummary) return;
+  if (!ctx.directory) return;
   try {
     await ctx.agentBookSummary.maybeGenerate(projectId);
     const state = await ctx.agentBookState.project(projectId);
@@ -160,8 +158,7 @@ async function regenerateAgentBookFrontPage(ctx: PluginContext, projectId: strin
       ctx.agentBookEvents.getRecentEvents(projectId, 10),
     ]);
     const frontPage = generateFrontPage(state, latestSummary, rules, recentEvents);
-    const projectRoot = process.cwd();
-    writeFrontPageFile(frontPage.markdown, projectRoot);
+    writeFrontPageFile(frontPage.markdown, ctx.directory);
   } catch (regenError) {
     getLogger().debug(`AgentBook frontpage regen skipped: ${regenError instanceof Error ? regenError.message : String(regenError)}`);
   }
