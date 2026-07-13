@@ -102,6 +102,173 @@
 
 ---
 
+**C:/Users/Donovan/Desktop/cross-session-memory/src/context-injection-logger.ts** (2026-07-13)
+Detected: Error:
+Context: import type { DatabasePool } from './types.js';
+import { getLogger } from './logger.js';
+import type { BuiltContextInjection, ContextInjectionItem } from './context-injection-contract.js';
+
+export interface ContextInjectionLoggerConfig {
+  enabled: boolean;
+  environment: 'production' | 'fixture' | ...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/src/context-injection-logger.ts** (2026-07-13)
+Detected: Error:
+Context: import type { DatabasePool } from './types.js';
+import { getLogger } from './logger.js';
+import type { BuiltContextInjection, ContextInjectionItem } from './context-injection-contract.js';
+
+export interface ContextInjectionLoggerConfig {
+  enabled: boolean;
+  environment: 'production' | 'fixture' | ...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/src/context-injection-logger.ts** (2026-07-13)
+Detected: Error:
+Context: import type { DatabasePool } from './types.js';
+import { getLogger } from './logger.js';
+import type { BuiltContextInjection, ContextInjectionItem } from './context-injection-contract.js';
+
+export interface ContextInjectionLoggerConfig {
+  enabled: boolean;
+  environment: 'production' | 'fixture' | ...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/src/context-injection-logger.ts** (2026-07-13)
+Detected: Error:
+Context: import type { DatabasePool } from './types.js';
+import { getLogger } from './logger.js';
+import type { BuiltContextInjection, ContextInjectionItem } from './context-injection-contract.js';
+
+export interface ContextInjectionLoggerConfig {
+  enabled: boolean;
+  environment: 'production' | 'fixture' | ...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/src/context-injection-logger.ts** (2026-07-13)
+Detected: Error:
+Context: import type { DatabasePool } from './types.js';
+import { getLogger } from './logger.js';
+import type { BuiltContextInjection, ContextInjectionItem } from './context-injection-contract.js';
+
+export interface ContextInjectionLoggerConfig {
+  enabled: boolean;
+  environment: 'production' | 'fixture' | ...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/src/context-injection-audit.ts** (2026-07-13)
+Detected: failed:
+Context: import type { DatabasePool } from './types.js';
+
+export interface InjectionAuditReport {
+  summary: {
+    totalEvents: number;
+    totalItems: number;
+    byKind: Record<string, number>;
+    byStatus: Record<string, number>;
+    byEnvironment: Record<string, number>;
+    byTrimLevel: Record<string, ...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
+**src/hooks/system-transform.ts** (2026-07-13)
+Detected: Error:, timeout
+Context: import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+...
+
 ## Recovery Procedures
 
 ### Full Reset (Nuclear)

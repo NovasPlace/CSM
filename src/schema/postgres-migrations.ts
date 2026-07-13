@@ -25,6 +25,7 @@ import { migrateProjectIsolation } from './project-isolation-schema.js';
 import { initializeSessionSchema } from './session-schema.js';
 import { initializeWorkLedgerSchema } from '../work-ledger-schema.js';
 import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
+import { initializeAgentBookSchema } from './agentbook-schema.js';
 
 export function buildPostgresMigrations(
   database: Database,
@@ -54,8 +55,12 @@ export function buildPostgresMigrations(
     migration('20260709-020-belief-knowledge', 'belief knowledge store', () => initializeBeliefKnowledgeSchema(pool)),
     migrationV2('20260710-021-work-ledger', 'run-level file change provenance and survival lineage', () => initializeWorkLedgerSchema(pool)),
     migrationV2('20260710-022-coordination-persistence', 'coordination state, audit events, and idempotency', () => initializeCoordinationPersistenceSchema(pool)),
-    migrationV2('20260711-023-capability-provenance-rewrite', 'rewrite capability promotion memories as immutable provenance snapshots', () => runCapabilityProvenanceMigration(pool).then(() => undefined)),
+    withAcceptedLegacy(
+      migrationV2('20260711-023-capability-provenance-rewrite', 'rewrite capability promotion memories as immutable provenance snapshots', () => runCapabilityProvenanceMigration(pool).then(() => undefined)),
+      ['1369e77dffefa86e3d4b6d8612bdd3c8a743762bf519dba31ffe4b5c19d7672e'],
+    ),
     migrationV2('20260712-024-context-injection-telemetry', 'context injection telemetry events and items', () => initializeContextInjectionTelemetrySchema(pool)),
+    migrationV2('20260713-025-agentbook', 'agentbook operational ledger, summaries, current state, and rules', () => initializeAgentBookSchema(pool)),
   ];
 }
 
@@ -98,4 +103,12 @@ function withLegacyChecksum(
   const legacyChecksum = migrationChecksum(legacy);
   if (legacyChecksum === migrationChecksum(definition)) return definition;
   return { ...definition, acceptedLegacyChecksums: [legacyChecksum] };
+}
+
+function withAcceptedLegacy(
+  definition: SchemaMigration,
+  additionalChecksums: readonly string[],
+): SchemaMigration {
+  const existing = definition.acceptedLegacyChecksums ?? [];
+  return { ...definition, acceptedLegacyChecksums: [...existing, ...additionalChecksums] };
 }

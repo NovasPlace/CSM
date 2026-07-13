@@ -6,6 +6,8 @@ import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
 import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
 import { getLogger } from '../logger.js';
+import type { AgentBookEventInput } from '../agentbook-types.js';
+import { generateFrontPage, writeFrontPageFile } from '../agentbook-frontpage.js';
 
 
 
@@ -96,6 +98,7 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
       recordExperiencePacket(ctx, input, output, sid);
       await recordDistilledToolCall(ctx, input, output, sid, toolOutput);
       await recordContinuitySignals(ctx, input, output, sid, toolOutput);
+      await captureAgentBookEvent(ctx, input, output, sid);
 
       if (ctx.config.logToolUsage) {
         await logToolUsage(ctx, input, output, sid);
@@ -115,6 +118,53 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
       getLogger().error('Tool tracking error', error instanceof Error ? error : new Error(String(error)));
     }
   };
+}
+
+async function captureAgentBookEvent(
+  ctx: PluginContext,
+  input: ToolExecuteAfterInput,
+  output: ToolExecuteAfterOutput,
+  sid: string | null,
+): Promise<void> {
+  if (!ctx.agentBookEvents) return;
+  try {
+    const projectId = (ctx.config as { projectId?: string }).projectId ?? 'cross-session-memory';
+    const toolOutput = summarizeToolOutput(output.output);
+    const eventInput: AgentBookEventInput = {
+      projectId,
+      sessionId: sid,
+      eventType: input.tool === 'bash' || input.tool === 'bash' ? 'command_run' : 'file_modified',
+      summary: `${input.tool}: ${toolOutput.slice(0, 200)}`,
+      command: input.tool === 'bash' ? String((input as { args?: { command?: string } }).args?.command ?? '') : null,
+      result: (output as { error?: unknown }).error ? 'error' : 'success',
+      metadata: { tool: input.tool, callId: input.callID },
+    };
+    if (input.tool === 'write') eventInput.eventType = 'file_created';
+    if (input.tool === 'edit' || input.tool === 'multiedit') eventInput.eventType = 'file_modified';
+    if ((output as { error?: unknown }).error) eventInput.eventType = 'failed_approach';
+    await ctx.agentBookEvents.append(eventInput);
+    await regenerateAgentBookFrontPage(ctx, projectId);
+  } catch (agentBookError) {
+    getLogger().debug(`AgentBook capture skipped: ${agentBookError instanceof Error ? agentBookError.message : String(agentBookError)}`);
+  }
+}
+
+async function regenerateAgentBookFrontPage(ctx: PluginContext, projectId: string): Promise<void> {
+  if (!ctx.agentBookState || !ctx.agentBookEvents || !ctx.agentBookRules || !ctx.agentBookSummary) return;
+  try {
+    await ctx.agentBookSummary.maybeGenerate(projectId);
+    const state = await ctx.agentBookState.project(projectId);
+    const [latestSummary, rules, recentEvents] = await Promise.all([
+      ctx.agentBookSummary.getLatestSummary(projectId),
+      ctx.agentBookRules.getActiveRules(),
+      ctx.agentBookEvents.getRecentEvents(projectId, 10),
+    ]);
+    const frontPage = generateFrontPage(state, latestSummary, rules, recentEvents);
+    const projectRoot = process.cwd();
+    writeFrontPageFile(frontPage.markdown, projectRoot);
+  } catch (regenError) {
+    getLogger().debug(`AgentBook frontpage regen skipped: ${regenError instanceof Error ? regenError.message : String(regenError)}`);
+  }
 }
 
 async function captureWorkLedgerBefore(

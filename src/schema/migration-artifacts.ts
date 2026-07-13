@@ -67,6 +67,12 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
   '20260712-025-sqlite-context-injection-telemetry': [
     artifact('src/schema/context-injection-telemetry-schema.ts', 'ef3d8eba8c0da7c94d89d63bf59dee1b61cc278b9396b810156c414354c27a0f'),
   ],
+  '20260713-025-agentbook': [
+    artifact('src/schema/agentbook-schema.ts', '09fa9b9c1545cc358bd06e5356f49b7baab518fa49e0f107fa361c4877a064e3'),
+  ],
+  '20260713-026-sqlite-agentbook': [
+    artifact('src/schema/agentbook-schema.ts', '09fa9b9c1545cc358bd06e5356f49b7baab518fa49e0f107fa361c4877a064e3'),
+  ],
 };
 
 export function artifactsFor(migrationId: string): readonly string[] {

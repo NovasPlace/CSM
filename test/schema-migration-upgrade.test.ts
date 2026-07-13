@@ -100,7 +100,7 @@ async function cleanupUpgradeDatabase(
     );
     const expected = new Map(buildPostgresMigrations(connected, connected.getPool())
       .map((migration) => [migration.id, migrationChecksum(migration)]));
-    assert.equal(result.rows.length, 24);
+    assert.equal(result.rows.length, 25);
     for (const row of result.rows) {
       assert.match(row.checksum, /^[a-f0-9]{64}$/);
       assert.equal(row.checksum, expected.get(row.migration_id));
@@ -146,5 +146,5 @@ async function cleanupUpgradeDatabase(
     const result = await requireDatabase(database).getPool().query(
       'SELECT COUNT(*)::int AS count FROM csm_schema_migrations',
     );
-    assert.equal(result.rows[0].count, 24);
+    assert.equal(result.rows[0].count, 25);
   });
