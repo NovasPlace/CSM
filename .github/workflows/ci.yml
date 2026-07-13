@@ -22,6 +22,11 @@ jobs:
       DATABASE_URL: postgresql://postgres:test@localhost:5432/opencode_memory
       CSM_DATABASE_URL: postgresql://postgres:test@localhost:5432/opencode_memory
       CSM_PG_BIN: /usr/lib/postgresql/${{ matrix.postgres-version }}/bin
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: test
+      PGDATABASE: opencode_memory
     services:
       postgres:
         image: pgvector/pgvector:0.8.2-pg${{ matrix.postgres-version }}
@@ -29,10 +34,10 @@ jobs:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: opencode_memory
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d opencode_memory"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
         ports:
           - 5432:5432
     steps:
@@ -59,6 +64,35 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-${{ matrix.postgres-version }}
 
+      - name: Wait for PostgreSQL
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in $(seq 1 60); do
+            if pg_isready \
+              -h "$PGHOST" \
+              -p "$PGPORT" \
+              -U "$PGUSER" \
+              -d "$PGDATABASE" >/dev/null 2>&1; then
+              ready=true
+              echo "PostgreSQL is ready after ${attempt} attempt(s)"
+              break
+            fi
+            echo "PostgreSQL readiness attempt ${attempt}/60 failed"
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "PostgreSQL did not become ready" >&2
+            exit 1
+          fi
+          psql \
+            -v ON_ERROR_STOP=1 \
+            -h "$PGHOST" \
+            -p "$PGPORT" \
+            -U "$PGUSER" \
+            -d "$PGDATABASE" \
+            -c 'SELECT current_user, current_database(), version();'
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -66,13 +100,40 @@ jobs:
         run: npm run build
 
       - name: Initialize database schema
-        run: npm run db:setup
+        run: |
+          set -euo pipefail
+          npm run db:setup 2>&1 | tee db.setup.log
 
       - name: Lint source
         run: npm run lint:src
 
       - name: Run tests
-        run: npm run test
+        run: |
+          set -euo pipefail
+          npm run test 2>&1 | tee test.log
+
+      - name: Database diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== PostgreSQL identity ==="
+          psql -v ON_ERROR_STOP=1 -c 'SELECT current_user, current_database(), version();' || true
+          echo "=== Tables ==="
+          psql -v ON_ERROR_STOP=1 -c '\dt' || true
+          echo "=== Schema migration ledger ==="
+          psql -v ON_ERROR_STOP=1 -c 'SELECT * FROM schema_migrations ORDER BY applied_at, id;' || true
+          echo "=== Test log tail ==="
+          tail -n 500 test.log || true
 
       - name: Run isolated backup and restore drill
         run: npm run drill:backup-restore
+
+      - name: Upload CI logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs-pg${{ matrix.postgres-version }}
+          path: |
+            db.setup.log
+            test.log
+          if-no-files-found: warn
+          retention-days: 7
