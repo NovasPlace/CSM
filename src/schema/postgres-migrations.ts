@@ -4,6 +4,7 @@ import { initializeCheckpointSchema } from '../checkpoint-schema.js';
 import { initializeCoordinationPersistenceSchema } from '../coordination-persistence/schema.js';
 import { initializeContextCompilationSchema } from '../context-compilation-schema.js';
 import { initializeContextCacheSchema } from '../context-cache-schema.js';
+import { initializeContextInjectionTelemetrySchema } from './context-injection-telemetry-schema.js';
 import { initializeRolloverSchema } from '../context-rollover-schema.js';
 import { initializeCrossSessionCausalSchema } from '../cross-session-causal-schema.js';
 import type { Database } from '../database.js';
@@ -54,6 +55,7 @@ export function buildPostgresMigrations(
     migrationV2('20260710-021-work-ledger', 'run-level file change provenance and survival lineage', () => initializeWorkLedgerSchema(pool)),
     migrationV2('20260710-022-coordination-persistence', 'coordination state, audit events, and idempotency', () => initializeCoordinationPersistenceSchema(pool)),
     migrationV2('20260711-023-capability-provenance-rewrite', 'rewrite capability promotion memories as immutable provenance snapshots', () => runCapabilityProvenanceMigration(pool).then(() => undefined)),
+    migrationV2('20260712-024-context-injection-telemetry', 'context injection telemetry events and items', () => initializeContextInjectionTelemetrySchema(pool)),
   ];
 }
 

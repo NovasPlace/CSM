@@ -16,6 +16,7 @@ import { initializeMinimalSqliteSchema } from './sqlite/index.js';
 import { migrateCompactionMetricsSqlite } from './sqlite/compaction-metrics-migration.js';
 import { initializeSqliteWorkJournal } from './sqlite/work-journal.js';
 import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
+import { initializeContextInjectionTelemetrySchema } from './context-injection-telemetry-schema.js';
 
 const SCHEMA_LOCK_KEY = 741_583_921;
 const SAVEPOINT = 'csm_schema_migration';
@@ -36,6 +37,7 @@ export const SQLITE_MIGRATION_IDS: readonly string[] = [
   '20260711-002-sqlite-work-journal',
   '20260711-023-capability-provenance-rewrite',
   '20260711-024-sqlite-compaction-metrics',
+  '20260712-025-sqlite-context-injection-telemetry',
 ];
 
 function buildMigrations(
@@ -68,6 +70,12 @@ function buildMigrations(
       contract: 'csm-sqlite-v2:compaction telemetry metrics table with partial-schema repair',
       implementation: artifactsFor('20260711-024-sqlite-compaction-metrics'),
       run: () => migrateCompactionMetricsSqlite(pool),
+    },
+    {
+      id: SQLITE_MIGRATION_IDS[4],
+      contract: 'csm-sqlite-v2:context injection telemetry events and items',
+      implementation: artifactsFor('20260712-025-sqlite-context-injection-telemetry'),
+      run: () => initializeContextInjectionTelemetrySchema(pool),
     },
   ];
 }

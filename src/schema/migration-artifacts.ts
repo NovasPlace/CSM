@@ -61,6 +61,12 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
     artifact('src/schema/sqlite/compaction-metrics.ts', '11ad9b60093c9795e5fe48df0819ddbaaf707d2d3d632d24e4ec70051ff94498'),
     artifact('src/schema/sqlite/compaction-metrics-migration.ts', '6ecc2ba2c371e344acbb81f61ade02dea27a75855ae659ab2fb13a4181cb5a64'),
   ],
+  '20260712-024-context-injection-telemetry': [
+    artifact('src/schema/context-injection-telemetry-schema.ts', 'ef3d8eba8c0da7c94d89d63bf59dee1b61cc278b9396b810156c414354c27a0f'),
+  ],
+  '20260712-025-sqlite-context-injection-telemetry': [
+    artifact('src/schema/context-injection-telemetry-schema.ts', 'ef3d8eba8c0da7c94d89d63bf59dee1b61cc278b9396b810156c414354c27a0f'),
+  ],
 };
 
 export function artifactsFor(migrationId: string): readonly string[] {
