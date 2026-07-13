@@ -141,13 +141,13 @@ The plugin auto-generates and updates `AGENTBOOK_STATE.md` after every tool call
 
 ## Tools
 
-CSM registers **37 tools** under the `csm_` prefix:
+CSM registers **36 tools** under the `csm_` prefix:
 
 | Category | Tools |
 |---|---|
 | **AgentBook** (3) | `csm_agentbook_events`, `csm_agentbook_state`, `csm_agentbook_rule` |
 | **Memory** (10) | `csm_memory_save`, `csm_memory_search`, `csm_memory_list`, `csm_memory_delete`, `csm_memory_distill`, `csm_memory_merge`, `csm_memory_dedup_detect`, `csm_memory_backfill_embeddings`, `csm_memory_compact`, `csm_memory_related` |
-| **Onboarding** (3) | `csm_onboard_agent`, `csm_reentry_preview`, `csm_context` |
+| **Onboarding** (2) | `csm_onboard_agent`, `csm_context` |
 | **Living State** (7) | `csm_belief_scan`, `csm_belief_scan_report`, `csm_belief_knowledge`, `csm_belief_promotion_scan`, `csm_self_model`, `csm_living_state_preview`, `csm_living_state_debug` |
 | **Governance** (7) | `csm_memory_governance_report`, `csm_memory_archive_candidate_report`, `csm_memory_candidate_generate`, `csm_memory_candidate_report`, `csm_recall_quality_report`, `csm_continuity_report`, `csm_work_ledger_surviving` |
 | **Diagnostics** (7) | `csm_runtime_status`, `csm_memory_packets`, `csm_memory_transcript`, `csm_memory_distilled_view`, `csm_compaction_audit`, `csm_context_review`, `csm_reentry_preview` |
