@@ -13,8 +13,11 @@ import { artifactsFor } from './migration-artifacts.js';
 import { buildPostgresMigrations } from './postgres-migrations.js';
 import { SchemaStepError } from './schema-errors.js';
 import { initializeMinimalSqliteSchema } from './sqlite/index.js';
+import { migrateCompactionMetricsSqlite } from './sqlite/compaction-metrics-migration.js';
 import { initializeSqliteWorkJournal } from './sqlite/work-journal.js';
 import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
+import { initializeContextInjectionTelemetrySchema } from './context-injection-telemetry-schema.js';
+import { initializeAgentBookSchema } from './agentbook-schema.js';
 
 const SCHEMA_LOCK_KEY = 741_583_921;
 const SAVEPOINT = 'csm_schema_migration';
@@ -34,6 +37,9 @@ export const SQLITE_MIGRATION_IDS: readonly string[] = [
   '20260709-001-sqlite-baseline',
   '20260711-002-sqlite-work-journal',
   '20260711-023-capability-provenance-rewrite',
+  '20260711-024-sqlite-compaction-metrics',
+  '20260712-025-sqlite-context-injection-telemetry',
+  '20260713-026-sqlite-agentbook',
 ];
 
 function buildMigrations(
@@ -59,9 +65,29 @@ function buildMigrations(
       id: SQLITE_MIGRATION_IDS[2],
       contract: 'csm-sqlite-v2:rewrite capability promotion memories as immutable provenance snapshots',
       implementation: artifactsFor('20260711-023-capability-provenance-rewrite'),
+      acceptedLegacyChecksums: ['5f2309483f18cc3e9de81eba037489a7ce4b0727e5c58d2a0ba4ae5ef40c88f8'],
       run: () => runCapabilityProvenanceMigration(pool).then(() => undefined),
     },
+    {
+      id: SQLITE_MIGRATION_IDS[3],
+      contract: 'csm-sqlite-v2:compaction telemetry metrics table with partial-schema repair',
+      implementation: artifactsFor('20260711-024-sqlite-compaction-metrics'),
+      run: () => migrateCompactionMetricsSqlite(pool),
+    },
+    {
+      id: SQLITE_MIGRATION_IDS[4],
+      contract: 'csm-sqlite-v2:context injection telemetry events and items',
+      implementation: artifactsFor('20260712-025-sqlite-context-injection-telemetry'),
+      run: () => initializeContextInjectionTelemetrySchema(pool),
+    },
+    {
+      id: SQLITE_MIGRATION_IDS[5],
+      contract: 'csm-sqlite-v2:agentbook operational ledger, summaries, current state, and rules',
+      implementation: artifactsFor('20260713-026-sqlite-agentbook'),
+      run: () => initializeAgentBookSchema(pool),
+    },
   ];
+
 }
 
 async function migrateSchema(

@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { homedir, platform } from 'node:os';
 import type { DatabasePool } from './types.js';
 import { getLogger } from './logger.js';
-import { dialectFromPool, jsonExtractText, nowFn } from './db/query-dialect.js';
+import { dialectFromPool, jsonExtractText } from './db/query-dialect.js';
 
 export type CsmMemory = {
   id: number;
@@ -165,12 +165,13 @@ export class StatsWriter {
       type RowCkpt = { created_at: string };
       type RowComp = { created_at: string };
 
+       const cutoff = new Date(Date.now() - 24 * 3600_000).toISOString();
        const [memResult, sessResult, ckptResult, compResult, tokResult, lastCompResult] = await Promise.all([
          this.pool.query("SELECT COUNT(*)::int AS n FROM memories"),
-         this.pool.query(`SELECT COUNT(*)::int AS n FROM sessions WHERE updated_at > ${nowFn(dialectFromPool(this.pool))} - interval '24 hours'`),
+         this.pool.query(`SELECT COUNT(*)::int AS n FROM sessions WHERE updated_at > $1`, [cutoff]),
          this.pool.query("SELECT created_at FROM checkpoints ORDER BY created_at DESC LIMIT 1"),
-         this.pool.query(`SELECT COUNT(*)::int AS n FROM compaction_metrics WHERE created_at > ${nowFn(dialectFromPool(this.pool))} - interval '24 hours'`),
-         this.pool.query(`SELECT COALESCE(SUM(tokens_saved), 0)::int AS n FROM compaction_metrics WHERE created_at > ${nowFn(dialectFromPool(this.pool))} - interval '24 hours'`),
+         this.pool.query(`SELECT COUNT(*)::int AS n FROM compaction_metrics WHERE created_at > $1`, [cutoff]),
+         this.pool.query(`SELECT COALESCE(SUM(tokens_saved), 0)::int AS n FROM compaction_metrics WHERE created_at > $1`, [cutoff]),
          this.pool.query("SELECT created_at FROM compaction_metrics ORDER BY created_at DESC LIMIT 1"),
        ]);
 

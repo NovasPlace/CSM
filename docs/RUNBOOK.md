@@ -252,3 +252,34 @@ Representative DB-backed suites:
 - `backfill-recall-telemetry`
 - `codex-bridge`
 - `context-cache-store`
+
+## Commands
+**C:/Users/Donovan/Desktop/cross-session-memory/test/context-injection-contract.test.ts** (2026-07-13)
+import assert from 'node:assert/strict';
+import { it, describe, before, after, beforeEach } from 'node:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { Database } from '../src/database.js';
+import { ReEntryProtocol } from '../src/re-entry-protocol.js';
+import {
+  BUILDER_VERSION,
+  computeConfigHash,
+  validateBuiltContextInjection,
+  type BuiltContextInjection,
+  type ContextInjectionItem,
+} from '../src/context-injection-contract.js';
+import { DEFAULT_REENTRY_CONFIG } from '../src/...
+
+**test/sqlite-plugin-lifecycle-probe.mjs** (2026-07-13)
+import plugin from '../dist/index.js';
+import { writeFile } from 'node:fs/promises';
+
+const workspace = process.argv[2];
+const hooks = await plugin(
+  { directory: workspace, worktree: workspace, client: {} },
+  { databaseProvider: 'sqlite', sqlitePath: process.env.CSM_SQLITE_PATH },
+);
+const output = { system: [] };
+await hooks['experimental.chat.system.transform']({
+  sessionID: 'sqlite-lifecycle-session',
+  messages: [{ role: 'user', content: 'inspect the current project' }],
+}, o...

@@ -26,6 +26,10 @@ import type { ExperiencePacketCreator } from './experience-packet.js';
 import type { LessonTriggerCache } from './lesson-trigger-cache.js';
 import type { SelfModelUpdater } from './self-model-updater.js';
 import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import type { AgentBookEventStore } from './agentbook-event-store.js';
+import type { AgentBookRulesStore } from './agentbook-rules-store.js';
+import type { AgentBookStateProjector } from './agentbook-state-projector.js';
+import type { AgentBookSummaryGenerator } from './agentbook-summary-generator.js';
 import type { LivingStateRuntime } from './living-state-runtime.js';
 import type { LivingStateAdvisor } from './living-state-advisor.js';
 import type { VcmManager } from './vcm-manager.js';
@@ -58,6 +62,7 @@ export interface PluginState {
   pendingMilestonePrompt?: import('./milestone-tracker.js').MilestonePromptBlock | null;
   reentryInjected: Set<string>;
   onboardingInjected: Set<string>;
+  csmSourceAttributionLogged?: boolean;
 }
 
 export interface PluginContext {
@@ -91,6 +96,10 @@ export interface PluginContext {
   lessonTriggers: LessonTriggerCache;
   selfModel: SelfModelUpdater;
   beliefKnowledge: BeliefKnowledgeConsolidator;
+  agentBookEvents: AgentBookEventStore;
+  agentBookRules: AgentBookRulesStore;
+  agentBookState: AgentBookStateProjector;
+  agentBookSummary: AgentBookSummaryGenerator;
   livingState: LivingStateRuntime;
   livingStateAdvisor: LivingStateAdvisor;
   reEntryProtocol?: import('./re-entry-protocol.js').ReEntryProtocol;

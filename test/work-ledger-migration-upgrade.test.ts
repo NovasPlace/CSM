@@ -87,7 +87,7 @@ it('upgrades csm-postgres-v1 through migrations 21 and 22', async () => {
             to_regclass('public.coordination_events') AS coordination_table
      FROM csm_schema_migrations`,
   );
-  assert.equal(afterResult.rows[0].count, 23);
+  assert.equal(afterResult.rows[0].count, 25);
   assert.equal(afterResult.rows[0].ledger_table, 'work_ledger_changes');
   assert.equal(afterResult.rows[0].coordination_table, 'coordination_events');
   const migration = await current.getPool().query(

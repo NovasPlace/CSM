@@ -225,6 +225,7 @@ export function createSystemTransformHook(ctx: PluginContext) {
   return async (input: SystemTransformInput, output: SystemTransformOutput): Promise<void> => {
     try {
       output.system = normalizeSystemEntries(output.system);
+      const csmSources: string[] = [];
       const sessionId = input.sessionID ?? ctx.state.currentSessionId ?? 'default';
       ctx.syncActiveSession(input.sessionID ?? '');
       const latestInputTurn = getLatestInputTurn(input.messages);
@@ -261,6 +262,7 @@ export function createSystemTransformHook(ctx: PluginContext) {
           // Always inject — onboarding is the agent's identity, never skip for cap budget.
           output.system.unshift(block);
           ctx.state.onboardingInjected.add(sessionId);
+          csmSources.push('onboarding');
           getLogger().info('Onboarding packet injected');
         } catch (err) {
           getLogger().error('Onboarding injection failed', err instanceof Error ? err : new Error(String(err)));
@@ -339,6 +341,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
 
       // PREPEND evidence block — model sees facts first, before any instructions
       output.system.unshift(evidenceBlock);
+      csmSources.push('evidence');
 
       // --- Lesson trigger injection (actionable lessons, not trivia) ---
       try {
@@ -346,6 +349,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         const lessonInjection = ctx.lessonTriggers.buildFullSystemInjection();
         if (lessonInjection) {
           output.system.push(lessonInjection);
+          csmSources.push('lessons');
         }
       } catch { /* lesson triggers non-critical */ }
 
@@ -358,6 +362,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             const govInjection = gov.buildVetoInjection(govResult.vetoes);
             if (govInjection) {
               output.system.push(govInjection);
+              csmSources.push('governance');
               logTelemetry({
                 governanceVetoesInjected: govResult.vetoes.length,
                 governanceVetoIds: govResult.vetoes.map(v => v.memoryId),
@@ -383,6 +388,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         : null;
       if (contextBrief) {
         output.system.push(contextBrief.compressed);
+        csmSources.push('context-brief');
       }
 
       // --- Phase 7B: Re-entry context injection (first turn only) ---
@@ -404,6 +410,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
           if (block && capTrimLevel !== 'minimal') {
             output.system.push(block);
             ctx.state.reentryInjected.add(sessionId);
+            csmSources.push('re-entry');
             getLogger().info('Re-entry block injected', { sessionId });
           }
         } catch (err) {
@@ -420,6 +427,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             const trimmed = block.slice(0, advisoryCharBudget(capTrimLevel, budget));
             if (trimmed.length > 0) {
               output.system.push(trimmed);
+              csmSources.push('advisory');
             }
           }
         } catch { /* advisory block non-critical */ }
@@ -446,9 +454,10 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             ctx.state.currentSessionId ?? 'unknown',
             ctx.directory ?? 'unknown',
           );
-          if (vcmBlock) {
-            output.system.push(vcmBlock);
-          }
+            if (vcmBlock) {
+              output.system.push(vcmBlock);
+              csmSources.push('vcm');
+            }
         } catch { /* VCM non-critical */ }
       }
 
@@ -465,6 +474,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         const checkpointInjection = await buildCheckpointInjection(ctx.checkpointInjectDeps, input.sessionID);
         if (checkpointInjection) {
           output.system.push(checkpointInjection);
+          csmSources.push('checkpoint');
         }
       }
 
@@ -481,6 +491,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             };
             const injection = buildResumeInjection(payload, deps);
             output.system.push(injection);
+            csmSources.push('work-journal');
             getLogger().info(`[WorkJournal] Injected resume payload for session ${input.sessionID.slice(0, 8)} (${payload.totalEntries} entries)`);
           }
         } catch (wjErr) {
@@ -507,6 +518,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             }
             parts.push('</active_goal>');
             output.system.push(parts.join('\n'));
+            csmSources.push('active-goal');
           }
         } catch { /* goal injection non-critical */ }
       }
@@ -551,6 +563,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             lines.push('1. Cite record IDs and evidence anchors when referencing continuity.');
             lines.push('2. Distinguish [direct] evidence from [inferred] or [gap]. State if no records injected.');
             output.system.push(lines.join('\n'));
+            csmSources.push('self-continuity');
           } else if (records.length > 0) {
             const lines = ['<self_continuity_notes>'];
             for (const rec of records) {
@@ -560,6 +573,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
             }
             lines.push('</self_continuity_notes>');
             output.system.push(lines.join('\n'));
+            csmSources.push('self-continuity');
           } else {
             logTelemetry({
               selfContinuityTriggered: false,
@@ -884,6 +898,27 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
         opencodeInternal: 0,
       };
       getLogger().debug(`[TokenBuckets] system: ${formatBreakdown(sysBuckets)}`);
+
+      // --- Cold-start source attribution diagnostic ---
+      if (csmSources.length > 0) {
+        const isColdStart = !ctx.state.csmSourceAttributionLogged;
+        const sourcesList = csmSources.join(', ');
+        const diagnostic = `[CSM] Sources injected this turn: ${sourcesList}`;
+        if (isColdStart) {
+          output.system.push(diagnostic);
+          ctx.state.csmSourceAttributionLogged = true;
+          // eslint-disable-next-line no-console
+          console.log(`[CSM Cold-Start Attribution] sessionId=${sessionId} sources=[${sourcesList}] AGENTS.md=separate`);
+        }
+      } else {
+        const isColdStart = !ctx.state.csmSourceAttributionLogged;
+        if (isColdStart) {
+          output.system.push('[CSM] No CSM sources injected this turn. Agent context is from AGENTS.md only.');
+          ctx.state.csmSourceAttributionLogged = true;
+          // eslint-disable-next-line no-console
+          console.log(`[CSM Cold-Start Attribution] sessionId=${sessionId} sources=[] AGENTS.md=only`);
+        }
+      }
 
       return;
     } catch (error) {

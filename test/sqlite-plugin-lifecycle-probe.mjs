@@ -2,7 +2,7 @@ import plugin from '../dist/index.js';
 import { writeFile } from 'node:fs/promises';
 
 const workspace = process.argv[2];
-const hooks = await plugin.server(
+const hooks = await plugin(
   { directory: workspace, worktree: workspace, client: {} },
   { databaseProvider: 'sqlite', sqlitePath: process.env.CSM_SQLITE_PATH },
 );

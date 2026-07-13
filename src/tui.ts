@@ -221,7 +221,7 @@ const mod: TuiPluginModule = {
         disposes.push(cmdDispose);
       }
     } catch (err) {
-      console.warn("[CrossSessionMemory] Command registration failed:", err);
+      getLogger().warn(`Command registration failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     try {

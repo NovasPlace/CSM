@@ -2,6 +2,227 @@
 
 ## Architecture Decisions
 
+**C:/Users/Donovan/Desktop/cross-session-memory/src/reentry-layers-foundation.ts** - 2026-07-13
+import { getLogger } from './logger.js';
+import type { MemoryManager } from './memory-manager.js';
+import type { DatabasePool } from './types.js';
+import type { ContextInjectionItem } from './context-injection-contract.js';
+
+export interface ReEntryLayerText {
+  text: string;
+  sources: string[];
+  items?: ContextInjectionItem[];
+}
+
+export async function buildIdentityLayer(
+  pool: DatabasePool,
+  sessionId: string,
+  projectId: string,
+): Promise<ReEntryLayerText> {
+  const sources = ['sessions...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/src/reentry-contract.ts** - 2026-07-13
+import type { ContextInjectionItem } from './context-injection-contract.js';
+
+export { BUILDER_VERSION, computeConfigHash, validateBuiltContextInjection };
+export type {
+  BuiltContextInjection,
+  ContextInjectionItem,
+  ContextInjectionLayerSummary,
+  InjectionKind,
+  ItemDisposition,
+  ItemSourceKind,
+  ProvenanceGranularity,
+  SelectionReasonCode,
+} from './context-injection-contract.js';
+
+export const REENTRY_HEADER = `## Agent Re-entry Context
+Source: CSM continuity runtime.
+Purpose: hydrat...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/test/context-injection-contract.test.ts** - 2026-07-13
+import assert from 'node:assert/strict';
+import { it, describe, before, after, beforeEach } from 'node:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { Database } from '../src/database.js';
+import { ReEntryProtocol } from '../src/re-entry-protocol.js';
+import {
+  BUILDER_VERSION,
+  computeConfigHash,
+  validateBuiltContextInjection,
+  type BuiltContextInjection,
+  type ContextInjectionItem,
+} from '../src/context-injection-contract.js';
+import { DEFAULT_REENTRY_CONFIG } from '../src/...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/test/context-injection-logger.test.ts** - 2026-07-13
+import assert from 'node:assert/strict';
+import { it, describe, before, after, beforeEach } from 'node:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { Database } from '../src/database.js';
+import { ContextInjectionLogger, type InjectionLogRecord } from '../src/context-injection-logger.js';
+import type { BuiltContextInjection } from '../src/context-injection-contract.js';
+import type { DatabasePool, PluginConfig } from '../src/types.js';
+
+const SQLITE_DIR = '.tmp/sqlite-logger';
+cons...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/test/context-injection-logger.test.ts** - 2026-07-13
+import assert from 'node:assert/strict';
+import { it, describe, before, beforeEach, afterEach } from 'node:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { Database } from '../src/database.js';
+import { ContextInjectionLogger, type InjectionLogRecord } from '../src/context-injection-logger.js';
+import type { BuiltContextInjection } from '../src/context-injection-contract.js';
+import type { DatabasePool, PluginConfig } from '../src/types.js';
+
+const SQLITE_DIR = '.tmp/sqlite-logger';
+...
+
+**C:/Users/Donovan/Desktop/cross-session-memory/test/context-injection-logger.test.ts** - 2026-07-13
+import assert from 'node:assert/strict';
+import { it, describe, before, beforeEach, afterEach } from 'node:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { Database } from '../src/database.js';
+import { ContextInjectionLogger, type InjectionLogRecord } from '../src/context-injection-logger.js';
+import type { BuiltContextInjection } from '../src/context-injection-contract.js';
+import type { DatabasePool, PluginConfig } from '../src/types.js';
+
+const SQLITE_DIR = '.tmp/sqlite-logger';
+...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/hooks/system-transform.ts** - 2026-07-13
+import type { PluginContext } from '../plugin-context.js';
+import { buildCheckpointInjection } from '../checkpoint-inject.js';
+import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../token-bucket-analyzer.js';
+import { buildManifest } from '../context-cache-manifest.js';
+import { getActiveGoal } from '../goal-schema.js';
+import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { CrossSessionCausalStitcher } from '../cross-session-causal-stit...
+
+**src/index.ts** - 2026-07-13
+// Cross-Session Memory Plugin for Opencode
+// Version 2.0 - Modularized architecture
+// AUTO-EXPORTED from module imports
+
+// Import and re-export from module exports
+import { registerHooks } from './hooks-registration.js';
+
+export default registerHooks;
+
+export const CSMPlugin = registerHooks;
+
+export type { PluginInput, PluginOptions, Hooks } from '@opencode-ai/plugin';
+export type { DatabasePool, Memory, MemoryType, ToolCallRecord, CompactionResult, BucketBreakdown } from './type...
+
 ### 1. PostgreSQL over SQLite (External DB)
 - **Decision**: Use PostgreSQL as primary memory store
 - **Why**: Survives OpenCode reinstalls; built-in SQLite at `~/.config/opencode/` gets wiped

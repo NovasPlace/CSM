@@ -1,5 +1,6 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { win32, posix } from 'node:path';
 import { contentHash } from './work-ledger-lineage.js';
 import { extractPatchPaths } from './work-ledger-patch-paths.js';
 
@@ -25,14 +26,34 @@ export function extractWorkLedgerPaths(args: Record<string, unknown>): string[] 
   return [...paths];
 }
 
+const WINDOWS_STYLE_ROOT = /^[a-zA-Z]:[\\/]|^\\\\/;
+
+/**
+ * node:path's default export is bound to the host OS at runtime (posix on
+ * Linux/macOS, win32 on Windows). That's fine for real filesystem paths,
+ * which always match the host, but it breaks escape-detection whenever a
+ * path string uses the *other* convention (e.g. a Windows-style drive path
+ * evaluated on a Linux CI runner) — POSIX semantics don't recognize
+ * `C:\...` as absolute, so an actual root-escape silently resolves as a
+ * harmless relative segment instead of throwing.
+ *
+ * Pick the path module by inspecting the project root's own format instead
+ * of trusting `process.platform`, so escape detection is correct regardless
+ * of which OS actually runs the check.
+ */
+function pathModuleForRoot(root: string) {
+  return WINDOWS_STYLE_ROOT.test(root) ? win32 : posix;
+}
+
 export function resolveWorkLedgerPath(
   projectRoot: string,
   filePath: string,
 ): ResolvedWorkLedgerPath {
-  const root = resolve(projectRoot);
-  const absolutePath = isAbsolute(filePath) ? resolve(filePath) : resolve(root, filePath);
-  const relativePath = relative(root, absolutePath);
-  if (isAbsolute(relativePath) || relativePath === '..'
+  const p = pathModuleForRoot(projectRoot);
+  const root = p.resolve(projectRoot);
+  const absolutePath = p.isAbsolute(filePath) ? p.resolve(filePath) : p.resolve(root, filePath);
+  const relativePath = p.relative(root, absolutePath);
+  if (p.isAbsolute(relativePath) || relativePath === '..'
     || relativePath.startsWith(`..\\`) || relativePath.startsWith('../')) {
     throw new Error(`Work Ledger path escapes project root: ${filePath}`);
   }

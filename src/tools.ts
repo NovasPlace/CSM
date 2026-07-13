@@ -861,12 +861,13 @@ export function compactionAuditTool(database: Database) {
     description: 'Audit compaction telemetry for correctness. Recomputes totals from raw before/after values, checks for duplicates, negative values, math errors, and zero fields. Verifies SUM(tokens_saved) matches SUM(before_tokens - after_tokens).',
     args: {},
     async execute() {
-      const { auditCompactionTelemetry, formatAuditReport } = await import('./compaction-telemetry-audit.js');
-      const result = await auditCompactionTelemetry(database.getPool());
+      const { auditCompactionTelemetry, formatAuditAvailability } = await import('./compaction-telemetry-audit.js');
+      const availability = await auditCompactionTelemetry(database.getPool());
+      const { title, output } = formatAuditAvailability(availability);
       return {
-        title: result.passed ? 'Compaction Audit PASSED' : 'Compaction Audit ISSUES FOUND',
-        output: formatAuditReport(result),
-        metadata: result,
+        title,
+        output,
+        metadata: availability,
       };
     },
   });

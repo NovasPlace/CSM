@@ -2,6 +2,10 @@ import type { PluginInput } from '@opencode-ai/plugin';
 import { AdaptiveContextGovernor } from './context-governor.js';
 import { AgentWorkJournal } from './agent-work-journal.js';
 import { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import { AgentBookEventStore } from './agentbook-event-store.js';
+import { AgentBookRulesStore } from './agentbook-rules-store.js';
+import { AgentBookStateProjector } from './agentbook-state-projector.js';
+import { AgentBookSummaryGenerator } from './agentbook-summary-generator.js';
 import { BeliefPromotionEngine } from './belief-promotion.js';
 import { BeliefPromotionScanner } from './belief-promotion-scanner.js';
 import { CheckpointStore } from './checkpoint-store.js';
@@ -66,6 +70,10 @@ export function createPersistenceServices(
   const selfModel = new SelfModelUpdater(database.getPool(), config.selfModel);
   const beliefKnowledge = new BeliefKnowledgeConsolidator(database.getPool(), config.beliefKnowledge);
   const beliefScanner = new BeliefPromotionScanner(database.getPool());
+  const agentBookEvents = new AgentBookEventStore(database.getPool());
+  const agentBookRules = new AgentBookRulesStore(database.getPool());
+  const agentBookState = new AgentBookStateProjector(database.getPool(), agentBookEvents);
+  const agentBookSummary = new AgentBookSummaryGenerator(database.getPool(), agentBookEvents);
   const workLedger = config.workLedger.enabled
     ? new WorkLedger(database.getPool(), config.workLedger) : undefined;
   return {
@@ -78,6 +86,7 @@ export function createPersistenceServices(
     workLedger,
     experiencePackets, selfModel, beliefKnowledge,
     beliefScanner,
+    agentBookEvents, agentBookRules, agentBookState, agentBookSummary,
   };
 }
 

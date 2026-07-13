@@ -20,6 +20,7 @@ import { goalSetTool, goalUpdateTool, goalListTool } from '../goal-tools.js';
 import { onboardAgentTool } from '../agent-onboarding-tool.js';
 import { createCheckpointTool, expandCheckpointRefTool, listCheckpointsTool } from '../checkpoint-tool.js';
 import { contextReviewTool } from '../context-review-tool.js';
+import { createAgentBookTools } from '../agentbook-tool.js';
 import {
   contextFetchTool, contextSearchTool, contextFetchFileRegionTool,
   contextFetchLastErrorTool, contextFetchDecisionLogTool,
@@ -93,6 +94,12 @@ export function registerTools(pluginCtx: PluginContext): Record<string, unknown>
     csm_belief_knowledge: beliefKnowledgeTool(pluginCtx.beliefKnowledge),
     csm_living_state_preview: livingStatePreviewTool(pluginCtx.livingState),
     csm_living_state_debug: livingStateDebugTool(pluginCtx.livingStateAdvisor),
+    ...createAgentBookTools({
+      eventStore: pluginCtx.agentBookEvents,
+      rulesStore: pluginCtx.agentBookRules,
+      stateProjector: pluginCtx.agentBookState,
+      summaryGenerator: pluginCtx.agentBookSummary,
+    }),
     csm_runtime_status: runtimeStatusTool(database, memoryManager, config, pluginCtx.state.currentSessionId),
     csm_compaction_audit: compactionAuditTool(database),
     csm_recall_quality_report: recallQualityReportTool(database),

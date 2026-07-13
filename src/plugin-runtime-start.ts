@@ -103,9 +103,10 @@ function assembleContext(
   state: ReturnType<typeof createPluginStateServices>,
   statsWriter: StatsWriter,
 ): PluginContext {
-  const { beliefScanner: _beliefScanner, ...persistentContext } = persisted;
+  const { beliefScanner: _beliefScanner, agentBookEvents, agentBookRules, agentBookState, agentBookSummary, ...persistentContext } = persisted;
   return {
     config, database, ...core, ...persistentContext, ...continuity, ...state, statsWriter,
+    agentBookEvents, agentBookRules, agentBookState, agentBookSummary,
     client: ctx.client, directory: ctx.directory, worktree: ctx.worktree,
     autoCheckpoint: (sessionId, trigger, details) => createAutoCheckpoint(
       { checkpointStore: persisted.checkpointStore, config: config.checkpoint },

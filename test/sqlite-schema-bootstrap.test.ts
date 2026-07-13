@@ -10,9 +10,12 @@ const EXPECTED_SQLITE_MIGRATION_IDS = [
   '20260709-001-sqlite-baseline',
   '20260711-002-sqlite-work-journal',
   '20260711-023-capability-provenance-rewrite',
+  '20260711-024-sqlite-compaction-metrics',
+  '20260712-025-sqlite-context-injection-telemetry',
+  '20260713-026-sqlite-agentbook',
 ] as const;
 
-describe('Phase 3C — SQLite schema bootstrap', () => {
+describe('Phase 3C â€” SQLite schema bootstrap', () => {
   const tmpDir = '.tmp/sqlite-bootstrap';
   const dbPath = `${tmpDir}/csm-test.sqlite`;
 
