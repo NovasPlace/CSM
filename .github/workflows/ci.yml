@@ -34,10 +34,10 @@ jobs:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: opencode_memory
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d opencode_memory"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
         ports:
           - 5432:5432
     steps:
@@ -108,7 +108,32 @@ jobs:
         run: npm run lint:src
 
       - name: Run tests
-        run: npm run test
+        run: |
+          set -euo pipefail
+          npm run test 2>&1 | tee test.log
+
+      - name: Database diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== PostgreSQL identity ==="
+          psql -v ON_ERROR_STOP=1 -c 'SELECT current_user, current_database(), version();' || true
+          echo "=== Tables ==="
+          psql -v ON_ERROR_STOP=1 -c '\dt' || true
+          echo "=== Schema migration ledger ==="
+          psql -v ON_ERROR_STOP=1 -c 'SELECT * FROM schema_migrations ORDER BY applied_at, id;' || true
+          echo "=== Test log tail ==="
+          tail -n 500 test.log || true
 
       - name: Run isolated backup and restore drill
         run: npm run drill:backup-restore
+
+      - name: Upload CI logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs-pg${{ matrix.postgres-version }}
+          path: |
+            db.setup.log
+            test.log
+          if-no-files-found: warn
+          retention-days: 7
