@@ -11,7 +11,7 @@ import { initializeContextCacheSchema } from '../dist/context-cache-schema.js';
 import { cacheOldContext, type CacheRuntimeConfig } from '../dist/context-cache-runtime.js';
 import { countItems, fetchItem, fetchFileReads, fetchLastError } from '../dist/context-cache-store.js';
 
-const DB_URL = 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
+const DB_URL = process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
 const SID = 'test-cache-runtime-' + Date.now();
 const pool = new Pool({ connectionString: DB_URL }) as any;
 

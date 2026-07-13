@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import type { BeliefPromotionConfig, MemorySaveOptions, Memory } from '../src/types.js';
 
-const TEST_DB_URL = process.env.CSM_DATABASE_URL ?? 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
+const TEST_DB_URL = process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
 
 const testPromotionConfig: BeliefPromotionConfig = {
   enabled: true,

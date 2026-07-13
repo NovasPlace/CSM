@@ -12,7 +12,7 @@ import { createAutoCheckpoint, type AutoCheckpointTrigger } from '../dist/helper
 import { initializeCheckpointSchema } from '../dist/checkpoint-schema.js';
 import type { CheckpointConfig } from '../dist/checkpoint-types.js';
 
-const DB_URL = 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
+const DB_URL = process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
 const TEST_SESSION = 'test-auto-checkpoint-' + Date.now();
 
 const CFG: CheckpointConfig = {

@@ -7,7 +7,7 @@ import { initializeCheckpointSchema } from '../dist/checkpoint-schema.js';
 import { estimateTokens } from '../dist/token-bucket-analyzer.js';
 import type { CheckpointConfig } from '../dist/checkpoint-types.js';
 
-const DB_URL = 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
+const DB_URL = process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
 const SESSION_ID = `test-checkpoint-budget-${Date.now()}`;
 const CFG: CheckpointConfig = {
   enabled: true,

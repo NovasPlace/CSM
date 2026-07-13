@@ -6,7 +6,7 @@ import { createPostgresPool } from '../src/db/postgres-pool.js';
 describe('PostgresPool factory', () => {
   it('returns an object satisfying DatabasePool interface', async () => {
     const pool = await createPostgresPool(
-      'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory',
+      (process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory'),
     );
 
     assert.equal(typeof pool.query, 'function');
@@ -18,7 +18,7 @@ describe('PostgresPool factory', () => {
 
   it('connect() returns a client with query and release', async () => {
     const pool = await createPostgresPool(
-      'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory',
+      (process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory'),
     );
 
     try {
@@ -35,7 +35,7 @@ describe('PostgresPool factory', () => {
 
   it('makes end idempotent and rejects post-close operations explicitly', async () => {
     const pool = await createPostgresPool(
-      'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory',
+      (process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory'),
     );
     await Promise.all([pool.end(), pool.end(), pool.end()]);
     await assert.rejects(pool.query('SELECT 1'), /PostgreSQL pool is closed/);

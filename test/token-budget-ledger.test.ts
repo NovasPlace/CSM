@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Pool } from 'pg';
 import { TokenBudgetLedger } from '../src/token-budget-ledger.js';
 
-const DB_URL = 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
+const DB_URL = process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
 const SESSION_ID = `test-token-ledger-${Date.now()}`;
 const SECOND_SESSION_ID = `${SESSION_ID}-2`;
 const SESSION_IDS = [SESSION_ID, SECOND_SESSION_ID];
