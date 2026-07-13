@@ -1,0 +1,120 @@
+name: Bug report
+description: Report a reproducible defect in CSM
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, private memory contents, customer data, or exploitable security details. Use private vulnerability reporting for security issues.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+      placeholder: Describe the observed failure.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Subsystem
+      options:
+        - Memory and recall
+        - AgentBook
+        - Re-entry and onboarding
+        - Context and compaction
+        - Living State and beliefs
+        - Governance and quality
+        - Checkpoints, goals, or work ledger
+        - Auto-documentation
+        - Database or migrations
+        - CI, build, or packaging
+        - Unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Database provider
+      options:
+        - PostgreSQL 14
+        - PostgreSQL 16
+        - Other PostgreSQL version
+        - SQLite
+        - Not applicable
+        - Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: CSM commit or version
+      placeholder: Commit SHA, tag, or package version
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Node.js version, OpenCode version, and relevant runtime details
+      placeholder: Windows 11, Node.js ..., OpenCode ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest reliable sequence that triggers the problem.
+      placeholder: |
+        1. Configure ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs and verification evidence
+      description: Redact secrets and private memory contents. Include focused test or CI output when available.
+      render: text
+
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression information
+      description: Did this work on an earlier commit? Provide the last known good version when known.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Reporter checklist
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: I removed secrets and private project data.
+          required: true
+        - label: This is not a security vulnerability requiring private disclosure.
+          required: true

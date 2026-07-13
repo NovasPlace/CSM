@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/NovasPlace/CSM/tree/master/docs
+    about: Review setup, features, architecture, contracts, and historical evidence.
+  - name: Security report
+    url: https://github.com/NovasPlace/CSM/security/advisories/new
+    about: Report vulnerabilities privately. Do not disclose security issues in public tickets.
