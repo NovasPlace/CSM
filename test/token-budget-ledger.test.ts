@@ -16,9 +16,9 @@ describe('TokenBudgetLedger', () => {
   let baselineWeeklyTokens = 0;
 
   before(async () => {
-    await pool.query('DELETE FROM session_token_usage WHERE session_id = ANY($1)', [SESSION_IDS]);
     const baselineLedger = new TokenBudgetLedger(pool, 1_000_000);
     await baselineLedger.ensureSchema();
+    await pool.query('DELETE FROM session_token_usage WHERE session_id = ANY($1)', [SESSION_IDS]);
     const baseline = await baselineLedger.getWeeklyUsage();
     baselineWeeklyInput = baseline.totalInputTokens;
     baselineWeeklyOutput = baseline.totalOutputTokens;
