@@ -67,7 +67,8 @@
     "lint:src": "eslint src --max-warnings=7",
     "lint:all": "eslint .",
     "lint:fix": "eslint src --fix",
-    "csm": "npx tsx scripts/csm-query.ts"
+    "csm": "npx tsx scripts/csm-query.ts",
+    "db:setup": "npx tsx scripts/init-db.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.17.13",

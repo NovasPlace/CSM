@@ -65,6 +65,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Initialize database schema
+        run: npm run db:setup
+
       - name: Lint source
         run: npm run lint:src
 
