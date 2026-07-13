@@ -22,6 +22,8 @@ import {
   isReentrySourceOnlyTurn,
   rememberUserTurn,
 } from './reentry-source-only.js';
+import { ContextInjectionLogger } from '../context-injection-logger.js';
+import { BUILDER_VERSION, computeConfigHash, type BuiltContextInjection, type ContextInjectionItem, type InjectionKind } from '../context-injection-contract.js';
 
 const TELEMETRY_LOG = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.cross-session-memory', 'self-continuity-telemetry.jsonl');
 const PROMPT_INJECTION_DISABLE_ENV = 'CSM_DISABLE_PROMPT_INJECTION';
@@ -899,7 +901,7 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
       };
       getLogger().debug(`[TokenBuckets] system: ${formatBreakdown(sysBuckets)}`);
 
-      // --- Cold-start source attribution diagnostic ---
+      // --- Cold-start source attribution diagnostic + DB telemetry ---
       if (csmSources.length > 0) {
         const isColdStart = !ctx.state.csmSourceAttributionLogged;
         const sourcesList = csmSources.join(', ');
@@ -909,6 +911,48 @@ VERDICT: Persistent memory operational. Do NOT claim you lack memory.` : `Store 
           ctx.state.csmSourceAttributionLogged = true;
           // eslint-disable-next-line no-console
           console.log(`[CSM Cold-Start Attribution] sessionId=${sessionId} sources=[${sourcesList}] AGENTS.md=separate`);
+
+          // Record to context_injection_events for observation window
+          try {
+            const injectionLogger = new ContextInjectionLogger(ctx.database.getPool(), {
+              enabled: true,
+              environment: 'production',
+            });
+            const mappedKind: InjectionKind =
+              csmSources.includes('onboarding') ? 'onboarding' :
+              csmSources.includes('re-entry') ? 'reentry' :
+              csmSources.includes('context-brief') ? 'context_brief' :
+              csmSources.includes('advisory') ? 'advisory' : 'onboarding';
+            const trimMap: Record<string, 'none' | 'soft' | 'aggressive'> = {
+              full: 'none', trim_advisory: 'soft', drop_vcm: 'soft', refs_only: 'aggressive', minimal: 'aggressive',
+            };
+            const items: ContextInjectionItem[] = csmSources.map((src, i) => ({
+              layerName: src, sourceKind: 'derived_state' as const, sourceId: src,
+              memoryId: null, position: i, selectionRank: null, selectionScore: null,
+              selectionReason: null, disposition: 'injected' as const,
+              provenanceGranularity: 'layer' as const, charCount: 0, metadata: { source: src },
+            }));
+            const built: BuiltContextInjection = {
+              text: diagnostic, injectionKind: mappedKind, items,
+              layers: csmSources.map(src => ({
+                layerName: src, status: 'included' as const, originalChars: 0,
+                finalChars: 0, itemCount: 1, trimReason: null,
+              })),
+              charCount: 0, estimatedTokens: sysTokens,
+              trimLevel: trimMap[capTrimLevel] ?? 'none',
+              builderVersion: BUILDER_VERSION,
+              configHash: computeConfigHash({ sources: csmSources }),
+              metadata: { sources: csmSources, coldStart: true, sessionId },
+            };
+            await injectionLogger.logInjection({
+              idempotencyKey: `${sessionId}:${mappedKind}:cold-start`,
+              projectId: ctx.directory ?? null, sessionId,
+              injectionKind: mappedKind, sourceTurnId: null,
+              built, blockHash: null, status: 'injected',
+            });
+          } catch (telemetryErr) {
+            getLogger().warn('Context injection DB telemetry failed: ' + (telemetryErr instanceof Error ? telemetryErr.message : String(telemetryErr)));
+          }
         }
       } else {
         const isColdStart = !ctx.state.csmSourceAttributionLogged;
