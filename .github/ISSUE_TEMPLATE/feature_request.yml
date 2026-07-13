@@ -1,0 +1,82 @@
+name: Feature request
+description: Propose a capability or product improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What continuity or operator problem needs to be solved?
+      placeholder: Describe the user or agent failure mode before proposing the implementation.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Primary subsystem
+      options:
+        - Memory and recall
+        - AgentBook
+        - Re-entry and onboarding
+        - Context and compaction
+        - Living State and beliefs
+        - Governance and quality
+        - Checkpoints, goals, or work ledger
+        - Auto-documentation
+        - Database or provider support
+        - Developer experience
+        - New subsystem
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the user-visible contract and expected result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or examples
+      description: Include workflows, failure cases, traces, or comparisons that show why the feature matters.
+
+  - type: dropdown
+    id: providers
+    attributes:
+      label: Provider scope
+      options:
+        - PostgreSQL and SQLite
+        - PostgreSQL only
+        - SQLite only
+        - No database impact
+        - Not yet known
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety
+    attributes:
+      label: Continuity and safety considerations
+      description: Address provenance, context budgets, promotion, deletion, provider honesty, concurrency, and recovery where relevant.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What can users do today, and why is that insufficient?
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Request checklist
+      options:
+        - label: I checked the feature map and existing issues.
+          required: true
+        - label: The request describes a problem and behavioral contract, not only an implementation preference.
+          required: true
