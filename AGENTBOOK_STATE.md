@@ -4,27 +4,27 @@
 cross-session-memory
 
 ## Active Goal
-Repository integrity fixes — CI branch targeting, circular ../vcm dep, stale front page, README tool count, verification gate
+No active repository-maintenance goal.
 
 ## Current State
-- Phase: Post-merge audit fixes
-- Events: 178+
-- Sessions: 6+
-- Latest summary: AgentBook merged, 1571/1571 tests pass
-- Updated: 2026-07-13T13:34:00.000Z
+- Phase: Clean mainline
+- Default branch: master
+- Open pull requests: 0
+- Open issues: 0
+- PostgreSQL CI matrix: green on 14 and 16
+- Updated: 2026-07-13T15:30:00.000Z
 
 ## Recent Work
-- AgentBook merged with full event store, rules store, state projector, summary generator, and front-page auto-regeneration
-- 20 AgentBook tests, all passing (test:agentbook)
-- Capability promotion closure verified — all 7 criteria cross-database checked
-- Post-merge audit identified 5 repository-integrity issues
+- Hardened PostgreSQL CI credentials, readiness checks, diagnostics, and log artifacts.
+- Verified typecheck, build, schema initialization, lint, full tests, and backup/restore on PostgreSQL 14 and 16.
+- Corrected AgentBook tool-event classification, failure detection, file evidence, and workspace-targeted front-page writes.
+- Merged the remaining valid AgentBook correction and cleared all open pull requests.
 
 ## Known Problems
-- No active blockers or known failures.
+- No active blockers or known failing repository gates.
 
 ## Rules
 - No active AgentBook rules.
 
 ## Next Action
-- Run full build + lint + test gate on integrity fixes
-- Commit and push to master
+- Begin the next planned feature or maintenance cycle from a fresh branch based on master.
