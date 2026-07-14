@@ -11,6 +11,7 @@ import { BeliefPromotionScanner } from './belief-promotion-scanner.js';
 import { CheckpointStore } from './checkpoint-store.js';
 import { ContextCapSensor } from './context-cap-sensor.js';
 import { ContextCompactor } from './context-compactor.js';
+import { ContextInjectionLogger } from './context-injection-logger.js';
 import { ContextPressure } from './context-pressure.js';
 import { ContextRecallDaemon } from './context-recall.js';
 import type { Database } from './database.js';
@@ -40,7 +41,7 @@ export function createCoreServices(database: Database, config: PluginConfig) {
   const redactor = new Redactor(config.redactor);
   const memoryManager = new MemoryManager(database, embeddings, redactor);
   void new TokenBudgetLedger(database.getPool());
-  void new AdaptiveContextGovernor(config.contextCompiler, config.contextGovernor);
+  const contextGovernor = new AdaptiveContextGovernor(config.contextCompiler, config.contextGovernor);
   return {
     embeddings, redactor, memoryManager,
     memoryExtractor: new MemoryExtractor(database, memoryManager, config.extractor),
@@ -54,7 +55,7 @@ export function createCoreServices(database: Database, config: PluginConfig) {
     loopSignalDetector: new LoopSignalDetector(),
     contextPressure: new ContextPressure(config.contextPressureRecommend, config.contextPressureDemand),
     toolDistiller: new ToolCallDistiller(config.distiller),
-    contextCompactor: new ContextCompactor(config.compactor),
+    contextCompactor: new ContextCompactor(config.compactor), contextGovernor,
   };
 }
 
@@ -65,6 +66,10 @@ export function createPersistenceServices(
   core: ReturnType<typeof createCoreServices>,
 ) {
   const checkpointStore = new CheckpointStore(database.getPool(), core.redactor);
+  const contextInjectionLogger = new ContextInjectionLogger(database.getPool(), {
+    enabled: true,
+    environment: process.env.NODE_ENV === 'test' ? 'fixture' : 'production',
+  });
   const workJournal = new AgentWorkJournal(database.getPool(), config.workJournal, core.redactor);
   const experiencePackets = new ExperiencePacketCreator(database.getPool());
   const selfModel = new SelfModelUpdater(database.getPool(), config.selfModel);
@@ -78,6 +83,7 @@ export function createPersistenceServices(
     ? new WorkLedger(database.getPool(), config.workLedger) : undefined;
   return {
     checkpointStore,
+    contextInjectionLogger,
     checkpointToolDeps: {
       client: ctx.client, store: checkpointStore, config: config.checkpoint, projectId: ctx.directory ?? null,
     },

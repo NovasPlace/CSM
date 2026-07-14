@@ -24,8 +24,8 @@ export function estimateInputTokens(msgs: SessionMessage[]): number {
     for (const p of m.parts ?? []) {
       if (p.type === 'text') total += estimateTokens(p.text ?? '');
       else if (p.type === 'tool') {
-        const s = typeof p.output === 'string' ? p.output : JSON.stringify(p.output ?? '');
-        total += estimateTokens(s);
+        const value = toolPartContent(p);
+        total += estimateTokens(value);
       }
     }
   }
@@ -36,11 +36,16 @@ function capturePart(msg: SessionMessage, p: SessionPart, maxBytes: number): Sto
   const mid = msg.info?.id;
   const role = msg.info?.role ?? 'unknown';
   if (p.type === 'tool' && (p.state?.status === 'completed' || p.state?.status === 'error')) {
-    const content = String(typeof p.output === 'string' ? p.output : JSON.stringify(p.output ?? ''));
+    const content = toolPartContent(p);
     if (content.trim().length === 0) return null;
     return {
-      checkpointId: '', messageId: mid, toolCallId: p.toolCallId,
-      kind: 'tool_output', content: content.slice(0, maxBytes), tokenCount: estimateTokens(content),
+      checkpointId: '',
+      messageId: mid,
+      partId: p.id,
+      toolCallId: p.callID ?? p.toolCallId,
+      kind: 'tool_output',
+      content: content.slice(0, maxBytes),
+      tokenCount: estimateTokens(content),
     };
   }
   if (p.type === 'text' && role === 'assistant' && (p.text ?? '').length > 800) {
@@ -51,4 +56,12 @@ function capturePart(msg: SessionMessage, p: SessionPart, maxBytes: number): Sto
     };
   }
   return null;
+}
+
+
+function toolPartContent(p: SessionPart): string {
+  const value = p.state?.status === 'error'
+    ? p.state?.error ?? p.error ?? ''
+    : p.state?.output ?? p.output ?? '';
+  return typeof value === 'string' ? value : JSON.stringify(value ?? '');
 }

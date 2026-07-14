@@ -66,6 +66,8 @@ export interface GovernorResult {
   metricsBefore: GovernorMetrics;
   metricsAfter: GovernorMetrics;
   decision: GovernorDecision;
+  thresholds: GovernorThresholds;
+  observedAt: string;
   rebuildApplied: boolean;
   compileResult?: CompileResult;
 }

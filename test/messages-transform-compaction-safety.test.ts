@@ -51,7 +51,7 @@ describe('messages transform compaction safety', () => {
     const currentTimestamp = Date.now() - 90_000;
     const messages = [
       { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'previous task' }] },
-      { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('read', 'old file contents', oldTimestamp)] },
+      { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('read', `old file contents ${'x'.repeat(500)}`, oldTimestamp)] },
       { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'current task' }] },
       { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('read', 'current file contents', currentTimestamp)] },
       { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('bash', 'working tree is clean', currentTimestamp + 10)] },
@@ -74,7 +74,7 @@ describe('messages transform compaction safety', () => {
     const messages = [
       { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'previous task' }] },
       { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('read', existingRef, firstTimestamp)] },
-      { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('bash', 'raw prior result', secondTimestamp)] },
+      { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('bash', `raw prior result ${'x'.repeat(500)}`, secondTimestamp)] },
       { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'next task' }] },
     ];
     const hook = createMessagesTransformHook(runtimeContext());

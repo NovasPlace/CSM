@@ -14,11 +14,16 @@ import type {
   GovernorDecision,
   GovernorProfileName,
   GovernorResult,
+  GovernorThresholds,
 } from './context-governor-types.js';
 import type { ContextCompilerConfig } from './types.js';
 
-function getThresholds(config: GovernorConfig): { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number } {
-  const def: { lightBrief: number; compactToolCalls: number; checkpointRefsOnly: number; distilledStateOnly: number; emergencyRebuild: number } = {
+export function getEffectiveGovernorThresholds(
+  config: GovernorConfig,
+  profileName?: GovernorProfileName,
+): GovernorThresholds {
+  const profile = getGovernorProfile(config, profileName);
+  const fallback: GovernorThresholds = {
     lightBrief: 50_000,
     compactToolCalls: 65_000,
     checkpointRefsOnly: 75_000,
@@ -27,21 +32,21 @@ function getThresholds(config: GovernorConfig): { lightBrief: number; compactToo
   };
 
   return {
-    lightBrief: config.thresholds?.lightBrief ?? def.lightBrief,
-    compactToolCalls: config.thresholds?.compactToolCalls ?? def.compactToolCalls,
-    checkpointRefsOnly: config.thresholds?.checkpointRefsOnly ?? def.checkpointRefsOnly,
-    distilledStateOnly: config.thresholds?.distilledStateOnly ?? def.distilledStateOnly,
-    emergencyRebuild: config.thresholds?.emergencyRebuild ?? def.emergencyRebuild,
+    lightBrief: config.thresholds?.lightBrief ?? profile.thresholds?.lightBrief ?? fallback.lightBrief,
+    compactToolCalls: config.thresholds?.compactToolCalls ?? profile.thresholds?.compactToolCalls ?? fallback.compactToolCalls,
+    checkpointRefsOnly: config.thresholds?.checkpointRefsOnly ?? profile.thresholds?.checkpointRefsOnly ?? fallback.checkpointRefsOnly,
+    distilledStateOnly: config.thresholds?.distilledStateOnly ?? profile.thresholds?.distilledStateOnly ?? fallback.distilledStateOnly,
+    emergencyRebuild: config.thresholds?.emergencyRebuild ?? profile.thresholds?.emergencyRebuild ?? fallback.emergencyRebuild,
   };
 }
 
-interface GovernorPart {
+export interface GovernorPart {
   type?: string;
   text?: string;
-  state?: Record<string, unknown>;
+  state?: { output?: string };
 }
 
-interface MessageLike {
+export interface GovernorMessage {
   info?: { role?: string };
   parts?: GovernorPart[];
 }
@@ -80,12 +85,12 @@ function textPart(text: string): GovernorPart {
   return { type: 'text', text };
 }
 
-function addMemoryBrief(messages: MessageLike[]): void {
+function addMemoryBrief(messages: GovernorMessage[]): void {
   const summary = summarizeMessages(messages, 2, '[MEMORY_BRIEF]');
   messages.unshift({ info: { role: 'assistant' }, parts: [textPart(summary)] });
 }
 
-function summarizeMessages(messages: MessageLike[], limit: number, prefix: string): string {
+function summarizeMessages(messages: GovernorMessage[], limit: number, prefix: string): string {
   const snippets = messages
     .slice(-limit)
     .flatMap((message) => message.parts ?? [])
@@ -94,7 +99,7 @@ function summarizeMessages(messages: MessageLike[], limit: number, prefix: strin
   return `${prefix} ${snippets.join(' | ')}`.trim();
 }
 
-function replaceWithCheckpointRefs(messages: MessageLike[], keepTail: number): void {
+function replaceWithCheckpointRefs(messages: GovernorMessage[], keepTail: number): void {
   const cut = Math.max(0, messages.length - keepTail);
   const archived = messages.slice(0, cut);
   const recent = messages.slice(cut);
@@ -106,7 +111,7 @@ function replaceWithCheckpointRefs(messages: MessageLike[], keepTail: number): v
   }, ...recent);
 }
 
-function replaceWithDistilledState(messages: MessageLike[], keepTail: number): void {
+function replaceWithDistilledState(messages: GovernorMessage[], keepTail: number): void {
   const distilled = `[DISTILLED_STATE]\n${buildCheckpointDistilledState(messages)}`;
   const recent = messages.slice(-keepTail);
   messages.splice(0, messages.length, {
@@ -115,7 +120,7 @@ function replaceWithDistilledState(messages: MessageLike[], keepTail: number): v
   }, ...recent);
 }
 
-function applyAction(messages: MessageLike[], action: GovernorActionName): boolean {
+function applyAction(messages: GovernorMessage[], action: GovernorActionName): boolean {
   if (action === 'light_memory_brief') {
     addMemoryBrief(messages);
     return false;
@@ -146,12 +151,16 @@ export class AdaptiveContextGovernor {
     private readonly governorConfig: GovernorConfig = DEFAULT_GOVERNOR_CONFIG,
   ) {}
 
-  govern(messages: MessageLike[], profileName?: GovernorProfileName): GovernorResult {
+  govern(
+    messages: GovernorMessage[],
+    profileName?: GovernorProfileName,
+    observedAt = new Date().toISOString(),
+  ): GovernorResult {
     const profile = getGovernorProfile(this.governorConfig, profileName);
     const slopeGrowth = estimateSlopeGrowth(messages);
     const projectedGrowth = profile.projectedGrowth + slopeGrowth;
     const before = measureGovernorMetrics(messages, projectedGrowth);
-    const thresholds = getThresholds(this.governorConfig);
+    const thresholds = getEffectiveGovernorThresholds(this.governorConfig, profile.name);
     const action = chooseAction(before.totalTokens, before.projectedNextTurnTokens, profile.maxBudget, thresholds);
     
     // Diagnostic logging
@@ -179,6 +188,8 @@ export class AdaptiveContextGovernor {
       metricsBefore: before,
       metricsAfter: after,
       decision,
+      thresholds,
+      observedAt,
       rebuildApplied,
       compileResult,
     };

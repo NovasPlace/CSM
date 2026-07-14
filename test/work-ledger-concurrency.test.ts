@@ -2,6 +2,7 @@ import { after, before, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { DEFAULT_CONFIG } from '../src/config.js';
 import { Database } from '../src/database.js';
@@ -11,7 +12,7 @@ import type { WorkLedgerCaptureInput } from '../src/work-ledger-types.js';
 
 const BASE_URL = process.env.CSM_DATABASE_URL
   ?? 'postgresql://postgres:postgres@localhost:5432/cross_session_memory';
-const DATABASE_NAME = `csm_work_ledger_concurrency_${Date.now()}`;
+const DATABASE_NAME = `csm_work_ledger_concurrency_${process.pid}_${randomUUID().replaceAll('-', '')}`;
 const ROOT = resolve(`.tmp/work-ledger-concurrency-${process.pid}`);
 const FILE = resolve(ROOT, 'tracked.txt');
 const admin = new Pool({ connectionString: databaseUrl('postgres') });

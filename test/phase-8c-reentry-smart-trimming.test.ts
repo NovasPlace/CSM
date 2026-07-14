@@ -8,6 +8,7 @@ import {
   type ReEntryConfig,
   type TrimReason,
 } from '../src/re-entry-protocol.js';
+import { deriveAdaptiveReentryBudget } from '../src/reentry-adaptive-budget.js';
 
 function makeLayer(
   name: string,
@@ -404,6 +405,27 @@ describe('Phase 8C — Smart Re-entry Trimming', () => {
           assert.ok(r.trimReason !== null, `layer ${r.name} should have a trimReason`);
         }
       }
+    });
+  });
+
+  describe('adaptive budget policy', () => {
+    it('keeps the configured ceiling for unknown and long prior sessions', () => {
+      const config = tightBudget(1_000);
+      assert.equal(deriveAdaptiveReentryBudget(config, null).effectiveMaxChars, 1_000);
+      assert.equal(deriveAdaptiveReentryBudget(config, 25).effectiveMaxChars, 1_000);
+    });
+
+    it('reduces the allowance for short and medium prior sessions', () => {
+      const config = tightBudget(1_000);
+      const short = deriveAdaptiveReentryBudget(config, 8);
+      const medium = deriveAdaptiveReentryBudget(config, 24);
+      assert.deepEqual([short.tier, short.effectiveMaxChars], ['short', 600]);
+      assert.deepEqual([medium.tier, medium.effectiveMaxChars], ['medium', 800]);
+    });
+
+    it('never raises a deliberately small configured maximum', () => {
+      const decision = deriveAdaptiveReentryBudget(tightBudget(100, 50), 8);
+      assert.equal(decision.effectiveMaxChars, 100);
     });
   });
 });

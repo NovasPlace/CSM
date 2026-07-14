@@ -223,6 +223,124 @@ export const CSMPlugin = registerHooks;
 export type { PluginInput, PluginOptions, Hooks } from '@opencode-ai/plugin';
 export type { DatabasePool, Memory, MemoryType, ToolCallRecord, CompactionResult, BucketBreakdown } from './type...
 
+**src/context-governor-optimizer.ts** - 2026-07-14
+import { estimateTokens } from './token-bucket-analyzer.js';
+
+interface GovernorPart {
+  type?: string;
+  text?: string;
+  tool?: string;
+  state?: { output?: string };
+}
+
+interface MessageLike {
+  info?: { role?: string };
+  parts?: GovernorPart[];
+}
+
+function textOf(part: GovernorPart): string {
+  return String(part.text ?? part.state?.output ?? '');
+}
+
+function normalize(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\d+/g, '#')
+    .replace(/x{12...
+
+**src/context-governor-optimizer.ts** - 2026-07-14
+import { estimateTokens } from './token-bucket-analyzer.js';
+
+interface GovernorPart {
+  type?: string;
+  text?: string;
+  tool?: string;
+  state?: { output?: string };
+}
+
+interface MessageLike {
+  info?: { role?: string };
+  parts?: GovernorPart[];
+}
+
+function textOf(part: GovernorPart): string {
+  return String(part.text ?? part.state?.output ?? '');
+}
+
+function normalize(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\d+/g, '#')
+    .replace(/x{12...
+
+**src/context-governor-optimizer.ts** - 2026-07-14
+import { estimateTokens } from './token-bucket-analyzer.js';
+
+interface GovernorPart {
+  type?: string;
+  text?: string;
+  tool?: string;
+  state?: { output?: string };
+}
+
+interface MessageLike {
+  info?: { role?: string };
+  parts?: GovernorPart[];
+}
+
+function textOf(part: GovernorPart): string {
+  return String(part.text ?? part.state?.output ?? '');
+}
+
+function normalize(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\d+/g, '#')
+    .replace(/x{12...
+
+**src/hooks/messages-transform.ts** - 2026-07-14
+import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logger.js';
+import { isAlreadyCompacted } from '../compaction-utils.js';
+
+interface TransformToolState {
+  status: string;
+  input?: Record<string, unknown>;
+  output?: string;
+  error?: string;
+  time?: ...
+
+**src/hooks/messages-transform.ts** - 2026-07-14
+import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logger.js';
+import { isAlreadyCompacted } from '../compaction-utils.js';
+
+interface TransformToolState {
+  status: string;
+  input?: Record<string, unknown>;
+  output?: string;
+  error?: string;
+  time?: ...
+
+**src/hooks/messages-transform.ts** - 2026-07-14
+import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logger.js';
+import { isAlreadyCompacted } from '../compaction-utils.js';
+import type { GovernorMessage, GovernorPart } from '../context-governor.js';
+
+interface TransformToolState {
+  status: string;
+  in...
+
 ### 1. PostgreSQL over SQLite (External DB)
 - **Decision**: Use PostgreSQL as primary memory store
 - **Why**: Survives OpenCode reinstalls; built-in SQLite at `~/.config/opencode/` gets wiped

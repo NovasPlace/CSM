@@ -50,6 +50,7 @@ async function runDisposal(
   await capture(state, errors, 'memory cleanup', () => pluginCtx.memoryManager.cleanup());
   await capture(state, errors, 'stats flush', () => pluginCtx.statsWriter.stopAndFlush());
   await capture(state, errors, 'work ledger', async () => pluginCtx.workLedger?.dispose());
+  await capture(state, errors, 'context injection telemetry', async () => pluginCtx.contextInjectionLogger?.flush());
   await capture(state, errors, 'documentation flush', () => flushDocUpdates(pluginCtx, ctx.directory));
   if (errors.length === 0) {
     await capture(state, errors, 'database disconnect', () => pluginCtx.database.disconnect());

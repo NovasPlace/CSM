@@ -94,6 +94,12 @@ interface LayerAssembly {
 
 **Identity and Constraints are NEVER trimmed** (hard constraints for system prompt integrity).
 
+Phase 8C applies a deterministic ceiling before this allocation: an unknown or
+long prior session keeps the configured maximum, a short session (0-8 turns)
+uses 60%, and a medium session (9-24 turns) uses 80%. The selected tier,
+observed prior turn count, and effective character ceiling are recorded in the
+re-entry injection provenance metadata.
+
 **Trimming order (by budget algorithm):**
 1. Active Goals
 2. In-Progress Work
@@ -277,7 +283,8 @@ state: {
 1. **No runtime dual-mode switching yet**: Changing preview/live mode still requires restart
 2. **No first-turn synthetic message**: Block only in system prompt, not conversation
 3. **No user instruction**: Block is third-person, not "You have..."
-4. **No experimental features**: No adaptive token budgeting, no learning
+4. **No learning-based selection**: Adaptive budgeting is deterministic; it
+   does not infer preferences or learn from payload content
 
 ---
 
@@ -285,7 +292,6 @@ state: {
 
 - **User experience pattern**: UI/CLI control for preview-only vs injection
 - **Deliverability**: Inject block as synthetic message on first turn
-- **Smart trimming**: Adaptive token budgeting based on session length
 - **Multi-session context**: Support for parallel sessions with re-entry
 - **Belief-driven selection**: Prioritize layers based on belief confidence
 

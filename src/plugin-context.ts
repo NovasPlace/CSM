@@ -39,6 +39,8 @@ import type { CompileResult } from './context-compiler.js';
 import type { Redactor } from './redactor.js';
 import type { StatsWriter } from './stats-writer.js';
 import type { WorkLedger } from './work-ledger.js';
+import type { AdaptiveContextGovernor } from './context-governor.js';
+import type { ContextInjectionLogger } from './context-injection-logger.js';
 
 export type AutoCheckpointFn = (
   sessionId: string,
@@ -62,6 +64,8 @@ export interface PluginState {
   pendingMilestonePrompt?: import('./milestone-tracker.js').MilestonePromptBlock | null;
   reentryInjected: Set<string>;
   onboardingInjected: Set<string>;
+  reentryPending?: Set<string>;
+  onboardingPending?: Set<string>;
   csmSourceAttributionLogged?: boolean;
 }
 
@@ -75,6 +79,8 @@ export interface PluginContext {
   contextRecall: ContextRecallDaemon;
   contextPressure: ContextPressure;
   contextCompactor: ContextCompactor;
+  contextGovernor?: AdaptiveContextGovernor;
+  contextInjectionLogger?: ContextInjectionLogger;
   toolDistiller: ToolCallDistiller;
   loopDetector: LoopDetector;
   loopSignalDetector: LoopSignalDetector;

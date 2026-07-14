@@ -8,6 +8,13 @@ export interface LoggerContext {
   turnId?: string;
   memoryId?: string;
   toolName?: string;
+  eventType?: 'context_governor';
+  profile?: string;
+  thresholds?: string;
+  reason?: string;
+  observedAt?: string;
+  outcome?: string;
+  layer?: string;
 }
 
 export interface LoggerOptions {
@@ -67,6 +74,8 @@ export class Logger {
     if (allContext.toolName) {
       parts.push(`tool:${allContext.toolName}`);
     }
+
+    appendAuditContext(parts, allContext);
 
     parts.push(message);
     return parts.join(' ');
@@ -137,6 +146,14 @@ export class Logger {
     const _sessionId = this.context.sessionId; // preserve session
     const _projectId = this.context.projectId; // preserve project
   }
+}
+
+function appendAuditContext(parts: string[], context: LoggerContext): void {
+  if (!context.eventType) return;
+  parts.push(`event:${context.eventType}`);
+  if (context.profile) parts.push(`profile:${context.profile}`);
+  if (context.outcome) parts.push(`outcome:${context.outcome}`);
+  if (context.observedAt) parts.push(`observed_at:${context.observedAt}`);
 }
 
 let globalLogger: Logger | null = null;

@@ -1,20 +1,22 @@
-{
-  "$schema": "https://opencode.ai/config.json",
-  "instructions": [
-    "AGENTS.md",
-    "AGENTBOOK_STATE.md"
-  ],
-  "compaction": {
-    "auto": true,
-    "prune": true,
-    "reserved": 81072,
-    "tail_turns": 2,
-    "preserve_recent_tokens": 6000
-  },
-  "plugin": [
-    [
-      "file:///C:/Users/Donovan/Desktop/cross-session-memory/dist/index.js",
-      {}
-    ]
-  ]
+﻿{
+    "$schema":  "https://opencode.ai/config.json",
+    "instructions":  [
+                         "AGENTS.md",
+                         "AGENTBOOK_STATE.md"
+                     ],
+    "compaction":  {
+                       "auto":  false,
+                       "prune":  false,
+                       "reserved":  32000,
+                       "tail_turns":  2,
+                       "preserve_recent_tokens":  6000
+                   },
+    "plugin":  [
+                   [
+                       "file:///C:/Users/Donovan/Desktop/cross-session-memory/dist/index.js",
+                       {
+
+                       }
+                   ]
+               ]
 }

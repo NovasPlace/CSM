@@ -14,6 +14,10 @@ import type { DatabasePool } from './types.js';
 import type { PluginConfig } from './types.js';
 import { dialectFromPool } from './db/query-dialect.js';
 import { getLogger } from './logger.js';
+import {
+  type BuiltContextInjection,
+} from './context-injection-contract.js';
+import { buildOnboardingProvenance } from './onboarding-injection-provenance.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -972,6 +976,14 @@ export async function buildOnboardingPacket(ctx: OnboardingContext): Promise<Onb
   logger.info(`Onboarding packet built: ${ready}/${sections.length} sections ready, ~${tokenEstimate} tokens`);
 
   return packet;
+}
+
+export async function buildOnboardingPacketWithProvenance(
+  ctx: OnboardingContext,
+): Promise<{ packet: OnboardingPacket; built: BuiltContextInjection }> {
+  const packet = await buildOnboardingPacket(ctx);
+  const text = formatOnboardingBlock(packet);
+  return { packet, built: buildOnboardingProvenance(packet, text) };
 }
 
 export function formatOnboardingBlock(packet: OnboardingPacket): string {

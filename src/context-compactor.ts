@@ -1,4 +1,4 @@
-﻿import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics } from './types.js';
+import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics } from './types.js';
 import { extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeQualityScore } from './compaction-quality.js';
 import { isCompactedToolText } from './compaction-utils.js';
 
@@ -7,12 +7,18 @@ import { isCompactedToolText } from './compaction-utils.js';
 interface CompactableMessagePart {
   type?: string;
   tool?: string;
-  state?: { output?: string; status?: string; time?: { start?: number; compacted?: number } };
+  state?: {
+    input?: Record<string, unknown>;
+    output?: string;
+    error?: string;
+    status?: string;
+    time?: { start?: number; compacted?: number };
+  };
   compacted?: boolean;
 }
 
 interface CompactableMessage {
-  info?: { role?: string };
+  info?: { role?: string; sessionID?: string };
   parts?: CompactableMessagePart[];
 }
 
@@ -74,26 +80,28 @@ export class ContextCompactor {
     messages?: CompactableMessage[]
   ): { compacted: string; result: CompactionResult; compactedCount: number } {
     if (!this.config.enabled || toolCalls.length === 0) {
-      const raw = toolCalls.map(tc => this.formatRawToolCall(tc)).join('\n') + '\n' + (inputStr ?? '');
+      const raw = [
+        toolCalls.map(tc => this.formatFullToolCall(tc)).join('\n'),
+        inputStr ?? '',
+      ].filter(Boolean).join('\n');
       const tokens = this.estimateTokens(raw);
-      return {
-        compacted: raw,
-        compactedCount: 0,
-        result: {
-          totalToolParts: toolCalls.length,
-          compactedParts: 0,
-          keptRawParts: toolCalls.length,
-          skippedParts: 0,
-          beforeChars: raw.length,
-          afterChars: raw.length,
-          beforeTokens: tokens,
-          afterTokens: tokens,
-          tokensSaved: 0,
-          savedPercent: 0,
-          semanticSignalCountPreserved: 0,
-          compactedAt: new Date(),
-        },
+      const result: CompactionResult = {
+        totalToolParts: toolCalls.length,
+        compactedParts: 0,
+        keptRawParts: toolCalls.length,
+        skippedParts: 0,
+        beforeChars: raw.length,
+        afterChars: raw.length,
+        beforeTokens: tokens,
+        afterTokens: tokens,
+        tokensSaved: 0,
+        savedPercent: 0,
+        semanticSignalCountPreserved: 0,
+        compactedAt: new Date(),
       };
+      this.lastResult = result;
+      this.lastQuality = null;
+      return { compacted: raw, compactedCount: 0, result };
     }
 
     const now = Date.now();
@@ -123,31 +131,63 @@ export class ContextCompactor {
         keepRaw.push(tc);
       } else if (isRunning) {
         keepRaw.push(tc);
-      } else {
+      } else if (this.isWorthCompacting(tc)) {
         compactable.push(tc);
+      } else {
+        keepRaw.push(tc);
       }
       eligibleIndex++;
     }
 
-    // Budget cap check - if tool calls exceed configured percentage, compact more aggressively
-    if (this.config.budgetCapEnabled && compactable.length > 0) {
-      const toolStr = keepRaw.map(tc => this.formatRawToolCall(tc)).join('\n') +
-        '\n' + compactable.map(tc => this.formatRawToolCall(tc)).join('\n');
-      const totalStr = toolStr + '\n' + (inputStr ?? '');
-      const toolTokens = this.estimateTokens(toolStr);
-      const totalTokens = this.estimateTokens(totalStr);
-      const toolPercent = totalTokens > 0 ? (toolTokens / totalTokens) * 100 : 0;
-
+    // Budget cap check — compact the oldest completed raw calls first. Never evict
+    // running/pending calls, and never replace content with a larger reference.
+    if (this.config.budgetCapEnabled) {
       const capPercent = this.config.budgetCapPercent ?? 30;
       const capTrigger = Math.floor(
         (this.config.budgetCapPressureThreshold ?? 0.75) * 4000
       );
+      const maxIterations = Math.max(0, Math.floor(this.config.budgetCapMaxIterations ?? 3));
 
-      if (toolPercent > capPercent && totalTokens > capTrigger) {
-        // Compact some of the keep-raw too
-        const extraCount = Math.max(1, Math.floor(keepRaw.length * 0.3));
-        const toCompact = keepRaw.splice(0, extraCount);
-        compactable.push(...toCompact);
+      for (let iteration = 0; iteration < maxIterations; iteration++) {
+        const pressure = this.measureToolPressure(keepRaw, compactable, alreadyCompacted, inputStr);
+        if (pressure.toolPercent <= capPercent || pressure.totalTokens <= capTrigger) break;
+
+        const candidates = keepRaw
+          .filter(tc => {
+            const status = this.getToolCallStatus(tc);
+            return status !== 'running' && status !== 'pending' && this.isWorthCompacting(tc);
+          })
+          .sort((a, b) => a.timestamp - b.timestamp);
+        if (candidates.length === 0) break;
+
+        const extraCount = Math.max(1, Math.floor(candidates.length * 0.3));
+        const selected = new Set(candidates.slice(0, extraCount));
+        for (let index = keepRaw.length - 1; index >= 0; index--) {
+          if (!selected.has(keepRaw[index])) continue;
+          compactable.push(keepRaw[index]);
+          keepRaw.splice(index, 1);
+        }
+      }
+    }
+
+    const beforeStr = [
+      toolCalls.map(tc => this.formatFullToolCall(tc)).join('\n'),
+      inputStr ?? '',
+    ].filter(Boolean).join('\n');
+    let qualityRejectedCount = 0;
+    let attemptedQuality: CompactionQualityMetrics | null = null;
+    if (compactable.length > 0) {
+      const prospectiveAfter = [
+        compactable.map(tc => this.formatCompactedToolCall(tc)).join('\n'),
+        alreadyCompacted.map(tc => this.formatFullToolCall(tc)).join('\n'),
+        keepRaw.map(tc => this.formatFullToolCall(tc)).join('\n'),
+        inputStr ?? '',
+      ].filter(Boolean).join('\n');
+      attemptedQuality = this.measureQuality(beforeStr, prospectiveAfter);
+      if (!attemptedQuality.safe) {
+        qualityRejectedCount = compactable.length;
+        keepRaw.push(...compactable);
+        compactable.length = 0;
       }
     }
 
@@ -164,18 +204,29 @@ export class ContextCompactor {
         for (const part of msg.parts ?? []) {
           if (part.type !== 'tool') continue;
           if (part.compacted || part.state?.time?.compacted) continue;
-          if (isCompactedToolText(part.state?.output)) continue;
+          if (isCompactedToolText(part.state?.output) || isCompactedToolText(part.state?.error)) continue;
 
           const partTimestamp = part.state?.time?.start ?? 0;
           if (partTimestamp === 0) continue;
           const candidates = compactableByTimestamp.get(partTimestamp);
           if (!candidates || candidates.length === 0) continue;
-          const candidateIndex = candidates.findIndex(tc => !part.tool || tc.tool === part.tool);
+          const partSource = part.state?.status === 'error'
+            ? part.state?.error ?? ''
+            : part.state?.output ?? '';
+          let candidateIndex = candidates.findIndex(tc =>
+            (!part.tool || tc.tool === part.tool)
+            && (tc.error ?? tc.output ?? '') === partSource
+          );
+          if (candidateIndex < 0) {
+            candidateIndex = candidates.findIndex(tc => !part.tool || tc.tool === part.tool);
+          }
           const matchingRecord = candidates.splice(candidateIndex >= 0 ? candidateIndex : 0, 1)[0];
           if (!matchingRecord) continue;
 
           if (!part.state) part.state = {};
-          part.state.output = this.formatCompactRef(matchingRecord);
+          const compactRef = this.formatCompactRef(matchingRecord);
+          if (part.state.status === 'error') part.state.error = compactRef;
+          else part.state.output = compactRef;
           part.state.time = { ...part.state.time, start: partTimestamp, compacted: Date.now() };
           part.compacted = true;
         }
@@ -202,9 +253,14 @@ export class ContextCompactor {
       compacted += inputStr;
     }
 
-    const beforeStr = toolCalls.map(tc => this.formatRawToolCall(tc)).join('\n') + '\n' + (inputStr ?? '');
+    const afterStr = [
+      compactable.map(tc => this.formatCompactedToolCall(tc)).join('\n'),
+      alreadyCompacted.map(tc => this.formatFullToolCall(tc)).join('\n'),
+      keepRaw.map(tc => this.formatFullToolCall(tc)).join('\n'),
+      inputStr ?? '',
+    ].filter(Boolean).join('\n');
     const beforeTokens = this.estimateTokens(beforeStr);
-    const afterTokens = this.estimateTokens(compacted);
+    const afterTokens = this.estimateTokens(afterStr);
     const tokensSaved = compactable.length > 0 ? beforeTokens - afterTokens : 0;
     const savedPercent = beforeTokens > 0 && compactable.length > 0
       ? Math.round((tokensSaved / beforeTokens) * 10000) / 100
@@ -218,22 +274,24 @@ export class ContextCompactor {
       if (tc.exitCode !== undefined && tc.exitCode !== 0) signalCount++;
     }
 
-    this.cumulativeStats.totalCompactions++;
-    this.cumulativeStats.totalPartsCompacted += compactable.length;
-    this.cumulativeStats.totalTokensSaved += tokensSaved;
-    this.cumulativeStats.totalSemanticSignalsPreserved += signalCount;
-    this.cumulativeStats.lastCompactedAt = new Date();
-    if (!this.cumulativeStats.firstCompactedAt) {
-      this.cumulativeStats.firstCompactedAt = new Date();
+    if (compactable.length > 0) {
+      this.cumulativeStats.totalCompactions++;
+      this.cumulativeStats.totalPartsCompacted += compactable.length;
+      this.cumulativeStats.totalTokensSaved += tokensSaved;
+      this.cumulativeStats.totalSemanticSignalsPreserved += signalCount;
+      this.cumulativeStats.lastCompactedAt = new Date();
+      if (!this.cumulativeStats.firstCompactedAt) {
+        this.cumulativeStats.firstCompactedAt = new Date();
+      }
     }
 
     const result: CompactionResult = {
       totalToolParts: toolCalls.length,
       compactedParts: compactable.length,
       keptRawParts: keepRaw.length + alreadyCompacted.length,
-      skippedParts: alreadyCompacted.length,
+      skippedParts: alreadyCompacted.length + qualityRejectedCount,
       beforeChars: beforeStr.length,
-      afterChars: compacted.length,
+      afterChars: afterStr.length,
       beforeTokens,
       afterTokens,
       tokensSaved,
@@ -244,53 +302,89 @@ export class ContextCompactor {
 
     this.lastResult = result;
 
-    // Measure compaction quality
-    const allTextBefore = beforeStr;
-    const allTextAfter = compacted;
-    if (compactable.length > 0) {
-      this.lastQuality = {
-        compressionRatio: afterTokens / (beforeTokens || 1),
-        embeddingDrift: -1,
-        entityRetention: computeRetention(
-          extractEntities(allTextBefore),
-          extractEntities(allTextAfter),
-        ),
-        decisionRetention: computeRetention(
-          extractDecisions(allTextBefore),
-          extractDecisions(allTextAfter),
-        ),
-        warningErrorRetention: computeRetention(
-          extractWarningsErrors(allTextBefore),
-          extractWarningsErrors(allTextAfter),
-        ),
-        restoreSuccessRate: 1.0,
-        recallSuccessAfterCompaction: computeRetention(
-          extractEntities(allTextBefore),
-          extractEntities(allTextAfter),
-        ),
-        tokensSavedTotal: tokensSaved,
-        tokensSavedPerSession: tokensSaved,
-        qualityScore: computeQualityScore(
-          computeRetention(extractEntities(allTextBefore), extractEntities(allTextAfter)),
-          computeRetention(extractDecisions(allTextBefore), extractDecisions(allTextAfter)),
-          computeRetention(extractWarningsErrors(allTextBefore), extractWarningsErrors(allTextAfter)),
-          0.5,
-          DEFAULT_QUALITY_CONFIG,
-        ),
-        safe: false,
-        entitiesBefore: extractEntities(allTextBefore),
-        entitiesAfter: extractEntities(allTextAfter),
-        decisionsBefore: extractDecisions(allTextBefore),
-        decisionsAfter: extractDecisions(allTextAfter),
-        warningsErrorsBefore: extractWarningsErrors(allTextBefore),
-        warningsErrorsAfter: extractWarningsErrors(allTextAfter),
-      };
-      this.lastQuality.safe = this.lastQuality.qualityScore >= DEFAULT_QUALITY_CONFIG.qualityThreshold;
-    } else {
-      this.lastQuality = null;
-    }
+    // Keep the attempted quality result even when the gate rejected mutation.
+    this.lastQuality = attemptedQuality;
 
     return { compacted, result, compactedCount: compactable.length };
+  }
+
+
+
+  private measureQuality(before: string, after: string): CompactionQualityMetrics {
+    const beforeTokens = this.estimateTokens(before);
+    const afterTokens = this.estimateTokens(after);
+    const entitiesBefore = extractEntities(before);
+    const entitiesAfter = extractEntities(after);
+    const decisionsBefore = extractDecisions(before);
+    const decisionsAfter = extractDecisions(after);
+    const warningsErrorsBefore = extractWarningsErrors(before);
+    const warningsErrorsAfter = extractWarningsErrors(after);
+    const entityRetention = computeRetention(entitiesBefore, entitiesAfter);
+    const decisionRetention = computeRetention(decisionsBefore, decisionsAfter);
+    const warningErrorRetention = computeRetention(warningsErrorsBefore, warningsErrorsAfter);
+    const qualityScore = computeQualityScore(
+      entityRetention,
+      decisionRetention,
+      warningErrorRetention,
+      0.5,
+      DEFAULT_QUALITY_CONFIG,
+    );
+    return {
+      compressionRatio: afterTokens / (beforeTokens || 1),
+      embeddingDrift: -1,
+      entityRetention,
+      decisionRetention,
+      warningErrorRetention,
+      restoreSuccessRate: 1.0,
+      recallSuccessAfterCompaction: entityRetention,
+      tokensSavedTotal: beforeTokens - afterTokens,
+      tokensSavedPerSession: beforeTokens - afterTokens,
+      qualityScore,
+      safe: qualityScore >= DEFAULT_QUALITY_CONFIG.qualityThreshold,
+      entitiesBefore,
+      entitiesAfter,
+      decisionsBefore,
+      decisionsAfter,
+      warningsErrorsBefore,
+      warningsErrorsAfter,
+    };
+  }
+
+  private formatFullToolCall(tc: ToolCallRecord): string {
+    const args = tc.args ? JSON.stringify(tc.args) : '';
+    const output = tc.output ?? '';
+    const error = tc.error ? `ERROR: ${tc.error}` : '';
+    return `TOOL: ${tc.tool}(${args}) ${output} ${error}`.trim();
+  }
+
+  private formatCompactedToolCall(tc: ToolCallRecord): string {
+    const args = tc.args ? JSON.stringify(tc.args) : '';
+    return `TOOL: ${tc.tool}(${args}) ${this.formatCompactRef(tc)}`.trim();
+  }
+
+  private isWorthCompacting(tc: ToolCallRecord): boolean {
+    const source = tc.error ?? tc.output ?? '';
+    return this.formatCompactRef(tc).length < source.length;
+  }
+
+  private measureToolPressure(
+    keepRaw: ToolCallRecord[],
+    compactable: ToolCallRecord[],
+    alreadyCompacted: ToolCallRecord[],
+    inputStr?: string,
+  ): { toolPercent: number; totalTokens: number } {
+    const toolStr = [
+      compactable.map(tc => this.formatCompactedToolCall(tc)).join('\n'),
+      alreadyCompacted.map(tc => this.formatFullToolCall(tc)).join('\n'),
+      keepRaw.map(tc => this.formatFullToolCall(tc)).join('\n'),
+    ].filter(Boolean).join('\n');
+    const totalStr = [toolStr, inputStr ?? ''].filter(Boolean).join('\n');
+    const toolTokens = this.estimateTokens(toolStr);
+    const totalTokens = this.estimateTokens(totalStr);
+    return {
+      toolPercent: totalTokens > 0 ? (toolTokens / totalTokens) * 100 : 0,
+      totalTokens,
+    };
   }
 
   private formatRawToolCall(tc: ToolCallRecord): string {
@@ -346,7 +440,7 @@ export class ContextCompactor {
   }
 
   getCompactionStats(): CumulativeCompactionStats {
-    return this.cumulativeStats;
+    return { ...this.cumulativeStats };
   }
 
   getCumulativeStats(): CumulativeCompactionStats {

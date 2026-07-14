@@ -245,7 +245,7 @@ export function compileContextWithLessons(
   return result;
 }
 
-const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]'];
+const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]', 'TOOL_REF', '[TOOL_REF'];
 const STEP_TYPES = ['step-start', 'step-finish', 'compaction', 'reasoning', 'snapshot', 'patch'];
 
 const CRITICAL_PATTERNS: RegExp[] = [

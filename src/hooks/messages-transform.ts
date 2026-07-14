@@ -4,6 +4,7 @@ import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
 import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
 import { getLogger } from '../logger.js';
 import { isAlreadyCompacted } from '../compaction-utils.js';
+import type { GovernorMessage, GovernorPart } from '../context-governor.js';
 
 interface TransformToolState {
   status: string;
@@ -13,7 +14,7 @@ interface TransformToolState {
   time?: { start?: number; end?: number; compacted?: number };
 }
 
-interface TransformPart {
+interface TransformPart extends GovernorPart {
   type: string;
   text?: string;
   tool?: string;
@@ -21,7 +22,7 @@ interface TransformPart {
   sessionID?: string;
 }
 
-interface TransformMessage {
+interface TransformMessage extends GovernorMessage {
   info?: { role?: string; sessionID?: string; id?: string };
   parts?: TransformPart[];
 }
@@ -75,6 +76,8 @@ export function createMessagesTransformHook(ctx: PluginContext) {
           });
         }
       }
+
+      auditGovernor(ctx, messages);
 
       if (records.length === 0) return;
 
@@ -140,6 +143,20 @@ function findLatestUserMessageIndex(messages: TransformMessage[]): number {
 
 function isCompletedPriorTurn(messageIndex: number, latestUserIndex: number): boolean {
   return latestUserIndex >= 0 && messageIndex < latestUserIndex;
+}
+
+function auditGovernor(ctx: PluginContext, messages: TransformMessage[]): void {
+  if (!ctx.contextGovernor || ctx.config.contextGovernor?.enabled === false) return;
+  const result = ctx.contextGovernor.govern(messages);
+  ctx.lastCompileResult = result.compileResult ?? null;
+  getLogger().info('Context governor audit', {
+    eventType: 'context_governor',
+    profile: result.decision.profile,
+    thresholds: Object.values(result.thresholds).join('/'),
+    reason: result.decision.reason,
+    observedAt: result.observedAt,
+    outcome: result.decision.action,
+  });
 }
 
 

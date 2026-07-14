@@ -269,6 +269,54 @@ import { estimateSystemPrompt, formatBreakdown, type BucketBreakdown } from '../
 import { buildManifest } from '../context-cache-manifest.js';
 ...
 
+**src/hooks/messages-transform.ts** (2026-07-14)
+Detected: failed:
+Context: import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logg...
+
+**src/hooks/messages-transform.ts** (2026-07-14)
+Detected: failed:
+Context: import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logg...
+
+**src/hooks/messages-transform.ts** (2026-07-14)
+Detected: failed:
+Context: import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logg...
+
+**src/hooks/messages-transform.ts** (2026-07-14)
+Detected: failed:
+Context: import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logg...
+
+**src/hooks/messages-transform.ts** (2026-07-14)
+Detected: failed:
+Context: import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logg...
+
+**src/hooks/messages-transform.ts** (2026-07-14)
+Detected: failed:
+Context: import type { PluginContext } from '../plugin-context.js';
+import type { ToolCallRecord } from '../types.js';
+import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
+import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
+import { getLogger } from '../logg...
+
 ## Recovery Procedures
 
 ### Full Reset (Nuclear)

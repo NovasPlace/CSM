@@ -5,7 +5,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { promises as fs, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { promises as fs, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -364,16 +364,21 @@ describe("auto-docs repair — failed flush restore", () => {
 
     const docsDir = join(dir, "docs");
     const changelogPath = join(docsDir, "CHANGELOG_LIVE.md");
-    writeFileSync(changelogPath, "# CHANGELOG_LIVE.md\n\n## Development Log\n\n", "utf-8");
-    try { await fs.chmod(changelogPath, 0o444); } catch { /* may not work on Windows */ }
+    rmSync(changelogPath);
+    mkdirSync(changelogPath);
 
     const ctx = makePluginContext(dir);
-    try { await flushDocUpdates(ctx, dir); } catch { /* expected on some platforms */ }
-
-    try { await fs.chmod(changelogPath, 0o644); } catch { /* ignore */ }
+    const flushPromise = flushDocUpdates(ctx, dir);
+    makeSourceFile(dir, "src/b.ts", "export const bValue: number = 200;\n");
+    queueDocUpdate("src/b.ts", "write", dir);
+    await flushPromise;
 
     const pending = getPendingUpdates(dir);
-    assert.ok(pending.some(u => u.filePath === "src/a.ts"), "a.ts should be restored after failed flush");
+    assert.deepEqual(
+      pending.map(update => update.filePath),
+      ["src/a.ts", "src/b.ts"],
+      "failed batch should be restored before newer queued updates",
+    );
   });
 });
 

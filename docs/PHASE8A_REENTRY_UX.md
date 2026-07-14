@@ -271,7 +271,9 @@ function formatStatus(status: ReentryPreviewOutput): string {
 ## 6. Future Work (Phase 8B+)
 
 - **Phase 8B: Live Enablement**: Runtime toggle for preview-only vs injection
-- **Phase 8C: Smart Trimming**: Adaptive token budgeting based on session length
+- **Phase 8C: Smart Trimming — implemented**: Prior-session turn count selects
+  a deterministic 60%, 80%, or 100% character ceiling; the selected tier is
+  visible in diagnostics and persisted injection provenance
 - **Phase 8D: Layer Visibility**: User toggle for layer inclusion/exclusion
 - **Phase 8E: Budget Slider**: Interactive token budget adjustment
 - **Phase 8F: Block Visualization**: Visual representation of block structure

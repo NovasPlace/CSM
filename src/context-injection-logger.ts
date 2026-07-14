@@ -1,4 +1,4 @@
-import type { DatabasePool } from './types.js';
+import type { DatabaseClient, DatabasePool } from './types.js';
 import { getLogger } from './logger.js';
 import type { BuiltContextInjection, ContextInjectionItem } from './context-injection-contract.js';
 
@@ -19,9 +19,9 @@ export interface InjectionLogRecord {
 }
 
 export class ContextInjectionLogger {
+  private static readonly sqliteChains = new WeakMap<DatabasePool, Promise<void>>();
   private readonly pool: DatabasePool;
   private readonly config: ContextInjectionLoggerConfig;
-  private readonly pending: Promise<void>[] = [];
   private writeChain: Promise<void> = Promise.resolve();
 
   constructor(pool: DatabasePool, config: ContextInjectionLoggerConfig) {
@@ -31,7 +31,8 @@ export class ContextInjectionLogger {
 
   logInjection(record: InjectionLogRecord): Promise<void> {
     if (!this.config.enabled) return Promise.resolve();
-    this.writeChain = this.writeChain
+    const prior = this.previousWrite();
+    const write = prior
       .catch(() => {})
       .then(() => this.writeRecord(record))
       .catch((error) => {
@@ -39,28 +40,36 @@ export class ContextInjectionLogger {
           sessionId: record.sessionId,
         });
       });
-    this.pending.push(this.writeChain);
-    return this.writeChain;
+    this.writeChain = write;
+    if (this.pool.getDialect?.() === 'sqlite') ContextInjectionLogger.sqliteChains.set(this.pool, write);
+    return write;
+  }
+
+  private previousWrite(): Promise<void> {
+    if (this.pool.getDialect?.() !== 'sqlite') return this.writeChain;
+    return ContextInjectionLogger.sqliteChains.get(this.pool) ?? Promise.resolve();
   }
 
   async flush(): Promise<void> {
-    await Promise.allSettled(this.pending);
-    this.pending.length = 0;
+    await this.writeChain;
   }
 
   private async writeRecord(record: InjectionLogRecord): Promise<void> {
-    const eventId = await this.insertEvent(this.pool, record);
+    const client = await this.pool.connect();
     try {
-      await this.insertItems(this.pool, eventId, record.built.items);
+      await client.query('BEGIN');
+      const eventId = await this.insertEvent(client, record);
+      await this.insertItems(client, eventId, record.built.items);
+      await client.query('COMMIT');
     } catch (error) {
-      try {
-        await this.pool.query('DELETE FROM context_injection_events WHERE id = $1', [eventId]);
-      } catch { /* pool may be dead */ }
+      await client.query('ROLLBACK').catch(() => undefined);
       throw error;
+    } finally {
+      client.release();
     }
   }
 
-  private async insertEvent(pool: DatabasePool, record: InjectionLogRecord): Promise<number> {
+  private async insertEvent(pool: DatabaseClient, record: InjectionLogRecord): Promise<number> {
     const b = record.built;
     const metadata = JSON.stringify(b.metadata);
     const sql = `INSERT INTO context_injection_events
@@ -74,7 +83,7 @@ export class ContextInjectionLogger {
     const params = [
       record.idempotencyKey, record.projectId, record.sessionId,
       record.injectionKind, record.sourceTurnId, this.config.environment,
-      record.status, b.charCount, b.estimatedTokens, b.trimLevel,
+      record.status ?? 'injected', b.charCount, b.estimatedTokens, b.trimLevel,
       record.blockHash, b.builderVersion, b.configHash, metadata,
     ];
 
@@ -84,7 +93,7 @@ export class ContextInjectionLogger {
     return Number(row.id);
   }
 
-  private async insertItems(pool: DatabasePool, eventId: number, items: ContextInjectionItem[]): Promise<void> {
+  private async insertItems(pool: DatabaseClient, eventId: number, items: ContextInjectionItem[]): Promise<void> {
     if (items.length === 0) return;
     let paramIdx = 1;
     const values: unknown[] = [];

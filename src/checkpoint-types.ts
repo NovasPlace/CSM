@@ -151,11 +151,24 @@ export interface SessionMessage {
 }
 
 export interface SessionPart {
+  id?: string;
+  sessionID?: string;
+  messageID?: string;
   type: string;
   text?: string;
   tool?: string;
+  /** OpenCode SDK field. */
+  callID?: string;
+  /** Legacy/internal alias retained for compatibility. */
   toolCallId?: string;
-  state?: { status?: string };
+  state?: {
+    status?: string;
+    input?: unknown;
+    output?: unknown;
+    error?: string;
+    time?: { start?: number; end?: number; compacted?: number };
+  };
+  /** Legacy flattened fields retained for older callers/tests. */
   output?: unknown;
   input?: unknown;
   error?: string;

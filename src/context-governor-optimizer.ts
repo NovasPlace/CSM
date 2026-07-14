@@ -73,13 +73,24 @@ function toolSignature(part: GovernorPart): string {
 function shouldSkipPart(part: GovernorPart): boolean {
   const text = textOf(part);
   return text.length === 0
-    || /^\[(MEMORY_BRIEF|CHECKPOINT_REF|DISTILLED_STATE|TOOL_DISTILLED|DEDUP_REF)/.test(text);
+    || /^\[(MEMORY_BRIEF|CHECKPOINT_REF|DISTILLED_STATE|TOOL_DISTILLED|DEDUP_REF|TOOL_DEDUP_REF|TOOL_REF)/.test(text);
 }
 
 export function optimizeGovernorContext(messages: MessageLike[], recentWindow: number): void {
   const seen = new Map<string, number>();
   const seenTools = new Map<string, number>();
   const keepFrom = Math.max(0, messages.length - recentWindow);
+  let lastAssistantTextIndex = -1;
+  for (let i = 0; i < messages.length; i++) {
+    const role = messages[i].info?.role ?? 'assistant';
+    if (role !== 'assistant') continue;
+    for (const part of messages[i].parts ?? []) {
+      if (part.type === 'text' && (part.text ?? '').trim().length > 0) {
+        lastAssistantTextIndex = i;
+        break;
+      }
+    }
+  }
   for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
     const role = messages[msgIndex].info?.role ?? 'assistant';
     for (const part of messages[msgIndex].parts ?? []) {
@@ -102,6 +113,7 @@ export function optimizeGovernorContext(messages: MessageLike[], recentWindow: n
       }
       seenTools.set(signature, msgIndex);
       if (estimateTokens(text) < 80) continue;
+      if (msgIndex > lastAssistantTextIndex) continue;
       part.state!.output = distilledToolText(part);
     }
   }

@@ -3,9 +3,11 @@ import { estimateTokens } from './token-bucket-analyzer.js';
 import type { CheckpointConfig, SessionMessage } from './checkpoint-types.js';
 
 interface CheckpointPart {
+  id?: string;
   type?: string;
   text?: string;
   tool?: string;
+  callID?: string;
   toolCallId?: string;
   state?: Record<string, unknown>;
   output?: string;
@@ -33,10 +35,11 @@ function toSessionMessage(message: MessageLike, index: number): SessionMessage {
       role: message.info?.role ?? 'assistant',
     },
     parts: (message.parts ?? []).map((part, partIndex) => ({
+      id: part.id,
       type: part.type ?? 'text',
       text: part.text,
       tool: part.tool,
-      toolCallId: part.toolCallId ?? `tool-${index}-${partIndex}`,
+      callID: part.callID ?? part.toolCallId ?? `tool-${index}-${partIndex}`,
       state: part.state,
       output: part.output ?? part.state?.output,
       input: part.input ?? part.state?.input,

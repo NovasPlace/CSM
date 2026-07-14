@@ -3,6 +3,11 @@ import type { MemoryManager } from './memory-manager.js';
 import type { SelfModelUpdater } from './self-model-updater.js';
 import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
 import type { AgentWorkJournal } from './agent-work-journal.js';
+import {
+  type BuiltContextInjection,
+} from './context-injection-contract.js';
+import { buildReentryProvenance } from './reentry-injection-provenance.js';
+import { resolveAdaptiveReentryBudget, type ReEntryBudgetDecision } from './reentry-adaptive-budget.js';
 import { getLogger } from './logger.js';
 
 const REENTRY_HEADER = `## Agent Re-entry Context
@@ -64,6 +69,8 @@ export interface ReEntryDiagnostic {
   totalChars: number;
   originalChars: number;
   budgetChars: number;
+  budgetTier: ReEntryBudgetDecision['tier'];
+  priorSessionTurns: number | null;
   approxTokens: number;
   trimLevel: 'none' | 'soft' | 'aggressive';
   sources: Record<string, string[]>;
@@ -364,6 +371,24 @@ export class ReEntryProtocol {
     }
   }
 
+  async buildBlockWithProvenance(
+    sessionId: string,
+    projectId: string,
+  ): Promise<BuiltContextInjection | null> {
+    if (!this.config.enabled || this.config.previewOnly) return null;
+    try {
+      const { budgeted, budget } = await this.assembleBudgetedLayers(sessionId, projectId);
+      const text = this.renderBlock(budgeted);
+      if (text === null) return null;
+      return buildReentryProvenance(
+        budgeted, this.config, text, this.computeTrimLevel(budgeted), sessionId, projectId, budget,
+      );
+    } catch (error) {
+      getLogger().error('Re-entry provenance block build failed', error as Error);
+      return null;
+    }
+  }
+
   async diagnose(sessionId: string, projectId: string): Promise<ReEntryDiagnostic> {
     if (!this.config.enabled) {
       return {
@@ -373,6 +398,8 @@ export class ReEntryProtocol {
         totalChars: 0,
         originalChars: 0,
         budgetChars: this.config.maxChars,
+        budgetTier: 'unknown',
+        priorSessionTurns: null,
         approxTokens: 0,
         trimLevel: 'none',
         sources: {},
@@ -381,8 +408,7 @@ export class ReEntryProtocol {
       };
     }
 
-    const results = await this.assembleLayers(sessionId, projectId);
-    const budgeted = this.applyBudget(results);
+    const { budgeted, budget } = await this.assembleBudgetedLayers(sessionId, projectId);
     const surviving = budgeted.filter((r) => !r.dropped);
     const finalChars = surviving.reduce((sum, r) => sum + r.chars, 0);
 
@@ -392,7 +418,9 @@ export class ReEntryProtocol {
       layersDropped: budgeted.filter((r) => r.dropped).map((r) => r.name),
       totalChars: finalChars,
       originalChars: budgeted.reduce((sum, r) => sum + r.originalChars, 0),
-      budgetChars: this.config.maxChars,
+      budgetChars: budget.effectiveMaxChars,
+      budgetTier: budget.tier,
+      priorSessionTurns: budget.priorTurnCount,
       approxTokens: estimateTokens(finalChars),
       trimLevel: this.computeTrimLevel(budgeted),
       sources: Object.fromEntries(
@@ -791,8 +819,18 @@ export class ReEntryProtocol {
     return { text: `## Constraints\n${lines.join('\n')}`, sources };
   }
 
-  private applyBudget(results: ReEntryLayerResult[]): ReEntryLayerResult[] {
-    return applyLayerBudget(results, this.config);
+  private async assembleBudgetedLayers(
+    sessionId: string,
+    projectId: string,
+  ): Promise<{ budgeted: ReEntryLayerResult[]; budget: ReEntryBudgetDecision }> {
+    const [results, budget] = await Promise.all([
+      this.assembleLayers(sessionId, projectId),
+      resolveAdaptiveReentryBudget(this.pool, this.config, sessionId, projectId),
+    ]);
+    return {
+      budgeted: applyLayerBudget(results, { ...this.config, maxChars: budget.effectiveMaxChars }),
+      budget,
+    };
   }
 
   private computeTrimLevel(results: ReEntryLayerResult[]): 'none' | 'soft' | 'aggressive' {
@@ -805,8 +843,7 @@ export class ReEntryProtocol {
   }
 
   private async buildRenderedBlock(sessionId: string, projectId: string): Promise<string | null> {
-    const results = await this.assembleLayers(sessionId, projectId);
-    const budgeted = this.applyBudget(results);
+    const { budgeted } = await this.assembleBudgetedLayers(sessionId, projectId);
     return this.renderBlock(budgeted);
   }
 

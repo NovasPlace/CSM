@@ -3,7 +3,7 @@
 // Produces CreateCheckpointInput + raw captures for the store.
 import { estimateTokens } from './token-bucket-analyzer.js';
 import {
-  SessionMessage, SourceRef, CompactedRef,
+  SessionMessage, SessionPart, SourceRef, CompactedRef,
   CreateCheckpointInput, CheckpointConfig,
 } from './checkpoint-types.js';
 import { buildCheckpointMarkdown, CheckpointSections } from './checkpoint-markdown.js';
@@ -149,17 +149,27 @@ function extractNextSteps(msgs: SessionMessage[]): string[] {
 
 function extractCompactedRefs(msgs: SessionMessage[]): CompactedRef[] {
   const refs: CompactedRef[] = [];
-  const re = /\[COMPACTED[^\]]*\]/g;
+  const markerRe = /\[COMPACTED[^\]]*\]|\[TOOL_REF[^\]]*\]|(?:^|\n)TOOL_REF[^\n]*/g;
   for (const m of msgs) {
-    const text = textOf(m);
-    const matches = text.match(re) ?? [];
-    for (const marker of matches) {
-      refs.push({
-        marker,
-        approxOriginalTokens: 0,
-        messageId: m.info?.id,
-        expandHint: 'v1-compacted region; expand if detail needed',
-      });
+    for (const p of m.parts ?? []) {
+      const text = p.type === 'text'
+        ? p.text ?? ''
+        : p.type === 'tool'
+          ? toolPartText(p)
+          : '';
+      const matches = text.match(markerRe) ?? [];
+      for (const rawMarker of matches) {
+        const marker = rawMarker.trim();
+        if (!marker) continue;
+        refs.push({
+          marker,
+          approxOriginalTokens: 0,
+          messageId: m.info?.id,
+          partId: p.id,
+          toolCallId: p.callID ?? p.toolCallId,
+          expandHint: 'compacted region; expand if detail needed',
+        });
+      }
     }
   }
   return refs.slice(0, 30);
@@ -170,12 +180,28 @@ function extractSourceRefs(msgs: SessionMessage[]): SourceRef[] {
   for (const m of msgs) {
     const role = (m.info?.role ?? 'unknown') as SourceRef['role'];
     for (const p of m.parts ?? []) {
-      if (p.type === 'tool' && p.toolCallId) {
-        refs.push({ messageId: m.info?.id, toolCallId: p.toolCallId, role, kind: 'tool_output', note: 'tool result' });
+      const toolCallId = p.callID ?? p.toolCallId;
+      if (p.type === 'tool' && toolCallId) {
+        refs.push({
+          messageId: m.info?.id,
+          partId: p.id,
+          toolCallId,
+          role,
+          kind: 'tool_output',
+          note: 'tool result',
+        });
       }
     }
   }
   return refs.slice(0, 50);
+}
+
+
+function toolPartText(p: SessionPart): string {
+  const value = p.state?.status === 'error'
+    ? p.state?.error ?? p.error ?? ''
+    : p.state?.output ?? p.output ?? '';
+  return typeof value === 'string' ? value : JSON.stringify(value ?? '');
 }
 
 function textOf(m: SessionMessage): string {
