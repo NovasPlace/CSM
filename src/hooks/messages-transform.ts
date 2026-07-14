@@ -3,13 +3,14 @@ import type { ToolCallRecord } from '../types.js';
 import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
 import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
 import { getLogger } from '../logger.js';
+import { isAlreadyCompacted } from '../compaction-utils.js';
 
 interface TransformToolState {
   status: string;
   input?: Record<string, unknown>;
   output?: string;
   error?: string;
-  time?: { start?: number; end?: number };
+  time?: { start?: number; end?: number; compacted?: number };
 }
 
 interface TransformPart {
@@ -33,8 +34,10 @@ export function createMessagesTransformHook(ctx: PluginContext) {
 
       const records: ToolCallRecord[] = [];
       const fallbackSid = ctx.state.currentSessionId ?? 'unknown';
+      const latestUserIndex = findLatestUserMessageIndex(messages);
 
-      for (const msg of messages) {
+      for (let messageIndex = 0; messageIndex < messages.length; messageIndex++) {
+        const msg = messages[messageIndex];
         if (msg.info?.role === 'user') {
           const userText = extractTextParts(msg.parts ?? []);
           if (userText) rememberUserTurn(ctx.state, msg.info.sessionID ?? fallbackSid, userText);
@@ -42,17 +45,22 @@ export function createMessagesTransformHook(ctx: PluginContext) {
         }
 
         if (msg.info?.role !== 'assistant') continue;
+        if (!isCompletedPriorTurn(messageIndex, latestUserIndex)) continue;
+
         const parts = msg.parts ?? [];
         for (const part of parts) {
           if (part.type !== 'tool') continue;
           const state = part.state;
           if (!state) continue;
           if (state.status !== 'completed' && state.status !== 'error') continue;
+          if (isAlreadyCompacted(part)) continue;
+
+          const timestamp = state.time?.start;
+          if (!Number.isFinite(timestamp)) continue;
 
           const args = state.input ?? {};
           const toolOutput = typeof state.output === 'string' ? state.output : '';
           const error = state.status === 'error' ? state.error : undefined;
-          const timestamp = state.time?.start ?? Date.now();
           const sessionId = part.sessionID ?? msg.info?.sessionID ?? fallbackSid;
           const filePath = (args.filePath as string) ?? (args.path as string) ?? undefined;
 
@@ -61,7 +69,7 @@ export function createMessagesTransformHook(ctx: PluginContext) {
             args,
             output: toolOutput,
             error,
-            timestamp,
+            timestamp: timestamp as number,
             sessionId,
             filePath,
           });
@@ -121,3 +129,17 @@ export function createMessagesTransformHook(ctx: PluginContext) {
     }
   };
 }
+
+
+function findLatestUserMessageIndex(messages: TransformMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index].info?.role === 'user') return index;
+  }
+  return -1;
+}
+
+function isCompletedPriorTurn(messageIndex: number, latestUserIndex: number): boolean {
+  return latestUserIndex >= 0 && messageIndex < latestUserIndex;
+}
+
+

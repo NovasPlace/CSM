@@ -16,12 +16,17 @@ export function hasOpenCodeDiscardMarker(part: ToolPartLike): boolean {
   return out.includes(OPENCODE_DISCARD_MARKER) || err.includes(OPENCODE_DISCARD_MARKER);
 }
 
+export function isCompactedToolText(text: string | undefined): boolean {
+  const normalized = (text ?? '').trimStart();
+  return normalized.startsWith(COMPACTED_MARKER)
+    || normalized.startsWith('TOOL_REF')
+    || normalized.startsWith('[TOOL_REF');
+}
+
 export function isAlreadyCompacted(part: ToolPartLike): boolean {
   if (hasOpenCodeDiscardMarker(part)) return false;
   if (part.state?.time?.compacted) return true;
-  const out = part.state?.output ?? '';
-  const err = part.state?.error ?? '';
-  return out.startsWith(COMPACTED_MARKER) || err.startsWith(COMPACTED_MARKER);
+  return isCompactedToolText(part.state?.output) || isCompactedToolText(part.state?.error);
 }
 
 export function adaptiveWindow(config: CompactorConfig, pressure?: number): number {

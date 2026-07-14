@@ -1,11 +1,13 @@
 ﻿import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics } from './types.js';
 import { extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeQualityScore } from './compaction-quality.js';
+import { isCompactedToolText } from './compaction-utils.js';
 
 // --- Typed DTOs for message mutation and extended tool call state (Phase L4-C) ---
 
 interface CompactableMessagePart {
   type?: string;
-  state?: { output?: string; status?: string };
+  tool?: string;
+  state?: { output?: string; status?: string; time?: { start?: number; compacted?: number } };
   compacted?: boolean;
 }
 
@@ -104,13 +106,18 @@ export class ContextCompactor {
     // Split tool calls into keep-raw (recent) and compactable (older)
     const keepRaw: ToolCallRecord[] = [];
     const compactable: ToolCallRecord[] = [];
+    const alreadyCompacted: ToolCallRecord[] = [];
 
-    for (let i = 0; i < sortedCalls.length; i++) {
-      const tc = sortedCalls[i];
+    let eligibleIndex = 0;
+    for (const tc of sortedCalls) {
+      if (isCompactedToolText(tc.output) || isCompactedToolText(tc.error)) {
+        alreadyCompacted.push(tc);
+        continue;
+      }
       const status = this.getToolCallStatus(tc);
       const isRunning = status === 'running' || status === 'pending';
 
-      if (i < windowSize) {
+      if (eligibleIndex < windowSize) {
         keepRaw.push(tc);
       } else if (now - tc.timestamp < minAge) {
         keepRaw.push(tc);
@@ -119,29 +126,7 @@ export class ContextCompactor {
       } else {
         compactable.push(tc);
       }
-    }
-
-    // Mutate messages: replace compacted tool parts with compacted output
-    if (messages) {
-      let callIdx = 0;
-      for (let msgIdx = 0; msgIdx < messages.length; msgIdx++) {
-        const msg = messages[msgIdx];
-        const role = msg.info?.role ?? 'unknown';
-        if (role === 'assistant') {
-          for (let partIdx = 0; partIdx < (msg.parts?.length ?? 0); partIdx++) {
-            const part = msg.parts![partIdx];
-            if (part.type === 'tool') {
-              if (callIdx < compactable.length) {
-                // This tool part should be compacted
-                if (!part.state) part.state = {};
-                part.state.output = this.formatCompactRef(compactable[callIdx]);
-                part.compacted = true; // Mark as compacted
-              }
-              callIdx++;
-            }
-          }
-        }
-      }
+      eligibleIndex++;
     }
 
     // Budget cap check - if tool calls exceed configured percentage, compact more aggressively
@@ -166,9 +151,43 @@ export class ContextCompactor {
       }
     }
 
+    if (messages) {
+      const compactableByTimestamp = new Map<number, ToolCallRecord[]>();
+      for (const tc of compactable) {
+        const matches = compactableByTimestamp.get(tc.timestamp) ?? [];
+        matches.push(tc);
+        compactableByTimestamp.set(tc.timestamp, matches);
+      }
+
+      for (const msg of messages) {
+        if (msg.info?.role !== 'assistant') continue;
+        for (const part of msg.parts ?? []) {
+          if (part.type !== 'tool') continue;
+          if (part.compacted || part.state?.time?.compacted) continue;
+          if (isCompactedToolText(part.state?.output)) continue;
+
+          const partTimestamp = part.state?.time?.start ?? 0;
+          if (partTimestamp === 0) continue;
+          const candidates = compactableByTimestamp.get(partTimestamp);
+          if (!candidates || candidates.length === 0) continue;
+          const candidateIndex = candidates.findIndex(tc => !part.tool || tc.tool === part.tool);
+          const matchingRecord = candidates.splice(candidateIndex >= 0 ? candidateIndex : 0, 1)[0];
+          if (!matchingRecord) continue;
+
+          if (!part.state) part.state = {};
+          part.state.output = this.formatCompactRef(matchingRecord);
+          part.state.time = { ...part.state.time, start: partTimestamp, compacted: Date.now() };
+          part.compacted = true;
+        }
+      }
+    }
+
     // Build compacted output
     const compactedParts = compactable.map(tc => this.formatCompactRef(tc));
-    const rawParts = keepRaw.map(tc => this.formatRawToolCall(tc));
+    const rawParts = [
+      ...alreadyCompacted.map(tc => tc.output || tc.error || ''),
+      ...keepRaw.map(tc => this.formatRawToolCall(tc)),
+    ];
 
     let compacted = '';
     if (compactedParts.length > 0) {
@@ -186,8 +205,10 @@ export class ContextCompactor {
     const beforeStr = toolCalls.map(tc => this.formatRawToolCall(tc)).join('\n') + '\n' + (inputStr ?? '');
     const beforeTokens = this.estimateTokens(beforeStr);
     const afterTokens = this.estimateTokens(compacted);
-    const tokensSaved = beforeTokens - afterTokens;
-    const savedPercent = beforeTokens > 0 ? Math.round((tokensSaved / beforeTokens) * 10000) / 100 : 0;
+    const tokensSaved = compactable.length > 0 ? beforeTokens - afterTokens : 0;
+    const savedPercent = beforeTokens > 0 && compactable.length > 0
+      ? Math.round((tokensSaved / beforeTokens) * 10000) / 100
+      : 0;
 
     // Count semantic signals preserved
     let signalCount = 0;
@@ -209,8 +230,8 @@ export class ContextCompactor {
     const result: CompactionResult = {
       totalToolParts: toolCalls.length,
       compactedParts: compactable.length,
-      keptRawParts: keepRaw.length,
-      skippedParts: 0,
+      keptRawParts: keepRaw.length + alreadyCompacted.length,
+      skippedParts: alreadyCompacted.length,
       beforeChars: beforeStr.length,
       afterChars: compacted.length,
       beforeTokens,

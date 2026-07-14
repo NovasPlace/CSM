@@ -15,7 +15,7 @@ export interface ToolPartLike {
     time?: {
       start?: number;
       end?: number;
-      compacted?: boolean;
+      compacted?: number;
     };
   };
 }
