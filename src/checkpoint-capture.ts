@@ -38,21 +38,23 @@ function capturePart(msg: SessionMessage, p: SessionPart, maxBytes: number): Sto
   if (p.type === 'tool' && (p.state?.status === 'completed' || p.state?.status === 'error')) {
     const content = toolPartContent(p);
     if (content.trim().length === 0) return null;
+    const stored = truncateUtf8(content, maxBytes);
     return {
       checkpointId: '',
       messageId: mid,
       partId: p.id,
       toolCallId: p.callID ?? p.toolCallId,
       kind: 'tool_output',
-      content: content.slice(0, maxBytes),
-      tokenCount: estimateTokens(content),
+      content: stored,
+      tokenCount: estimateTokens(stored),
     };
   }
   if (p.type === 'text' && role === 'assistant' && (p.text ?? '').length > 800) {
     const content = p.text ?? '';
+    const stored = truncateUtf8(content, maxBytes);
     return {
       checkpointId: '', messageId: mid, kind: 'assistant_text',
-      content: content.slice(0, maxBytes), tokenCount: estimateTokens(content),
+      content: stored, tokenCount: estimateTokens(stored),
     };
   }
   return null;
@@ -64,4 +66,17 @@ function toolPartContent(p: SessionPart): string {
     ? p.state?.error ?? p.error ?? ''
     : p.state?.output ?? p.output ?? '';
   return typeof value === 'string' ? value : JSON.stringify(value ?? '');
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
+  let used = 0;
+  const chars: string[] = [];
+  for (const char of value) {
+    const bytes = Buffer.byteLength(char, 'utf8');
+    if (used + bytes > maxBytes) break;
+    chars.push(char);
+    used += bytes;
+  }
+  return chars.join('');
 }

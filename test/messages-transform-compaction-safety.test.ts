@@ -129,4 +129,60 @@ describe('messages transform compaction safety', () => {
 
     strictEqual(messages[0].parts[0].state.output, 'must stay readable');
   });
+
+  it('stores the original output before emitting a fetchable TOOL_REF', async () => {
+    const queries: Array<{ sql: string; params?: unknown[] }> = [];
+    const ctx = runtimeContext();
+    ctx.config = { contextCache: { enabled: true }, contextGovernor: { enabled: false } } as PluginContext['config'];
+    ctx.database = {
+      getPool: () => ({
+        query: async (sql: string, params?: unknown[]) => {
+          queries.push({ sql, params });
+          return { rows: [], rowCount: 1 };
+        },
+      }),
+    } as PluginContext['database'];
+    const original = `recoverable file contents ${'r'.repeat(500)}`;
+    const timestamp = Date.now() - 120_000;
+    const messages = [
+      { info: { role: 'assistant', id: 'message-old', sessionID: SESSION_ID }, parts: [{
+        id: 'part-old', callID: 'call-old', messageID: 'message-old', type: 'tool', tool: 'read', sessionID: SESSION_ID,
+        state: { status: 'completed', input: { filePath: 'src/recoverable.ts' }, output: original, time: { start: timestamp, end: timestamp + 1 } },
+      }] },
+      { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'next task' }] },
+    ];
+
+    await createMessagesTransformHook(ctx)({}, { messages });
+
+    const marker = messages[0].parts[0].state.output;
+    ok(marker.startsWith('TOOL_REF id=call-old'));
+    ok(marker.includes('fetch=context_fetch'));
+    const cacheInsert = queries.find((query) => query.sql.includes('INSERT INTO context_cache'));
+    ok(cacheInsert);
+    strictEqual(cacheInsert?.params?.[1], 'call-old');
+    strictEqual(cacheInsert?.params?.[6], original);
+  });
+
+  it('fails closed and leaves output raw when the recovery store write fails', async () => {
+    const ctx = runtimeContext();
+    ctx.config = { contextCache: { enabled: true }, contextGovernor: { enabled: false } } as PluginContext['config'];
+    ctx.database = {
+      getPool: () => ({
+        query: async (sql: string) => {
+          if (sql.includes('INSERT INTO context_cache')) throw new Error('cache unavailable');
+          return { rows: [], rowCount: 0 };
+        },
+      }),
+    } as PluginContext['database'];
+    const original = `must remain visible ${'v'.repeat(500)}`;
+    const messages = [
+      { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('read', original, Date.now() - 120_000)] },
+      { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'next task' }] },
+    ];
+
+    await createMessagesTransformHook(ctx)({}, { messages });
+
+    strictEqual(messages[0].parts[0].state.output, original);
+  });
+
 });

@@ -72,6 +72,26 @@ export async function initializeCheckpointSchema(pool: DatabasePool): Promise<vo
      ON checkpoints(session_id, created_at DESC)
      WHERE is_active = true`
   );
+  await pool.query(`
+    WITH ranked AS (
+      SELECT checkpoint_id,
+             ROW_NUMBER() OVER (
+               PARTITION BY session_id
+               ORDER BY created_at DESC, checkpoint_id DESC
+             ) AS active_rank
+      FROM checkpoints
+      WHERE is_active = true
+    )
+    UPDATE checkpoints AS c
+    SET is_active = false
+    FROM ranked AS r
+    WHERE c.checkpoint_id = r.checkpoint_id AND r.active_rank > 1
+  `);
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_checkpoints_one_active
+     ON checkpoints(session_id)
+     WHERE is_active = true`
+  );
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_checkpoints_created ON checkpoints(created_at DESC)`
   );
@@ -85,6 +105,10 @@ export async function initializeCheckpointSchema(pool: DatabasePool): Promise<vo
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_raw_captures_message
      ON checkpoint_raw_captures(message_id)`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_raw_captures_part
+     ON checkpoint_raw_captures(part_id)`
   );
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_raw_captures_tool_call

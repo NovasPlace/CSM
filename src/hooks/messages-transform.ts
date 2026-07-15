@@ -5,6 +5,8 @@ import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
 import { getLogger } from '../logger.js';
 import { isAlreadyCompacted } from '../compaction-utils.js';
 import type { GovernorMessage, GovernorPart } from '../context-governor.js';
+import { storeItem, type CacheKind } from '../context-cache-store.js';
+import { estimateTokens } from '../token-bucket-analyzer.js';
 
 interface TransformToolState {
   status: string;
@@ -15,6 +17,10 @@ interface TransformToolState {
 }
 
 interface TransformPart extends GovernorPart {
+  id?: string;
+  messageID?: string;
+  callID?: string;
+  toolCallId?: string;
   type: string;
   text?: string;
   tool?: string;
@@ -72,6 +78,9 @@ export function createMessagesTransformHook(ctx: PluginContext) {
             error,
             timestamp: timestamp as number,
             sessionId,
+            messageId: part.messageID ?? msg.info?.id,
+            partId: part.id,
+            toolCallId: part.callID ?? part.toolCallId,
             filePath,
           });
         }
@@ -86,6 +95,7 @@ export function createMessagesTransformHook(ctx: PluginContext) {
       const createdAt = new Date().toISOString();
 
       try {
+        await persistExpandableRecords(ctx, pool, records);
         const compactOutput = ctx.contextCompactor.compact(records, undefined, messages);
         const result = compactOutput.result;
         const status: 'compressed' | 'skipped_under_budget' =
@@ -147,7 +157,7 @@ function isCompletedPriorTurn(messageIndex: number, latestUserIndex: number): bo
 
 function auditGovernor(ctx: PluginContext, messages: TransformMessage[]): void {
   if (!ctx.contextGovernor || ctx.config.contextGovernor?.enabled === false) return;
-  const result = ctx.contextGovernor.govern(messages);
+  const result = ctx.contextGovernor.govern(cloneForGovernorAudit(messages));
   ctx.lastCompileResult = result.compileResult ?? null;
   getLogger().info('Context governor audit', {
     eventType: 'context_governor',
@@ -159,4 +169,67 @@ function auditGovernor(ctx: PluginContext, messages: TransformMessage[]): void {
   });
 }
 
+async function persistExpandableRecords(
+  ctx: PluginContext,
+  pool: ReturnType<PluginContext['database']['getPool']>,
+  records: ToolCallRecord[],
+): Promise<void> {
+  if (ctx.config?.contextCache?.enabled === false) {
+    throw new Error('tool compaction requires context cache for recoverable TOOL_REF output');
+  }
+  const candidates = records.filter((record) => {
+    const source = record.error ?? record.output ?? '';
+    return source.trim().length > 0
+      && ctx.contextCompactor.createExpandableRef(record).length < source.length;
+  });
+  await Promise.all(candidates.map(async (record) => {
+    const source = record.error ?? record.output ?? '';
+    const refId = ctx.contextCompactor.getExpandableRefId(record);
+    await storeItem(pool, {
+      sessionId: record.sessionId,
+      displayId: refId,
+      kind: cacheKind(record),
+      createdAt: record.timestamp,
+      summary: summarizeRecord(record, source),
+      content: source,
+      metadata: {
+        source: 'tool_compaction',
+        tool: record.tool,
+        filePath: record.filePath,
+        messageId: record.messageId,
+        partId: record.partId,
+        toolCallId: record.toolCallId,
+      },
+      tokens: estimateTokens(source),
+    }, ctx.redactor);
+  }));
+}
 
+function cacheKind(record: ToolCallRecord): CacheKind {
+  if (record.error) return 'error';
+  if (record.tool === 'read' && record.filePath) return 'file_read';
+  return 'tool_output';
+}
+
+function summarizeRecord(record: ToolCallRecord, source: string): string {
+  const subject = record.filePath ?? String(record.args.command ?? record.tool);
+  const summary = source.replace(/\s+/g, ' ').trim().slice(0, 100);
+  return `${record.tool} ${subject}: ${summary}`.slice(0, 180);
+}
+
+function cloneForGovernorAudit(messages: TransformMessage[]): TransformMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    info: message.info ? { ...message.info } : undefined,
+    parts: message.parts?.map((part) => ({
+      ...part,
+      state: part.state
+        ? {
+          ...part.state,
+          input: part.state.input ? { ...part.state.input } : undefined,
+          time: part.state.time ? { ...part.state.time } : undefined,
+        }
+        : undefined,
+    })),
+  }));
+}

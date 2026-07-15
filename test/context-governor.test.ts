@@ -57,7 +57,11 @@ const ACTION_LADDER_CONFIG = {
 
 function actionFor(count: number, size: number, config = DEFAULT_GOVERNOR_CONFIG) {
   const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, config);
-  const messages = [msg('user', [text('continue')]), ...longToolMessages(count, size)];
+  const messages = [
+    ...longToolMessages(count, size),
+    msg('user', [text('continue')]),
+    msg('assistant', [text('current turn stays raw')]),
+  ];
   return { messages, result: governor.govern(messages, 'balanced') };
 }
 
@@ -85,7 +89,11 @@ describe('AdaptiveContextGovernor', () => {
 
   it('replaces older history with checkpoint refs at the checkpoint threshold', () => {
     const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, ACTION_LADDER_CONFIG);
-    const messages = [msg('user', [text('resume')]), ...longToolMessages(30, 5000)];
+    const messages = [
+      ...longToolMessages(30, 5000),
+      msg('user', [text('resume')]),
+      msg('assistant', [text('current turn stays raw')]),
+    ];
     const result = governor.govern(messages, 'balanced');
     const firstText = String(messages[0].parts?.[0]?.text ?? '');
     assert.equal(result.decision.action, 'checkpoint_refs_only');
@@ -109,6 +117,8 @@ describe('AdaptiveContextGovernor', () => {
       msg('assistant', [text('Failed test: benchmark continuity mismatch')]),
       ...longToolMessages(120, 5000),
       msg('assistant', [text('Next step: preserve checkpoint refs during rebuild')]),
+      msg('user', [text('continue from the checkpoint')]),
+      msg('assistant', [text('current turn stays raw')]),
     ];
     const result = governor.govern(messages, 'balanced');
     const distilled = String(messages[0].parts?.[0]?.text ?? '');

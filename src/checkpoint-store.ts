@@ -13,8 +13,8 @@ interface CheckpointRow {
   session_id: string;
   project_id: string | null;
   created_at: Date;
-  source_message_start: number | null;
-  source_message_end: number | null;
+  source_message_start: string | null;
+  source_message_end: string | null;
   summary_markdown: string;
   summary_tokens: number;
   input_tokens_estimate: number;
@@ -48,8 +48,8 @@ function rowToCheckpoint(row: CheckpointRow): CheckpointRecord {
     sessionId: row.session_id,
     projectId: row.project_id ?? undefined,
     createdAt: row.created_at,
-    sourceMessageStart: row.source_message_start as unknown as string | undefined,
-    sourceMessageEnd: row.source_message_end as unknown as string | undefined,
+    sourceMessageStart: row.source_message_start ?? undefined,
+    sourceMessageEnd: row.source_message_end ?? undefined,
     summaryMarkdown: row.summary_markdown,
     summaryTokens: row.summary_tokens,
     inputTokensEstimate: row.input_tokens_estimate,
@@ -112,6 +112,10 @@ export class CheckpointStore {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query(
+        `SELECT pg_advisory_xact_lock(hashtext('csm_checkpoint'), hashtext($1))`,
+        [input.sessionId],
+      );
       // Deactivate all prior active checkpoints in this session
       const prev = await client.query(
         `UPDATE checkpoints SET is_active = false
@@ -162,7 +166,10 @@ export class CheckpointStore {
   /** Returns the single active checkpoint for a session, or null. */
   async getActiveCheckpoint(sessionId: string): Promise<CheckpointRecord | null> {
     const res = await this.pool.query(
-      `SELECT * FROM checkpoints WHERE session_id = $1 AND is_active = true LIMIT 1`,
+      `SELECT * FROM checkpoints
+       WHERE session_id = $1 AND is_active = true
+       ORDER BY created_at DESC, checkpoint_id DESC
+       LIMIT 1`,
       [sessionId],
     );
     return res.rows.length > 0 ? rowToCheckpoint(res.rows[0] as CheckpointRow) : null;
@@ -187,7 +194,7 @@ export class CheckpointStore {
   }
 
   /**
-   * Recovery: find a raw capture by message_id or tool_call_id within the
+   * Recovery: find a raw capture by message_id, part_id, or tool_call_id within the
    * active checkpoint of a session. Returns ExpandedRef with found=false if absent.
    */
   async expandRef(
@@ -200,7 +207,8 @@ export class CheckpointStore {
     }
     const res = await this.pool.query(
       `SELECT * FROM checkpoint_raw_captures
-       WHERE checkpoint_id = $1 AND (message_id = $2 OR tool_call_id = $2)
+       WHERE checkpoint_id = $1
+         AND (message_id = $2 OR part_id = $2 OR tool_call_id = $2)
        LIMIT 1`,
       [active.checkpointId, identifier],
     );

@@ -258,4 +258,25 @@ describe('ContextCompactor', () => {
     strictEqual(compactor.getLastQuality()?.safe, false);
     ok((compactor.getLastQuality()?.qualityScore ?? 1) < 0.6);
   });
+
+  it('generates distinct recovery IDs for multiple tool parts sharing one message ID', () => {
+    const compactor = new ContextCompactor({ ...CFG, workingMemoryWindow: 0 });
+    const timestamp = Date.now() - 1_000;
+    const first: ToolCallRecord = {
+      tool: 'read', messageId: 'assistant-message', timestamp, sessionId: 's',
+      args: { filePath: 'first.ts' }, output: 'a'.repeat(500),
+    };
+    const second: ToolCallRecord = {
+      tool: 'read', messageId: 'assistant-message', timestamp, sessionId: 's',
+      args: { filePath: 'second.ts' }, output: 'b'.repeat(500),
+    };
+
+    const firstId = compactor.getExpandableRefId(first);
+    const secondId = compactor.getExpandableRefId(second);
+
+    ok(firstId.startsWith('assistant-message_'));
+    ok(secondId.startsWith('assistant-message_'));
+    ok(firstId !== secondId);
+  });
+
 });

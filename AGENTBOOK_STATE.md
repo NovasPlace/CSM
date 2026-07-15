@@ -8,43 +8,63 @@ No active goal recorded.
 
 ## Current State
 - Phase: Not recorded
-- Events: 1672
-- Sessions: 17
-- Latest summary: summary_26e2815d-f678-4842-b2a8-f6c76848d7eb
-- Updated: 2026-07-14T20:25:39.736Z
+- Events: 1883
+- Sessions: 21
+- Latest summary: summary_a5597fe0-4680-47c7-88ad-882db3166abd
+- Updated: 2026-07-15T01:08:57.563Z
 
 ## Recent Work
-- [command_run] bash: 50:36  warning  'E' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
-  55:22  warning  'V' is defined but never used. Allowed unused vars must match 
-- [command_run] bash: > opencode-cross-session-memory@1.0.0 build
-> tsc
-- [command_run] bash: > opencode-cross-session-memory@1.0.0 typecheck
-> tsc --noEmit
-- [command_run] bash: warning: in the working copy of 'docs/SYSTEM_MAP.md', LF will be replaced by CRLF the next time Git touches it
- docs/SYSTEM_MAP.md | 12231 ++++++++++++++++++++++++++++++++++++++++++++++++---
- 1 file c
-- [command_run] bash: ---
-docs/SYSTEM_MAP.md
-- [command_run] bash: warning: in the working copy of 'AGENTBOOK_STATE.md', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'docs/ARCHITECTURE.md', LF will be replaced by CRLF the n
-- [command_run] bash: e27675d fix(compaction): protect current-turn tool outputs from compaction
-75a7da2 chore: register CSM plugin in project opencode.json
-a1e5ff5 chore(ci): remove one-shot workflow audit report [skip ci
-- [command_run] bash: On branch master
-Your branch is up to date with 'origin/master'.
-
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard 
-- [command_run] bash: ✔ compacted memory preserves decisions (0.0657ms)
-  ✔ compacted memory does not drop deprecation/rollback/security notes (0.0577ms)
-  ✔ quality score drops below threshold when entities are lost (0.
 - [command_run] bash: > opencode-cross-session-memory@1.0.0 lint:src
 > eslint src --max-warnings=7
 
 
 C:\Users\Donovan\Desktop\cross-session-memory\src\types\opentui.d.ts
   50:36  warning  'E' is defined but never used
+- [command_run] bash: > opencode-cross-session-memory@1.0.0 build
+> tsc
+- [command_run] bash: ✔ compresses old output without touching anything after the latest user message (1.8089ms)
+  ✔ treats TOOL_REF and governor markers as terminal instead of compressing them again (0.2209ms)
+  ✔ does 
+- [command_run] bash: > opencode-cross-session-memory@1.0.0 typecheck
+> tsc --noEmit
+- [command_run] bash: ---exit:1---
+- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\.gitignore</path>
+<type>file</type>
+<content>
+1: node_modules
+2: dist
+3: *.log
+4: .env
+5: *.db
+6: *.sqlite
+7: *.sqlite3
+8: *.swp
+9: *.swo
+10: *~
+11: — C:\Users\Donovan\Desktop\cross-session-memory\.gitignore
+- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\csm-round3-fix-README.txt</path>
+<type>file</type>
+<content>
+1: CSM ROUND 3 — ACTIVE-TURN + RECOVERY SAFETY FIXES
+2: 
+3: This patch is incremental.  — C:\Users\Donovan\Desktop\cross-session-memory\csm-round3-fix-README.txt
+- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\README.txt</path>
+<type>file</type>
+<content>
+1: CSM follow-up compaction and checkpoint safety fixes
+2: =========================================== — C:\Users\Donovan\Desktop\cross-session-memory\README.txt
+- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\FIX_README.txt</path>
+<type>file</type>
+<content>
+1: CSM TOOL_REF compaction fix
+2: 
+3: Primary fix
+4: - Protect every tool result produced after th — C:\Users\Donovan\Desktop\cross-session-memory\FIX_README.txt
+- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\check-migrations.cjs</path>
+<type>file</type>
+<content>
+1: const { Pool } = require('./node_modules/pg');
+2: const { createHash } = require('node:cr — C:\Users\Donovan\Desktop\cross-session-memory\check-migrations.cjs
 
 ## Known Problems
 - No active blockers or known failures.

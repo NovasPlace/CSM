@@ -76,7 +76,9 @@ function shouldSkipPart(part: GovernorPart): boolean {
     || /^\[(MEMORY_BRIEF|CHECKPOINT_REF|DISTILLED_STATE|TOOL_DISTILLED|DEDUP_REF|TOOL_DEDUP_REF|TOOL_REF)/.test(text);
 }
 
-export function optimizeGovernorContext(messages: MessageLike[], recentWindow: number): void {
+export function optimizeGovernorContext(
+  messages: MessageLike[], recentWindow: number, protectedFromIndex = messages.length,
+): void {
   const seen = new Map<string, number>();
   const seenTools = new Map<string, number>();
   const keepFrom = Math.max(0, messages.length - recentWindow);
@@ -92,6 +94,7 @@ export function optimizeGovernorContext(messages: MessageLike[], recentWindow: n
     }
   }
   for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
+    if (msgIndex >= protectedFromIndex) continue;
     const role = messages[msgIndex].info?.role ?? 'assistant';
     for (const part of messages[msgIndex].parts ?? []) {
       if (shouldSkipPart(part) || role === 'user') continue;

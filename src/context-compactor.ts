@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics } from './types.js';
 import { extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeQualityScore } from './compaction-quality.js';
 import { isCompactedToolText } from './compaction-utils.js';
@@ -270,7 +271,7 @@ export class ContextCompactor {
     let signalCount = 0;
     for (const tc of compactable) {
       if (tc.error) signalCount++;
-      if (tc.filePath) signalCount++;
+      if (toolFilePath(tc)) signalCount++;
       if (tc.exitCode !== undefined && tc.exitCode !== 0) signalCount++;
     }
 
@@ -367,6 +368,18 @@ export class ContextCompactor {
     return this.formatCompactRef(tc).length < source.length;
   }
 
+  getExpandableRefId(tc: ToolCallRecord): string {
+    if (tc.toolCallId) return sanitizeRefToken(tc.toolCallId);
+    if (tc.partId) return sanitizeRefToken(tc.partId);
+    const digest = toolRecordDigest(tc);
+    // A message can contain multiple tool parts. A bare message ID therefore is
+    // not a unique recovery key; retain it for traceability and suffix a digest.
+    if (tc.messageId) {
+      return `${sanitizeRefToken(tc.messageId).slice(0, 140)}_${digest.slice(0, 12)}`;
+    }
+    return `tool_${digest.slice(0, 20)}`;
+  }
+
   private measureToolPressure(
     keepRaw: ToolCallRecord[],
     compactable: ToolCallRecord[],
@@ -404,31 +417,25 @@ export class ContextCompactor {
   }
 
   private formatCompactRef(tc: ToolCallRecord): string {
-    const _refId = `tool_${tc.sessionId}_${tc.timestamp}`;
-    const output = tc.output ? tc.output.slice(0, this.config.maxOutputChars ?? 120) : '';
-    const error = tc.error ? `ERROR: ${tc.error.slice(0, 100)}` : '';
-
-    const signals: string[] = [];
-    if (tc.error) signals.push('error');
-    if (tc.filePath) signals.push('file:' + tc.filePath);
-    if (tc.exitCode !== undefined && tc.exitCode !== 0) signals.push('exit:' + tc.exitCode);
-    if (tc.tool === 'write' || tc.tool === 'edit' || tc.tool === 'patch') signals.push('mutation');
-
-    const sigStr = signals.length > 0 ? ' signals=' + signals.join(',') : '';
-    const args = tc.args ? JSON.stringify(tc.args).slice(0, 80) : '';
-    return `TOOL_REF ${tc.tool}(${args})${sigStr} ${output} ${error}`.trim();
+    return this.createExpandableRef(tc);
   }
 
   createExpandableRef(tc: ToolCallRecord): string {
-    const refId = `tool_${tc.sessionId}_${tc.timestamp}`;
+    const refId = this.getExpandableRefId(tc);
     const signals: string[] = [];
     if (tc.error) signals.push('error');
-    if (tc.filePath) signals.push('file:' + tc.filePath);
+    const filePath = toolFilePath(tc);
+    if (filePath) signals.push('file');
+    if (tc.exitCode !== undefined && tc.exitCode !== 0) signals.push(`exit:${tc.exitCode}`);
     if (tc.tool === 'write' || tc.tool === 'edit' || tc.tool === 'patch') signals.push('mutation');
 
-    const summary = (tc.output ?? '').slice(0, 80).replace(/"/g, "'");
-    const sigStr = signals.length > 0 ? ' signals=' + signals.join(',') : '';
-    return `[TOOL_REF id=${refId} tool=${tc.tool} type=${tc.tool} file=${tc.filePath ?? 'unknown'}${sigStr} summary="${summary}"]`;
+    const source = tc.error ?? tc.output ?? '';
+    const summarySource = tc.error ? `ERROR: ${tc.error}` : source;
+    const summary = sanitizeMarkerValue(summarySource, this.config.maxOutputChars ?? 120);
+    const file = sanitizeMarkerValue(filePath ?? 'unknown', 160);
+    const tool = sanitizeRefToken(tc.tool || 'unknown');
+    const sigStr = signals.length > 0 ? ` signals=${signals.join(',')}` : '';
+    return `TOOL_REF id=${refId} fetch=context_fetch tool=${tool} file="${file}"${sigStr} summary="${summary}"`;
   }
 
   getLastResult(): CompactionResult | null {
@@ -446,6 +453,37 @@ export class ContextCompactor {
   getCumulativeStats(): CumulativeCompactionStats {
     return this.getCompactionStats();
   }
+}
+
+
+function toolRecordDigest(tc: ToolCallRecord): string {
+  return createHash('sha256')
+    .update(`${tc.sessionId}\0${tc.tool}\0${tc.timestamp}\0${tc.error ?? tc.output ?? ''}`)
+    .digest('hex');
+}
+
+function toolFilePath(tc: ToolCallRecord): string | undefined {
+  if (tc.filePath) return tc.filePath;
+  const args = tc.args ?? {};
+  for (const key of ['filePath', 'path', 'file', 'filename']) {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim().length > 0) return value;
+  }
+  return undefined;
+}
+
+function sanitizeRefToken(value: string): string {
+  const normalized = value.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 180);
+  return normalized || 'unknown';
+}
+
+function sanitizeMarkerValue(value: string, maxChars: number): string {
+  return value
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/["\\]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, Math.max(0, maxChars));
 }
 
 export function createContextCompactor(config?: Partial<CompactorConfig>): ContextCompactor {

@@ -91,4 +91,24 @@ describe('checkpoint OpenCode message compatibility', () => {
     strictEqual(result.compactedRefs[0].toolCallId, 'call-ref');
     strictEqual(result.compactedRefs[0].partId, 'part-ref');
   });
+
+  it('enforces maxRawCaptureBytes as UTF-8 bytes and counts stored content only', () => {
+    const messages: SessionMessage[] = [{
+      info: { id: 'message-unicode', role: 'assistant' },
+      parts: [{
+        id: 'part-unicode', type: 'tool', callID: 'call-unicode', tool: 'read',
+        state: { status: 'completed', output: 'ééé', time: { start: 1, end: 2 } },
+      }],
+    }];
+
+    const result = buildCheckpoint({
+      sessionId: 'session-1', projectId: null, messages,
+      config: { ...CONFIG, maxRawCaptureBytes: 5 },
+    }).checkpoint;
+
+    strictEqual(Buffer.byteLength(result.rawCaptures[0].content, 'utf8'), 4);
+    strictEqual(result.rawCaptures[0].content, 'éé');
+    strictEqual(result.rawCaptures[0].tokenCount, 1);
+  });
+
 });

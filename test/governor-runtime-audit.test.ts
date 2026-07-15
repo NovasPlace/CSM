@@ -45,3 +45,25 @@ describe('governor runtime audit', () => {
     assert.match(audit, /observed_at:\d{4}-\d{2}-\d{2}T/);
   });
 });
+
+it('audits a cloned message graph and cannot rewrite the active turn', async () => {
+  const ctx = runtimeContext();
+  const activeOutput = `current tool result ${'z'.repeat(5_000)}`;
+  const messages = [
+    { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'old context '.repeat(1_000) }] },
+    { info: { role: 'user', sessionID: 'governor-audit' }, parts: [{ type: 'text', text: 'current task' }] },
+    {
+      info: { role: 'assistant', sessionID: 'governor-audit' },
+      parts: [{
+        type: 'tool', tool: 'read',
+        state: { status: 'completed', input: { filePath: 'src/current.ts' }, output: activeOutput, time: { start: 1 } },
+      }],
+    },
+  ];
+
+  await createMessagesTransformHook(ctx)({}, { messages });
+
+  assert.equal(messages[2].parts[0].state.output, activeOutput);
+  assert.equal(messages[0].parts[0].text, 'old context '.repeat(1_000));
+  assert.ok(ctx.lastCompileResult);
+});

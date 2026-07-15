@@ -22,6 +22,7 @@ interface SdkPart {
     status?: string;
     type?: string;
     output?: string;
+    error?: string;
     exitCode?: number | string;
     input?: {
       command?: string;
@@ -245,7 +246,7 @@ export function compileContextWithLessons(
   return result;
 }
 
-const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]', 'TOOL_REF', '[TOOL_REF'];
+const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]', 'TOOL_REF', '[TOOL_REF', '[TOOL_DISTILLED:', '[TOOL_DEDUP_REF:', '[DEDUP_REF]', '[CACHED:'];
 const STEP_TYPES = ['step-start', 'step-finish', 'compaction', 'reasoning', 'snapshot', 'patch'];
 
 const CRITICAL_PATTERNS: RegExp[] = [
@@ -270,7 +271,7 @@ export function scoreCriticality(part: SdkPart): number {
   if (part.type !== 'tool') return 0;
   if (part.state?.status === 'error' || part.state?.type === 'error') return 2;
   const tool = String(part.tool ?? '');
-  const output = String(part.state?.output ?? '');
+  const output = String(part.state?.error ?? part.state?.output ?? '');
   for (const pat of CRITICAL_PATTERNS) {
     if (pat.test(output)) return 2;
   }
@@ -288,9 +289,13 @@ export function scoreCriticality(part: SdkPart): number {
   return 0;
 }
 
+function partContent(part: SdkPart): string {
+  return String(part.text ?? part.state?.error ?? part.state?.output ?? '');
+}
+
 function isAlreadyCompressed(part: SdkPart): boolean {
-  const text = part.text ?? part.state?.output ?? '';
-  return ALREADY_COMPACTED.some(m => String(text).startsWith(m));
+  const text = partContent(part).trimStart();
+  return ALREADY_COMPACTED.some(marker => text.startsWith(marker));
 }
 
 /** Compute pressure-aware recent window size */
@@ -308,9 +313,10 @@ function adaptiveRecentWindow(
 /** Returns pinned category string or 'compressible' */
 function classifyPart(
   part: SdkPart, msgIndex: number, totalMsgs: number, role: string,
-  adaptiveWindow: number, pressureRatio: number,
+  adaptiveWindow: number, pressureRatio: number, activeTurnStart: number,
 ): string {
-  if (isAlreadyCompressed(part)) return 'compressible';
+  if (msgIndex >= activeTurnStart) return 'active_turn';
+  if (isAlreadyCompressed(part)) return 'already_compacted';
   if (role === 'user') return 'user_message';
   const criticality = scoreCriticality(part);
   const isRecent = msgIndex >= totalMsgs - adaptiveWindow;
@@ -350,7 +356,7 @@ function estimateMessageTokens(messages: SdkMessage[]): number {
   let total = 0;
   for (const msg of messages) {
     for (const part of msg.parts ?? []) {
-      total += estimateTokens(String(part.text ?? part.state?.output ?? ''));
+      total += estimateTokens(partContent(part));
     }
   }
   return total;
@@ -409,10 +415,9 @@ function compressToolOutput(part: SdkPart): CompressedPartDetail | null {
      const errLines = output.split('\n').slice(0, 15).join('\n');
     const summary = `[CRITICAL_TOOL:${tool}] ${input.filePath ?? input.command ?? ''}\n${errLines}`;
     const summaryTokens = estimateTokens(summary);
-    if (summaryTokens < before) {
-      part.state.output = summary;
-    }
-    const after = estimateTokens(String(part.state.output ?? ''));
+    if (summaryTokens >= before) return null;
+    part.state.output = summary;
+    const after = summaryTokens;
     const meta = toolRiskAndSignals(tool, input, before);
     return {
       kind: `tool_${tool}`, source: input.filePath ?? input.command ?? input.pattern ?? '',
@@ -421,9 +426,9 @@ function compressToolOutput(part: SdkPart): CompressedPartDetail | null {
     };
   }
   const summary = buildToolSummary(tool, input, lineCount);
-  part.state.output = summary;
-  const after = estimateTokens(String(part.state.output ?? ''));
+  const after = estimateTokens(summary);
   if (after >= before) return null;
+  part.state.output = summary;
   const meta = toolRiskAndSignals(tool, input, before);
   return {
     kind: `tool_${tool}`, source: input.filePath ?? input.command ?? input.pattern ?? '',
@@ -438,8 +443,10 @@ function compressTextPart(part: SdkPart): CompressedPartDetail | null {
   const before = estimateTokens(text);
   if (before < 150) return null;
   const keep = text.slice(0, 500);
-  part.text = `${keep}\n[COMPRESSED_CONTEXT: ${before} tok → ~${Math.ceil(keep.length / 4)} tok]`;
-  const after = estimateTokens(part.text);
+  const compressed = `${keep}\n[COMPRESSED_CONTEXT: ${before} tok → ~${Math.ceil(keep.length / 4)} tok]`;
+  const after = estimateTokens(compressed);
+  if (after >= before) return null;
+  part.text = compressed;
   return {
     kind: 'assistant_text', source: '', reason: 'stale_turn',
     beforeTokens: before, afterTokens: after, compressionRatio: after / before,
@@ -448,7 +455,7 @@ function compressTextPart(part: SdkPart): CompressedPartDetail | null {
 }
 
 function classifyAndCollect(
-  messages: SdkMessage[], adaptiveWindow: number, pressureRatio: number,
+  messages: SdkMessage[], adaptiveWindow: number, pressureRatio: number, activeTurnStart: number,
 ): { candidates: { part: SdkPart; tokens: number }[]; pinnedCategories: Record<string, number> } {
   const candidates: { part: SdkPart; tokens: number }[] = [];
   const pinnedCategories: Record<string, number> = {};
@@ -456,9 +463,9 @@ function classifyAndCollect(
   for (let i = 0; i < totalMsgs; i++) {
     const role = messages[i].info?.role ?? 'unknown';
     for (const part of messages[i].parts ?? []) {
-      const cls = classifyPart(part, i, totalMsgs, role, adaptiveWindow, pressureRatio);
+      const cls = classifyPart(part, i, totalMsgs, role, adaptiveWindow, pressureRatio, activeTurnStart);
       if (cls === 'compressible' || cls === 'compressible_critical') {
-        candidates.push({ part, tokens: estimateTokens(String(part.text ?? part.state?.output ?? '')) });
+        candidates.push({ part, tokens: estimateTokens(partContent(part)) });
       } else {
         pinnedCategories[cls] = (pinnedCategories[cls] ?? 0) + 1;
       }
@@ -486,6 +493,13 @@ function compressToFit(
   return { saved, details };
 }
 
+function findActiveTurnStart(messages: SdkMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index].info?.role === 'user') return index;
+  }
+  return 0;
+}
+
 /** Compile messages to fit within a token budget. */
 export function compileContext(
   messages: SdkMessage[], config: ContextCompilerConfig,
@@ -502,10 +516,11 @@ export function compileContext(
   }
   let adaptiveWindow = adaptiveRecentWindow(config.recentTurnWindow, beforeTokens, budget);
   let pressureRatio = beforeTokens / Math.max(budget, 1);
+  const activeTurnStart = findActiveTurnStart(messages);
   let allDetails: CompressedPartDetail[] = [];
   let totalSaved = 0;
   for (let pass = 0; pass < 3; pass++) {
-    const { candidates, pinnedCategories: _pinnedCategories } = classifyAndCollect(messages, adaptiveWindow, pressureRatio);
+    const { candidates, pinnedCategories: _pinnedCategories } = classifyAndCollect(messages, adaptiveWindow, pressureRatio, activeTurnStart);
     const overBudget = beforeTokens - totalSaved - budget;
     if (overBudget <= 0) break;
     const { saved, details } = compressToFit(candidates, overBudget);
@@ -517,7 +532,7 @@ export function compileContext(
     }
   }
   const afterTokens = beforeTokens - totalSaved;
-  const { pinnedCategories: finalPinned } = classifyAndCollect(messages, adaptiveWindow, pressureRatio);
+  const { pinnedCategories: finalPinned } = classifyAndCollect(messages, adaptiveWindow, pressureRatio, activeTurnStart);
   return {
     beforeTokens, afterTokens, budget,
     partsCompressed: allDetails.length, partsPinned: Object.values(finalPinned).reduce((a, b) => a + b, 0),

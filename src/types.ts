@@ -450,6 +450,9 @@ export interface ToolCallRecord {
   exitCode?: number;
   timestamp: number;
   sessionId: string;
+  messageId?: string;
+  partId?: string;
+  toolCallId?: string;
   filePath?: string;           // Extracted from args if it's a file operation
 }
 

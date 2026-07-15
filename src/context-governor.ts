@@ -99,39 +99,55 @@ function summarizeMessages(messages: GovernorMessage[], limit: number, prefix: s
   return `${prefix} ${snippets.join(' | ')}`.trim();
 }
 
-function replaceWithCheckpointRefs(messages: GovernorMessage[], keepTail: number): void {
-  const cut = Math.max(0, messages.length - keepTail);
+function findActiveTurnStart(messages: GovernorMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index].info?.role === 'user') return index;
+  }
+  return 0;
+}
+
+function replaceWithCheckpointRefs(
+  messages: GovernorMessage[], keepTail: number, activeTurnStart: number,
+): boolean {
+  const cut = Math.min(Math.max(0, messages.length - keepTail), activeTurnStart);
   const archived = messages.slice(0, cut);
   const recent = messages.slice(cut);
-  if (archived.length === 0) return;
+  if (archived.length === 0) return false;
   const refs = buildCheckpointRefSummary(archived);
   messages.splice(0, messages.length, {
     info: { role: 'assistant' },
     parts: [textPart(refs)],
   }, ...recent);
+  return true;
 }
 
-function replaceWithDistilledState(messages: GovernorMessage[], keepTail: number): void {
-  const distilled = `[DISTILLED_STATE]\n${buildCheckpointDistilledState(messages)}`;
-  const recent = messages.slice(-keepTail);
+function replaceWithDistilledState(
+  messages: GovernorMessage[], keepTail: number, activeTurnStart: number,
+): boolean {
+  const archiveEnd = Math.min(Math.max(0, messages.length - keepTail), activeTurnStart);
+  if (archiveEnd === 0) return false;
+  const archived = messages.slice(0, archiveEnd);
+  const distilled = `[DISTILLED_STATE]\n${buildCheckpointDistilledState(archived)}`;
+  const recent = messages.slice(archiveEnd);
   messages.splice(0, messages.length, {
     info: { role: 'assistant' },
     parts: [textPart(distilled)],
   }, ...recent);
+  return true;
 }
 
-function applyAction(messages: GovernorMessage[], action: GovernorActionName): boolean {
+function applyAction(
+  messages: GovernorMessage[], action: GovernorActionName, activeTurnStart: number,
+): boolean {
   if (action === 'light_memory_brief') {
     addMemoryBrief(messages);
     return false;
   }
   if (action === 'checkpoint_refs_only') {
-    replaceWithCheckpointRefs(messages, 6);
-    return true;
+    return replaceWithCheckpointRefs(messages, 6, activeTurnStart);
   }
   if (action === 'distilled_project_state' || action === 'emergency_context_rebuild') {
-    replaceWithDistilledState(messages, action === 'distilled_project_state' ? 4 : 2);
-    return true;
+    return replaceWithDistilledState(messages, action === 'distilled_project_state' ? 4 : 2, activeTurnStart);
   }
   return false;
 }
@@ -173,8 +189,13 @@ export class AdaptiveContextGovernor {
       projectedNextTurnTokens: before.projectedNextTurnTokens,
       overBudget: before.totalTokens > profile.maxBudget,
     };
-    const rebuildApplied = applyAction(messages, action);
-    optimizeGovernorContext(messages, profile.recentTurnWindow);
+    const activeTurnStart = findActiveTurnStart(messages);
+    const rebuildApplied = applyAction(messages, action, activeTurnStart);
+    // Rebuild actions can replace a large prefix and shift the latest user turn.
+    // Recalculate the boundary before any optimizer mutation so the active turn
+    // remains protected in the rebuilt message array.
+    const rebuiltActiveTurnStart = findActiveTurnStart(messages);
+    optimizeGovernorContext(messages, profile.recentTurnWindow, rebuiltActiveTurnStart);
     const compileResult = compileContext(
       messages,
       buildCompilerConfig(
