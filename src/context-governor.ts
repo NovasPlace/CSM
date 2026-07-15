@@ -20,23 +20,22 @@ import type { ContextCompilerConfig } from './types.js';
 
 export function getEffectiveGovernorThresholds(
   config: GovernorConfig,
-  profileName?: GovernorProfileName,
+  _profileName?: GovernorProfileName,
 ): GovernorThresholds {
-  const profile = getGovernorProfile(config, profileName);
   const fallback: GovernorThresholds = {
     lightBrief: 50_000,
     compactToolCalls: 65_000,
     checkpointRefsOnly: 75_000,
-    distilledStateOnly: 90_000,
-    emergencyRebuild: 120_000,
+    distilledStateOnly: 85_000,
+    emergencyRebuild: 100_000,
   };
 
   return {
-    lightBrief: config.thresholds?.lightBrief ?? profile.thresholds?.lightBrief ?? fallback.lightBrief,
-    compactToolCalls: config.thresholds?.compactToolCalls ?? profile.thresholds?.compactToolCalls ?? fallback.compactToolCalls,
-    checkpointRefsOnly: config.thresholds?.checkpointRefsOnly ?? profile.thresholds?.checkpointRefsOnly ?? fallback.checkpointRefsOnly,
-    distilledStateOnly: config.thresholds?.distilledStateOnly ?? profile.thresholds?.distilledStateOnly ?? fallback.distilledStateOnly,
-    emergencyRebuild: config.thresholds?.emergencyRebuild ?? profile.thresholds?.emergencyRebuild ?? fallback.emergencyRebuild,
+    lightBrief: config.thresholds?.lightBrief ?? fallback.lightBrief,
+    compactToolCalls: config.thresholds?.compactToolCalls ?? fallback.compactToolCalls,
+    checkpointRefsOnly: config.thresholds?.checkpointRefsOnly ?? fallback.checkpointRefsOnly,
+    distilledStateOnly: config.thresholds?.distilledStateOnly ?? fallback.distilledStateOnly,
+    emergencyRebuild: config.thresholds?.emergencyRebuild ?? fallback.emergencyRebuild,
   };
 }
 
@@ -191,6 +190,19 @@ export class AdaptiveContextGovernor {
     };
     const activeTurnStart = findActiveTurnStart(messages);
     const rebuildApplied = applyAction(messages, action, activeTurnStart);
+    const rebuildActions: GovernorActionName[] = ['checkpoint_refs_only', 'distilled_project_state', 'emergency_context_rebuild'];
+    const rebuildFailed = !rebuildApplied && rebuildActions.includes(action);
+    if (rebuildFailed) {
+      const after = measureGovernorMetrics(messages, projectedGrowth);
+      return {
+        metricsBefore: before,
+        metricsAfter: after,
+        decision,
+        thresholds,
+        observedAt,
+        rebuildApplied: false,
+      };
+    }
     // Rebuild actions can replace a large prefix and shift the latest user turn.
     // Recalculate the boundary before any optimizer mutation so the active turn
     // remains protected in the rebuilt message array.

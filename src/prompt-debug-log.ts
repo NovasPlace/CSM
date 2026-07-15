@@ -18,7 +18,7 @@ function summarizePart(part: Record<string, unknown>, index: number) {
     sessionID: part.sessionID,
     messageID: part.messageID,
     textLength: text?.length,
-    textPreview: text?.slice(0, 200),
+    textPreview: text?.slice(0, 2000),
     tool: part.tool,
     stateStatus: typeof part.state === 'object' && part.state ? (part.state as { status?: unknown }).status : undefined,
     toolOutputLength: typeof toolOutput === 'string' ? toolOutput.length : undefined,

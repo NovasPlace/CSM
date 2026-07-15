@@ -246,7 +246,7 @@ export function compileContextWithLessons(
   return result;
 }
 
-const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]', 'TOOL_REF', '[TOOL_REF', '[TOOL_DISTILLED:', '[TOOL_DEDUP_REF:', '[DEDUP_REF]', '[CACHED:'];
+const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]', 'TOOL_REF', '[TOOL_REF', '[TOOL_DISTILLED:', '[TOOL_DEDUP_REF:', '[DEDUP_REF]', '[CACHED:', '[DISTILLED_STATE]', '[CHECKPOINT_REF]', '[MEMORY_BRIEF]', '[COMPRESSED_CONTEXT:'];
 const STEP_TYPES = ['step-start', 'step-finish', 'compaction', 'reasoning', 'snapshot', 'patch'];
 
 const CRITICAL_PATTERNS: RegExp[] = [
@@ -315,7 +315,7 @@ function classifyPart(
   part: SdkPart, msgIndex: number, totalMsgs: number, role: string,
   adaptiveWindow: number, pressureRatio: number, activeTurnStart: number,
 ): string {
-  if (msgIndex >= activeTurnStart) return 'active_turn';
+  if (activeTurnStart > 0 && msgIndex > activeTurnStart) return 'active_turn';
   if (isAlreadyCompressed(part)) return 'already_compacted';
   if (role === 'user') return 'user_message';
   const criticality = scoreCriticality(part);
@@ -415,9 +415,10 @@ function compressToolOutput(part: SdkPart): CompressedPartDetail | null {
      const errLines = output.split('\n').slice(0, 15).join('\n');
     const summary = `[CRITICAL_TOOL:${tool}] ${input.filePath ?? input.command ?? ''}\n${errLines}`;
     const summaryTokens = estimateTokens(summary);
-    if (summaryTokens >= before) return null;
-    part.state.output = summary;
-    const after = summaryTokens;
+    if (summaryTokens < before) {
+      part.state.output = summary;
+    }
+    const after = estimateTokens(String(part.state.output ?? ''));
     const meta = toolRiskAndSignals(tool, input, before);
     return {
       kind: `tool_${tool}`, source: input.filePath ?? input.command ?? input.pattern ?? '',

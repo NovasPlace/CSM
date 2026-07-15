@@ -19,7 +19,7 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
   ],
   '20260709-004-core': [artifact('src/schema/core-schema.ts', 'f7ac5f2b0aa8892cc4b8c168a0a3e4d1e60fbc42afff917a4b0c9540aaeee233', '2dade867455651b8157909b48df246af8c777377f5d2c3f7a2feef474a2c9b5b')],
   '20260709-005-project-isolation': [artifact('src/schema/project-isolation-schema.ts', '68fd8d3b61e8ce98a73212679fecf0a8b8b1bd994940a9936d36bb9a6ac0b8d4')],
-  '20260709-006-checkpoint': [artifact('src/checkpoint-schema.ts', 'd54dc7ab1a63fae3a838b5b2839c2a3bc5e386249e6ee7720f41aadae1f515e7')],
+  '20260709-006-checkpoint': [artifact('src/checkpoint-schema.ts', 'd54dc7ab1a63fae3a838b5b2839c2a3bc5e386249e6ee7720f41aadae1f515e7', '728deba8fa9a1e570d57a1c1d2181d387166eb5c004ca12d9107146c083b39ed')],
   '20260709-007-context-compilation': [artifact('src/context-compilation-schema.ts', '8ba4536dba69a5e4940e34af9670fd4f4764b250f9ba610d7f5feab02ee9425c')],
   '20260709-008-context-cache': [artifact('src/context-cache-schema.ts', '0d20a6fbd00c3e6cb28bd85bee4be70f18dccd09b465a46044ea9e03a2ad6f56')],
   '20260709-009-rollover': [artifact('src/context-rollover-schema.ts', 'bff3a9ff39a19b3314db75a095a7fdedc9607390c967a3a4e998a40ffaccb328')],

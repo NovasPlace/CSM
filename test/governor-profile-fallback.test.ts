@@ -9,6 +9,12 @@ it('falls back to balanced thresholds for an unknown runtime profile', () => {
   assert.equal(profile.name, 'balanced');
   assert.deepEqual(
     getEffectiveGovernorThresholds(config, 'missing_profile' as never),
-    DEFAULT_GOVERNOR_CONFIG.profiles.balanced.thresholds,
+    {
+      lightBrief: 50_000,
+      compactToolCalls: 65_000,
+      checkpointRefsOnly: 75_000,
+      distilledStateOnly: 85_000,
+      emergencyRebuild: 100_000,
+    },
   );
 });
