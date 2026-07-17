@@ -83,6 +83,7 @@ export class CandidateGenerator {
 
     if (types.includes('prune')) {
       candidates.push(...await this.findPruneCandidates(d, config, maxPerType));
+      candidates.push(...await this.findBreadcrumbLessonCandidates(d, config, maxPerType));
     }
     if (types.includes('promote_to_lesson')) {
       candidates.push(...await this.findPromoteCandidates(d, config, maxPerType));
@@ -203,6 +204,55 @@ export class CandidateGenerator {
         accessCount: toNum(r.access_count),
         recallCount: toNum(r.recall_count),
         minAgeDays,
+      },
+    }));
+  }
+
+  private async findBreadcrumbLessonCandidates(
+    _d: QueryDialect,
+    config: CandidateGeneratorConfig,
+    maxPerType: number,
+  ): Promise<CandidateRow[]> {
+    const params: unknown[] = [];
+    let projectClause = '';
+    if (config.projectId) {
+      params.push(config.projectId);
+      projectClause = ` AND m.project_id = $${params.length}`;
+    }
+    params.push(maxPerType);
+
+    const sql = `
+      SELECT m.id, m.content, m.access_count,
+             COALESCE(r.recall_count, 0) AS recall_count
+      FROM memories m
+      LEFT JOIN (
+        SELECT memory_id, COUNT(*) AS recall_count
+        FROM memory_recall_events
+        GROUP BY memory_id
+      ) r ON r.memory_id = m.id
+      WHERE m.superseded_by IS NULL
+        AND m.archived_at IS NULL
+        AND m.memory_type = 'lesson'
+        AND m.emotion = 'frustration'
+        AND m.content LIKE 'Instead of that approach, Fixed %'
+        AND COALESCE(r.recall_count, 0) = 0
+        ${projectClause}
+      ORDER BY m.created_at DESC
+      LIMIT $${params.length}
+    `;
+
+    const result = await this.pool.query(sql, params);
+    return (result.rows as Array<{ id: number; content: string; access_count: number | string; recall_count: number | string }>).map((r) => ({
+      candidateType: 'prune' as const,
+      memoryId: r.id,
+      reason: 'Low-signal frustration breadcrumb (auto-generated "Instead of that approach, Fixed ..." lesson, never recalled)',
+      confidence: 0.8,
+      sourceSignals: {
+        memoryType: 'lesson',
+        emotion: 'frustration',
+        contentPattern: 'Instead of that approach, Fixed %',
+        recallCount: toNum(r.recall_count),
+        accessCount: toNum(r.access_count),
       },
     }));
   }

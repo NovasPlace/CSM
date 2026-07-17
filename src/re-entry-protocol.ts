@@ -136,19 +136,23 @@ export function estimateTokens(chars: number): number {
 /**
  * Pure standalone budget allocator.
  *
- * Adaptive proportional allocation by priority weight:
+ * Floor-first, priority-weighted allocation:
  * 1. Protected layers (neverTrim) are always kept at full size.
- * 2. If total fits within budget, no trimming.
- * 3. Otherwise, each trimmable layer gets a proportional share:
- *    share = remainingBudget * (priority / sumPriorities)
- * 4. Layers whose share < minLayerChars are dropped (lowest priority first),
- *    and the budget is redistributed to surviving layers.
- * 5. Surplus from layers whose demand < their share is redistributed
- *    to higher-priority under-allocated layers.
+ * 2. If the total fits within the budget, no trimming occurs.
+ * 3. Otherwise, each trimmable layer has a per-layer floor — the minimum it is
+ *    guaranteed if it survives — derived from its configured budget, floored at
+ *    minLayerChars, and capped at its actual content. The lowest-priority
+ *    trimmable layers are dropped (reason `below_min_layer_chars`) until the
+ *    survivors' cumulative floor fits the remaining budget. This protects
+ *    high-signal layers (active Work, Goals, Preferences) from being starved by
+ *    verbose lower-priority content under tight budgets.
+ * 4. Survivors start at their floor; leftover budget is distributed by priority
+ *    weight, capped at each layer's content. Surplus from cap-hit layers flows
+ *    back to higher-priority layers that still have room.
  *
- * This prevents a verbose high-priority layer from starving lower-priority
- * layers, while ensuring protected layers (Identity, Constraints) are
- * always preserved.
+ * The per-layer floor is carried on `ReEntryLayerResult.budget` (populated from
+ * `LAYER_SPECS` by the layer builders). Protected layers (Identity, Constraints)
+ * are always preserved in full.
  */
 export function applyLayerBudget(
   results: ReEntryLayerResult[],
@@ -234,52 +238,60 @@ export function applyLayerBudget(
     return sortByLayerOrder(output);
   }
 
+  // Per-layer floor: the minimum chars a trimmable layer is guaranteed if it
+  // survives. Sourced from the layer's configured budget, floored at
+  // minLayerChars, and capped at the layer's actual content.
+  const floorOf = (r: ReEntryLayerResult): number =>
+    Math.min(r.originalChars, Math.max(r.budget, config.minLayerChars));
+
   let allocatable = [...trimmable];
 
+  // Phase 1 — floor satisfaction. Drop the lowest-priority trimmable layers
+  // until the cumulative floor of the survivors fits within the remaining
+  // budget. Every survivor is then guaranteed at least its floor.
   while (allocatable.length > 0) {
-    const sumPriorities = allocatable.reduce(
-      (sum, r) => sum + r.priority, 0,
-    );
+    const totalFloors = allocatable.reduce((sum, r) => sum + floorOf(r), 0);
+    if (totalFloors <= remaining) break;
+    const droppedLayer = allocatable[allocatable.length - 1];
+    output.push({
+      ...droppedLayer,
+      dropped: true, text: '', chars: 0,
+      trimReason: 'below_min_layer_chars',
+    });
+    allocatable = allocatable.slice(0, -1);
+  }
 
-    const shares = allocatable.map((r) => ({
-      layer: r,
-      share: Math.floor((remaining * r.priority) / sumPriorities),
-    }));
+  // Phase 2 — proportional surplus distribution. Each survivor starts at its
+  // floor; leftover budget is distributed by priority weight, capped at the
+  // layer's original content. Surplus from cap-hit layers flows back to
+  // higher-priority layers that still have room.
+  if (allocatable.length > 0) {
+    const allocations = allocatable
+      .map((r) => ({ layer: r, target: floorOf(r) }))
+      .sort((a, b) => b.layer.priority - a.layer.priority);
 
-    const tooSmall = shares
-      .filter((s) => s.share < config.minLayerChars)
-      .sort((a, b) => a.layer.priority - b.layer.priority);
+    const surplus = remaining - allocations.reduce((sum, a) => sum + a.target, 0);
 
-    if (tooSmall.length > 0) {
-      const toDrop = tooSmall[0];
-      output.push({
-        ...toDrop.layer,
-        dropped: true, text: '', chars: 0,
-        trimReason: 'below_min_layer_chars',
-      });
-      allocatable = allocatable.filter(
-        (r) => r.name !== toDrop.layer.name,
-      );
-      continue;
-    }
-
-    const allocations = shares.map((s) => ({
-      layer: s.layer,
-      target: Math.min(s.layer.originalChars, s.share),
-    }));
-
-    const allocated = allocations.reduce((sum, a) => sum + a.target, 0);
-    let surplus = remaining - allocated;
     if (surplus > 0) {
-      const underAllocated = allocations
-        .filter((a) => a.target < a.layer.originalChars)
-        .sort((a, b) => b.layer.priority - a.layer.priority);
-      for (const a of underAllocated) {
-        if (surplus <= 0) break;
+      const sumPriorities = allocations.reduce((sum, a) => sum + a.layer.priority, 0);
+      if (sumPriorities > 0) {
+        for (const a of allocations) {
+          const room = a.layer.originalChars - a.target;
+          if (room <= 0) continue;
+          const extra = Math.min(room, Math.floor((surplus * a.layer.priority) / sumPriorities));
+          a.target += extra;
+        }
+      }
+      // Redistribute leftover surplus (from layers that hit their content cap)
+      // to layers that still have room, highest priority first.
+      let leftover = remaining - allocations.reduce((sum, a) => sum + a.target, 0);
+      for (const a of allocations) {
+        if (leftover <= 0) break;
         const room = a.layer.originalChars - a.target;
-        const extra = Math.min(room, surplus);
+        if (room <= 0) continue;
+        const extra = Math.min(room, leftover);
         a.target += extra;
-        surplus -= extra;
+        leftover -= extra;
       }
     }
 
@@ -302,7 +314,6 @@ export function applyLayerBudget(
         });
       }
     }
-    break;
   }
 
   return sortByLayerOrder(output);

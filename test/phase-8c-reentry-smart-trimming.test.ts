@@ -18,7 +18,7 @@ function makeLayer(
   return {
     name,
     priority: 50,
-    budget: 300,
+    budget: 0,
     originalChars: text.length,
     chars: text.length,
     text,
@@ -30,36 +30,36 @@ function makeLayer(
   };
 }
 
-function identity(text: string): ReEntryLayerResult {
-  return makeLayer('identity', text, { priority: 100 });
+function identity(text: string, overrides: Partial<ReEntryLayerResult> = {}): ReEntryLayerResult {
+  return makeLayer('identity', text, { priority: 100, ...overrides });
 }
 
-function constraints(text: string): ReEntryLayerResult {
-  return makeLayer('constraints', text, { priority: 100 });
+function constraints(text: string, overrides: Partial<ReEntryLayerResult> = {}): ReEntryLayerResult {
+  return makeLayer('constraints', text, { priority: 100, ...overrides });
 }
 
-function goals(text: string): ReEntryLayerResult {
-  return makeLayer('goals', text, { priority: 90 });
+function goals(text: string, overrides: Partial<ReEntryLayerResult> = {}): ReEntryLayerResult {
+  return makeLayer('goals', text, { priority: 90, ...overrides });
 }
 
-function work(text: string): ReEntryLayerResult {
-  return makeLayer('work', text, { priority: 80 });
+function work(text: string, overrides: Partial<ReEntryLayerResult> = {}): ReEntryLayerResult {
+  return makeLayer('work', text, { priority: 80, ...overrides });
 }
 
-function preferences(text: string): ReEntryLayerResult {
-  return makeLayer('preferences', text, { priority: 70 });
+function preferences(text: string, overrides: Partial<ReEntryLayerResult> = {}): ReEntryLayerResult {
+  return makeLayer('preferences', text, { priority: 70, ...overrides });
 }
 
-function capabilities(text: string): ReEntryLayerResult {
-  return makeLayer('capabilities', text, { priority: 60 });
+function capabilities(text: string, overrides: Partial<ReEntryLayerResult> = {}): ReEntryLayerResult {
+  return makeLayer('capabilities', text, { priority: 60, ...overrides });
 }
 
-function beliefs(text: string): ReEntryLayerResult {
-  return makeLayer('beliefs', text, { priority: 50 });
+function beliefs(text: string, overrides: Partial<ReEntryLayerResult> = {}): ReEntryLayerResult {
+  return makeLayer('beliefs', text, { priority: 50, ...overrides });
 }
 
-function recent(text: string): ReEntryLayerResult {
-  return makeLayer('recent', text, { priority: 40 });
+function recent(text: string, overrides: Partial<ReEntryLayerResult> = {}): ReEntryLayerResult {
+  return makeLayer('recent', text, { priority: 40, ...overrides });
 }
 
 function tightBudget(maxChars = 300, minLayerChars = 50): ReEntryConfig {
@@ -111,13 +111,13 @@ describe('Phase 8C — Smart Re-entry Trimming', () => {
       assert.equal(con.trimReason, 'protected_layer');
     });
 
-    it('drops low-priority layers first when budget is tight', () => {
+    it('drops low-priority layers first when floors exceed budget', () => {
       const results = [
         identity('I'.repeat(50)),
-        goals('G'.repeat(200)),
-        preferences('P'.repeat(100)),
-        beliefs('B'.repeat(100)),
-        recent('R'.repeat(100)),
+        goals('G'.repeat(200), { budget: 200 }),
+        preferences('P'.repeat(100), { budget: 100 }),
+        beliefs('B'.repeat(100), { budget: 100 }),
+        recent('R'.repeat(100), { budget: 100 }),
         constraints('C'.repeat(50)),
       ];
       const config = tightBudget(300, 50);
@@ -125,12 +125,17 @@ describe('Phase 8C — Smart Re-entry Trimming', () => {
 
       const recentLayer = out.find((r) => r.name === 'recent')!;
       const beliefsLayer = out.find((r) => r.name === 'beliefs')!;
+      const goalsLayer = out.find((r) => r.name === 'goals')!;
 
       assert.equal(recentLayer.dropped, true);
       assert.equal(recentLayer.trimReason, 'below_min_layer_chars');
 
       assert.equal(beliefsLayer.dropped, true);
       assert.equal(beliefsLayer.trimReason, 'below_min_layer_chars');
+
+      // goals (highest priority) survives at its floor
+      assert.equal(goalsLayer.dropped, false);
+      assert.ok(goalsLayer.chars >= 200, 'goals keeps its floor');
     });
 
     it('trims verbose layer proportionally instead of consuming all budget', () => {
@@ -329,6 +334,68 @@ describe('Phase 8C — Smart Re-entry Trimming', () => {
       const originalChars = results.map((r) => r.chars);
       applyLayerBudget(results, tightBudget(100));
       assert.deepEqual(results.map((r) => r.chars), originalChars);
+    });
+  });
+
+  describe('applyLayerBudget — per-layer floors', () => {
+
+    it('guarantees a high-priority layer its floor by dropping lower-priority layers', () => {
+      // Work has a large floor (400) and lots of content. Under a tight budget,
+      // lower-priority layers are dropped so Work keeps at least its floor.
+      const results = [
+        identity('I'.repeat(50)),
+        work('W'.repeat(1000), { budget: 400 }),
+        beliefs('B'.repeat(300), { budget: 200 }),
+        recent('R'.repeat(300), { budget: 200 }),
+        constraints('C'.repeat(50)),
+      ];
+      const config = tightBudget(600, 50);
+      const out = applyLayerBudget(results, config);
+
+      const workLayer = out.find((r) => r.name === 'work')!;
+      const recentLayer = out.find((r) => r.name === 'recent')!;
+
+      assert.equal(workLayer.dropped, false);
+      assert.ok(workLayer.chars >= 400, `work keeps its floor (got ${workLayer.chars})`);
+      assert.equal(recentLayer.dropped, true);
+    });
+
+    it('caps the floor at a layer actual content', () => {
+      // Goals content (80) is smaller than its configured budget (300); its
+      // floor is its content, so it is preserved in full, not over-allocated.
+      const results = [
+        identity('I'.repeat(50)),
+        goals('G'.repeat(80), { budget: 300 }),
+        constraints('C'.repeat(50)),
+      ];
+      const config = tightBudget(400, 50);
+      const out = applyLayerBudget(results, config);
+
+      const goalsLayer = out.find((r) => r.name === 'goals')!;
+      assert.equal(goalsLayer.dropped, false);
+      assert.equal(goalsLayer.trimmed, false);
+      assert.equal(goalsLayer.chars, 80);
+    });
+
+    it('uses minLayerChars as the default floor when budget is unset', () => {
+      // With budget 0, the floor falls back to minLayerChars, so a tight budget
+      // trims layers proportionally rather than dropping them.
+      const results = [
+        identity('I'.repeat(50)),
+        goals('G'.repeat(400)),
+        recent('R'.repeat(400)),
+        constraints('C'.repeat(50)),
+      ];
+      const config = tightBudget(300, 50);
+      const out = applyLayerBudget(results, config);
+
+      const goalsLayer = out.find((r) => r.name === 'goals')!;
+      const recentLayer = out.find((r) => r.name === 'recent')!;
+
+      assert.equal(goalsLayer.dropped, false);
+      assert.equal(recentLayer.dropped, false);
+      assert.ok(goalsLayer.chars >= 50);
+      assert.ok(recentLayer.chars >= 50);
     });
   });
 

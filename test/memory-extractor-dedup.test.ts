@@ -115,3 +115,50 @@ test('MemoryExtractor dedup: DB fallback catches pre-existing extraction', async
 
   assert.equal(saveCount.value, 0, 'should suppress when DB says group already extracted');
 });
+
+test('MemoryExtractor: success outcome with a fix becomes procedural, not a frustration lesson', () => {
+  const { mgr } = makeMockMemoryManager();
+  const db = makeMockDatabase(false);
+  const extractor = new MemoryExtractor(db, mgr, testConfig);
+
+  const group = {
+    id: 'group_success_fix',
+    outcome: 'success',
+    fixApplied: 'Fixed "oldString not found" by changing: src/foo.ts',
+    proceduralInsight: 'Used the Edit tool with a larger context window',
+    intent: 'edit a file',
+    filesChanged: ['src/foo.ts'],
+    commandsRun: [],
+    errorSummary: 'oldString not found',
+    toolCalls: [{ tool: 'edit' }],
+  };
+
+  const candidate = (extractor as any).buildDistilledCandidate('ses', 'proj', group);
+  assert.equal(candidate.proposedType, 'procedural');
+  assert.equal(candidate.emotion, 'success');
+  assert.equal(candidate.importance, 0.6);
+  assert.equal(candidate.content.startsWith('Instead of that approach,'), false);
+});
+
+test('MemoryExtractor: failure outcome still becomes a frustration lesson', () => {
+  const { mgr } = makeMockMemoryManager();
+  const db = makeMockDatabase(false);
+  const extractor = new MemoryExtractor(db, mgr, testConfig);
+
+  const group = {
+    id: 'group_fail',
+    outcome: 'failure',
+    fixApplied: 'Fixed "err" by changing: x',
+    proceduralInsight: 'insight',
+    intent: 'do thing',
+    filesChanged: [],
+    commandsRun: [],
+    errorSummary: 'err',
+    toolCalls: [{ tool: 'bash', error: 'boom' }],
+  };
+
+  const candidate = (extractor as any).buildDistilledCandidate('ses', 'proj', group);
+  assert.equal(candidate.proposedType, 'lesson');
+  assert.equal(candidate.emotion, 'frustration');
+  assert.equal(candidate.importance, 0.75);
+});

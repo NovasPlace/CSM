@@ -180,6 +180,30 @@ describe('CandidateGenerator', () => {
     assert.equal(report.skippedDuplicates, 1);
   });
 
+  it('detects breadcrumb-lesson prune candidates: low-signal frustration breadcrumbs', async () => {
+    const { pool, calls } = makePool((sql) => {
+      if (sql.includes("Instead of that approach, Fixed %")) {
+        return {
+          rows: [
+            { id: 101, content: 'Instead of that approach, Fixed "err" by changing: x', access_count: 0, recall_count: 0 },
+            { id: 102, content: 'Instead of that approach, Fixed "boom" by changing: y', access_count: 1, recall_count: 0 },
+          ],
+          rowCount: 2,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const gen = makeGenerator(pool);
+    const report = await gen.generate({ dryRun: true, types: ['prune'] });
+
+    const breadcrumb = report.candidates.filter((c) => c.reason.includes('breadcrumb'));
+    assert.equal(breadcrumb.length, 2);
+    assert.equal(breadcrumb[0].candidateType, 'prune');
+    assert.equal(breadcrumb[0].memoryId, 101);
+    assert.ok(breadcrumb[0].sourceSignals.contentPattern !== undefined);
+    assert.ok(calls.some((c) => c.sql.includes('Instead of that approach, Fixed %')), 'breadcrumb query issued');
+  });
+
   it('report aggregates counts by type and status', async () => {
     const { pool } = makePool((sql) => {
       if (sql.includes('GROUP BY candidate_type, status')) {

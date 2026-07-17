@@ -142,13 +142,15 @@ export class MemoryExtractor {
     group: ToolCallGroup,
   ): MemoryCandidate {
     const isFailure = group.outcome === 'failure' || group.outcome === 'partial';
-    const hasErrorFix = group.fixApplied?.startsWith('Fixed ') === true;
-    const isFixLesson = !isFailure && hasErrorFix;
-    const type: MemoryType = (isFailure || isFixLesson) ? 'lesson' : 'procedural';
-    const importance = (isFailure || isFixLesson) ? 0.75 : 0.6;
-    const emotion: MemoryEmotion = (isFailure || isFixLesson) ? 'frustration' : 'success';
+    // Only genuine failures become frustration lessons. A successful outcome
+    // that merely had an edit applied (a "Fixed ..." breadcrumb) is procedural
+    // signal, not a lesson — treating it as a frustration lesson produced the
+    // low-signal "Instead of that approach, Fixed ..." noise in the feed.
+    const type: MemoryType = isFailure ? 'lesson' : 'procedural';
+    const importance = isFailure ? 0.75 : 0.6;
+    const emotion: MemoryEmotion = isFailure ? 'frustration' : 'success';
     const confidence = 0.92;
-    const content = (isFailure || isFixLesson)
+    const content = isFailure
       ? this.makeActionableLesson(group.fixApplied ?? group.proceduralInsight ?? group.intent, group)
       : (group.proceduralInsight ?? group.intent);
     const status = this.determineInitialStatus(confidence) as 'pending' | 'approved' | 'rejected' | 'auto-approved';
