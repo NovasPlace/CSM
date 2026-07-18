@@ -1,11 +1,11 @@
 import type { DatabaseProvider, PluginConfig } from './types.js';
 import { databaseRuntimeConfigFromEnv } from './database-runtime-config.js';
-import { getEnvBoolean, getEnvString } from './config-env.js';
+import { getEnvBoolean, getEnvInteger, getEnvString } from './config-env.js';
 
 type DatabaseSettings = Pick<PluginConfig,
   'databaseProvider' | 'databaseUrl' | 'sqlitePath' | 'databaseRuntime'>;
 type EmbeddingSettings = Pick<PluginConfig,
-  'embeddingModel' | 'embeddingApiKey' | 'embeddingApiUrl'>;
+  'embeddingModel' | 'embeddingApiKey' | 'embeddingApiUrl'> & { embeddingDimensions: number };
 
 const DEFAULT_DATABASE_URL =
   'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
@@ -32,14 +32,28 @@ export function embeddingSettingsFromEnv(): EmbeddingSettings {
     if (!embeddingApiKey?.trim()) {
       throw new Error('OPENAI_API_KEY is required when CSM_EMBEDDING_PROVIDER=openai');
     }
-    return { embeddingModel: 'text-embedding-3-small', embeddingApiKey };
+    return {
+      embeddingModel: 'text-embedding-3-small',
+      embeddingDimensions: readEmbeddingDimensions(1_536),
+      embeddingApiKey,
+    };
   }
   if (provider !== 'ollama') {
     throw new Error(`Invalid CSM_EMBEDDING_PROVIDER: "${provider}". Must be "ollama" or "openai"`);
   }
   const embeddingApiUrl = getEnvString('OLLAMA_HOST', 'http://localhost:11434') as string;
   validateHttpUrl('OLLAMA_HOST', embeddingApiUrl);
-  return { embeddingModel: 'nomic-embed-text', embeddingApiUrl };
+  return {
+    embeddingModel: 'nomic-embed-text',
+    embeddingDimensions: readEmbeddingDimensions(768),
+    embeddingApiUrl,
+  };
+}
+
+function readEmbeddingDimensions(fallback: number): number {
+  const dimensions = getEnvInteger('CSM_EMBEDDING_DIMENSIONS', fallback);
+  if (dimensions <= 0) throw new Error('CSM_EMBEDDING_DIMENSIONS must be greater than zero');
+  return dimensions;
 }
 
 export function validateDatabaseTarget(config: PluginConfig): void {

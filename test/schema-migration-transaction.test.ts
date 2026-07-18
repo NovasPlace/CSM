@@ -83,7 +83,7 @@ describe('real PostgreSQL migration transaction policy', () => {
       const result = await first.getPool().query(
         'SELECT COUNT(*)::int AS count FROM csm_schema_migrations',
       );
-      assert.equal(result.rows[0].count, 25);
+      assert.equal(result.rows[0].count, 27);
       await assert.doesNotReject(() => second.getPool().query('SELECT 1'));
     } finally {
       await first.close();

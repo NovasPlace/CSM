@@ -12,11 +12,11 @@ import type { BridgeDeps } from './bridge-ops.js';
 import type { CodexBridgeExtraDeps } from './codex-bridge-extra-ops.js';
 import { mergePluginConfig, normalizeProviderRuntimeConfig } from './provider-runtime-config.js';
 import { StartupRollback } from './startup-rollback.js';
-import type { PluginConfig } from './types.js';
+import type { RuntimePluginConfig } from './runtime-plugin-config.js';
 import { WorkLedger } from './work-ledger.js';
 
 export interface CodexBridgeRuntime {
-  config: PluginConfig;
+  config: RuntimePluginConfig;
   deps: BridgeDeps & CodexBridgeExtraDeps;
   workLedger?: WorkLedger;
 }
@@ -28,7 +28,7 @@ export interface CodexBridgeStartupBoundary<T = CodexBridgeRuntime> {
 }
 
 export async function createCodexBridgeRuntime<T = CodexBridgeRuntime>(
-  options: Partial<PluginConfig> = {},
+  options: Partial<RuntimePluginConfig> = {},
   boundary: CodexBridgeStartupBoundary<T> = {},
 ): Promise<T> {
   const config = normalizedConfig(options);
@@ -50,14 +50,14 @@ export async function createCodexBridgeRuntime<T = CodexBridgeRuntime>(
   }
 }
 
-function normalizedConfig(options: Partial<PluginConfig>): PluginConfig {
+function normalizedConfig(options: Partial<RuntimePluginConfig>): RuntimePluginConfig {
   const configured = mergePluginConfig(
     DEFAULT_CONFIG, options as unknown as Record<string, unknown>,
   );
   return normalizeProviderRuntimeConfig(validatePluginConfig(configured));
 }
 
-function createRuntime(config: PluginConfig, database: Database): CodexBridgeRuntime {
+function createRuntime(config: RuntimePluginConfig, database: Database): CodexBridgeRuntime {
   const redactor = new Redactor(config.redactor);
   const embeddings = new EmbeddingGenerator(config);
   const memoryManager = new MemoryManager(database, embeddings, redactor);

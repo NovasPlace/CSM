@@ -8,63 +8,50 @@ No active goal recorded.
 
 ## Current State
 - Phase: Not recorded
-- Events: 1883
-- Sessions: 21
-- Latest summary: summary_a5597fe0-4680-47c7-88ad-882db3166abd
-- Updated: 2026-07-15T01:08:57.563Z
+- Events: 5069
+- Sessions: 47
+- Latest summary: summary_a01e3843-97e0-43d0-a611-ecbc8f3a47ec
+- Updated: 2026-07-18T14:57:12.413Z
 
 ## Recent Work
-- [command_run] bash: > opencode-cross-session-memory@1.0.0 lint:src
-> eslint src --max-warnings=7
+- [command_run] bash: ℹ tests 42
+ℹ pass 42
+ℹ fail 0
+ℹ skipped 0
+- [command_run] bash: failing tests:
 
-
-C:\Users\Donovan\Desktop\cross-session-memory\src\types\opentui.d.ts
-  50:36  warning  'E' is defined but never used
-- [command_run] bash: > opencode-cross-session-memory@1.0.0 build
-> tsc
-- [command_run] bash: ✔ compresses old output without touching anything after the latest user message (1.8089ms)
-  ✔ treats TOOL_REF and governor markers as terminal instead of compressing them again (0.2209ms)
-  ✔ does 
-- [command_run] bash: > opencode-cross-session-memory@1.0.0 typecheck
-> tsc --noEmit
-- [command_run] bash: ---exit:1---
-- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\.gitignore</path>
-<type>file</type>
-<content>
-1: node_modules
-2: dist
-3: *.log
-4: .env
-5: *.db
-6: *.sqlite
-7: *.sqlite3
-8: *.swp
-9: *.swo
-10: *~
-11: — C:\Users\Donovan\Desktop\cross-session-memory\.gitignore
-- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\csm-round3-fix-README.txt</path>
-<type>file</type>
-<content>
-1: CSM ROUND 3 — ACTIVE-TURN + RECOVERY SAFETY FIXES
-2: 
-3: This patch is incremental.  — C:\Users\Donovan\Desktop\cross-session-memory\csm-round3-fix-README.txt
-- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\README.txt</path>
-<type>file</type>
-<content>
-1: CSM follow-up compaction and checkpoint safety fixes
-2: =========================================== — C:\Users\Donovan\Desktop\cross-session-memory\README.txt
-- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\FIX_README.txt</path>
-<type>file</type>
-<content>
-1: CSM TOOL_REF compaction fix
-2: 
-3: Primary fix
-4: - Protect every tool result produced after th — C:\Users\Donovan\Desktop\cross-session-memory\FIX_README.txt
-- [file_read] read: <path>C:\Users\Donovan\Desktop\cross-session-memory\check-migrations.cjs</path>
-<type>file</type>
-<content>
-1: const { Pool } = require('./node_modules/pg');
-2: const { createHash } = require('node:cr — C:\Users\Donovan\Desktop\cross-session-memory\check-migrations.cjs
+test at test\codex-bridge-lifecycle.test.ts:1:1848
+✖ releases a pending PostgreSQL ledger lease when bridge construction fails (1513.4681ms)
+  error: sorry, too many clients alread
+- [command_run] bash: records and retrieves session usage
+  ✖ reports weekly usage across sessions
+  ✖ detects over-quota usage
+✖ TokenBudgetLedger (407.5557ms)
+✔ logs a non-blocking experience packet write failure (9.
+- [command_run] bash: Name               Status
+----               ------
+postgresql-x64-16 Running
+postgresql-x64-17 Running
+True
+- [command_run] bash: failing lines: 86
+X releases a pending PostgreSQL ledger lease when bridge construction fails (1513.4681ms)
+X keeps the database open when ledger disconnect fails and retries only unfinished work (2
+- [command_run] bash: U+0020  
+U+0020  
+U+0393 �
+U+00A3 �
+U+00FB �
+U+0020  
+U+0072 r
+U+0065 e
+U+0063 c
+U+006F o
+U+0072 r
+U+0064 d
+- [command_run] bash: matches: 0
+- [command_run] bash: (no output)
+- [command_run] bash: fail lines: 0
+- [command_run] bash: (no output)
 
 ## Known Problems
 - No active blockers or known failures.

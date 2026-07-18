@@ -66,7 +66,7 @@ describe('Phase 8A-Impl: Re-entry Preview Adapter + Tool', () => {
   describe('tool registration count', () => {
     it('tool count is 33 after Phase 9A', async () => {
       const { CSM_TOOL_NAMES } = await import('../dist/tool-names.js');
-      strictEqual(CSM_TOOL_NAMES.length, 34, `expected 34 tools, got ${CSM_TOOL_NAMES.length}`);
+      strictEqual(CSM_TOOL_NAMES.length, 35, `expected 35 tools, got ${CSM_TOOL_NAMES.length}`);
     });
   });
 });

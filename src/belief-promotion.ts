@@ -138,6 +138,14 @@ export class BeliefPromotionEngine {
         }
       } else if (decision.action === 'promote' && dryRun) {
         promoteCount++;
+      } else if (decision.action === 'skip_dedup_match' && !dryRun) {
+        // Dedup match: candidate crossed all thresholds but is structurally
+        // identical to an existing memory (same dedup_key). Re-evaluation will
+        // never produce a different result while that memory exists, so mark
+        // the candidate applied to stop it shadowing the pending queue.
+        // (Closure Criterion 6: structural idempotency.) Other skip_* actions
+        // stay pending — they may cross thresholds as evidence accumulates.
+        await this.markCandidateApplied(c.id, d);
       }
     }
 

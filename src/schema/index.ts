@@ -9,85 +9,34 @@ import {
   type SchemaMigration,
   validateMigrationHistory,
 } from './migration-ledger.js';
-import { artifactsFor } from './migration-artifacts.js';
 import { buildPostgresMigrations } from './postgres-migrations.js';
 import { SchemaStepError } from './schema-errors.js';
-import { initializeMinimalSqliteSchema } from './sqlite/index.js';
-import { migrateCompactionMetricsSqlite } from './sqlite/compaction-metrics-migration.js';
-import { initializeSqliteWorkJournal } from './sqlite/work-journal.js';
-import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
-import { initializeContextInjectionTelemetrySchema } from './context-injection-telemetry-schema.js';
-import { initializeAgentBookSchema } from './agentbook-schema.js';
+import { buildSqliteMigrations } from './sqlite-migrations.js';
+
+export { SQLITE_MIGRATION_IDS } from './sqlite-migrations.js';
 
 const SCHEMA_LOCK_KEY = 741_583_921;
 const SAVEPOINT = 'csm_schema_migration';
 
-export async function initializeAllSchemas(database: Database): Promise<void> {
+export async function initializeAllSchemas(database: Database, dimensions = 1_536): Promise<void> {
   const pool = database.getPool();
   const provider = toMigrationProvider(database.getProvider());
   await withSchemaTransaction(pool, provider, async (transactionPool) => {
     if (provider === 'postgres') await lockPostgresSchema(transactionPool);
-    const migrations = buildMigrations(database, transactionPool, provider);
+    const migrations = buildMigrations(database, transactionPool, provider, dimensions);
     await migrateSchema(transactionPool, migrations, provider);
   });
   getLogger().info(`${provider === 'sqlite' ? 'SQLite' : 'PostgreSQL'} schema ready`);
 }
 
-export const SQLITE_MIGRATION_IDS: readonly string[] = [
-  '20260709-001-sqlite-baseline',
-  '20260711-002-sqlite-work-journal',
-  '20260711-023-capability-provenance-rewrite',
-  '20260711-024-sqlite-compaction-metrics',
-  '20260712-025-sqlite-context-injection-telemetry',
-  '20260713-026-sqlite-agentbook',
-];
-
 function buildMigrations(
   database: Database,
   pool: DatabasePool,
   provider: MigrationProvider,
+  dimensions: number,
 ): SchemaMigration[] {
-  if (provider === 'postgres') return buildPostgresMigrations(database, pool);
-  return [
-    {
-      id: SQLITE_MIGRATION_IDS[0],
-      contract: 'csm-sqlite-v1:core memory, graph, recall, packets, self-model, and beliefs',
-      implementation: artifactsFor('20260709-001-sqlite-baseline'),
-      run: () => initializeMinimalSqliteSchema(pool),
-    },
-    {
-      id: SQLITE_MIGRATION_IDS[1],
-      contract: 'csm-sqlite-v2:persistent agent work journal',
-      implementation: artifactsFor('20260711-002-sqlite-work-journal'),
-      run: () => initializeSqliteWorkJournal(pool),
-    },
-    {
-      id: SQLITE_MIGRATION_IDS[2],
-      contract: 'csm-sqlite-v2:rewrite capability promotion memories as immutable provenance snapshots',
-      implementation: artifactsFor('20260711-023-capability-provenance-rewrite'),
-      acceptedLegacyChecksums: ['5f2309483f18cc3e9de81eba037489a7ce4b0727e5c58d2a0ba4ae5ef40c88f8'],
-      run: () => runCapabilityProvenanceMigration(pool).then(() => undefined),
-    },
-    {
-      id: SQLITE_MIGRATION_IDS[3],
-      contract: 'csm-sqlite-v2:compaction telemetry metrics table with partial-schema repair',
-      implementation: artifactsFor('20260711-024-sqlite-compaction-metrics'),
-      run: () => migrateCompactionMetricsSqlite(pool),
-    },
-    {
-      id: SQLITE_MIGRATION_IDS[4],
-      contract: 'csm-sqlite-v2:context injection telemetry events and items',
-      implementation: artifactsFor('20260712-025-sqlite-context-injection-telemetry'),
-      run: () => initializeContextInjectionTelemetrySchema(pool),
-    },
-    {
-      id: SQLITE_MIGRATION_IDS[5],
-      contract: 'csm-sqlite-v2:agentbook operational ledger, summaries, current state, and rules',
-      implementation: artifactsFor('20260713-026-sqlite-agentbook'),
-      run: () => initializeAgentBookSchema(pool),
-    },
-  ];
-
+  if (provider === 'postgres') return buildPostgresMigrations(database, pool, dimensions);
+  return buildSqliteMigrations(pool);
 }
 
 async function migrateSchema(

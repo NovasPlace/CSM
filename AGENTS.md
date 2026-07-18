@@ -33,7 +33,7 @@ Phases 1A–4F-C, 7A–9B, L1–L4-K, and capability promotion closure are compl
 - **Observation Window**: Monitoring whether CSM onboarding/re-entry improves agent cold-start continuity. Baseline: 2026-07-13T07:54:15Z, 3 context_injection_events (1 onboarding, 2 reentry), 0 natural traffic yet. Next: fresh-session test with source attribution diagnostic.
 
 ### Next (not started)
-- **Phase 8C — Smart Trimming**: Adaptive token budgeting.
+- **Phase L4+ typed DTO continuation**: `checkpoint-store.ts`, `agent-work-journal.ts`, and `context-cache-runtime.ts`.
 
 ### Blocked
 - **`no-explicit-any` typed-debt (Phase L4+ remaining)**: L4-A through L4-K reduced 102→7. Remaining 7 warnings are in `opentui.d.ts` (external API types, skipped by design). Future work: typed DTOs for `checkpoint-store.ts` (row mapper), `agent-work-journal.ts`, `context-cache-runtime.ts`. Requires per-module typed DTOs and generic row mappers, not blanket replacement.
@@ -57,9 +57,8 @@ Phases 1A–4F-C, 7A–9B, L1–L4-K, and capability promotion closure are compl
 
 ## Next Steps
 1. **Observation window**: Run fresh-session test with source attribution diagnostic to verify CSM onboarding/re-entry contributes to cold-start continuity (not just AGENTS.md)
-2. Phase 8C — Smart Trimming: adaptive token budgeting for re-entry layers
-3. Phase L4+: continue typed-DTO pass on `checkpoint-store.ts`, `agent-work-journal.ts`, `context-cache-runtime.ts`
-4. Fix remaining `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
+2. Phase L4+: continue typed-DTO pass on `checkpoint-store.ts`, `agent-work-journal.ts`, `context-cache-runtime.ts`
+3. Fix remaining `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
 
 ## Critical Context
 - Windows/PowerShell environment: `grep`→`rg`, `wc`→manual count, `&&`/`||`→PowerShell syntax

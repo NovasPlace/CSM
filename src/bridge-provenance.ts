@@ -92,7 +92,14 @@ function compareMemories(left: Memory, right: Memory): number {
   if (rankDelta !== 0) return rankDelta;
   const importanceDelta = right.importance - left.importance;
   if (importanceDelta !== 0) return importanceDelta;
-  return right.createdAt.getTime() - left.createdAt.getTime();
+  const createdDelta = timestamp(right.createdAt) - timestamp(left.createdAt);
+  if (createdDelta !== 0) return createdDelta;
+  return right.id - left.id;
+}
+
+function timestamp(value: unknown): number {
+  const milliseconds = value instanceof Date ? value.getTime() : Date.parse(String(value));
+  return Number.isFinite(milliseconds) ? milliseconds : 0;
 }
 
 function provenanceScore(memory: Memory): number {

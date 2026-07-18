@@ -93,6 +93,78 @@ See `WORK_LEDGER.md` for capture surfaces, status semantics, path containment, a
 
 The supported upgrade window and restore-based rollback procedure are defined in `SCHEMA_SUPPORT_MATRIX.md`. Never delete migration ledger rows or reverse production DDL manually.
 
+## Cold-Start Source Attribution Diagnostic
+
+**Purpose:** prove that CSM injection (onboarding + re-entry blocks) materially contributes to a fresh session's context, not just the static `AGENTS.md` file. This is the observation-window test referenced in `AGENTS.md` → "Next Steps".
+
+### Step 1 — Capture baseline counts
+
+```bash
+$env:PGUSER='postgres'; $env:PGPASSWORD='postgres'
+$env:DATABASE_URL='postgresql://postgres:postgres@localhost:5432/opencode_memory'
+node .tmp_opencode_diag/attribution_breakdown.cjs   # see stats by injection_kind
+```
+
+Record current `event_count` for `onboarding` and `reentry` — these are the baseline for the new cold-start session.
+
+### Step 2 — Launch a fresh opencode session in this repo
+
+From a terminal:
+
+```powershell
+opencode
+```
+
+Then ask anything that requires prior-session context (forces onboarding + re-entry to fire). Good prompts:
+
+- *"what phase is the project in right now?"* — exercises phase-checkpoint + recent-work layers
+- *"what's the current lint baseline?"* — exercises constraints + key-decisions layers
+- *"summarize recent decisions"* — exercises belief-knowledge + advisories layers
+
+Both `injection_kind='onboarding'` and `injection_kind='reentry'` rows are written by `ContextInjectionLogger.logInjection()` from `onboarding-injection-guard.ts:30` and `reentry-injection-guard.ts:46` regardless of the prompt — the prompt only affects what the agent *uses*, not whether telemetry fires.
+
+### Step 3 — Verify new rows landed
+
+```bash
+node .tmp_opencode_diag/attribution_breakdown.cjs
+```
+
+Expect:
+- One new `onboarding` event + one new `reentry` event for the new `session_id`
+- Onboarding block: ~11–12k chars, ~2.9–3.2k tokens, `trim_level='none'`
+- Re-entry block: ~3k chars, ~750 tokens, `trim_level='soft'`, `metadata.budgetTier='short'`
+
+### Step 4 — Read the attribution breakdown
+
+The schema distinguishes CSM vs AGENTS.md via `context_injection_items.source_id` (not `source_kind`). The expected attribution split for a normal session:
+
+**Onboarding block layers:**
+| Layer | `source_id` | Attribution |
+|-------|-------------|-------------|
+| `identity-brief` | `AGENTS.md + defaults` | AGENTS.md |
+| `project-continuity` | `package.json + README + filesystem` | CSM (live scan) |
+| `phase-checkpoint` | `AGENTS.md` | AGENTS.md |
+| `constraints` | `hardwired + AGENTS.md` | mixed |
+| `relevant-memories` | `memory store` | CSM (DB query) |
+| `promoted-beliefs` | `belief_knowledge_store` | CSM |
+| `advisories` | `living-state pipeline` | CSM |
+| `tool-guidance` | `defaults + AGENTS.md` | mixed |
+| `handoff-state` | `sessions + work_journal + chat_messages + memories + .csm/` | CSM |
+| `readiness-summary` | `synthesis of all sections` | CSM |
+
+**Re-entry block layers:** 8 layers (`identity`, `goals`, `work`, `preferences`, `capabilities`, `beliefs`, `recent`, `constraints`) — all `source_id='reentry-layer:*'`, **100% CSM-derived, no AGENTS.md dependency**.
+
+### Step 5 — Confirm the agent actually used CSM context
+
+This is the soft test the schema cannot answer alone — the rows prove injection happened, not that the model cited it. Quick check: in the fresh session, ask the agent *"without reading any files, what phase is the project in?"*. If it cites "Phase 9B / observation window" or the 7-warning lint baseline, that's CSM-derived (not in AGENTS.md verbatim under a section the model would quote cold). If it recites `## Constraints` or `## Key Decisions` bullet-for-bullet, that's AGENTS.md.
+
+### Findings as of 2026-07-16
+
+- **Live DB:** `opencode_memory` (NOT `cross_session_memory` — that one is stale, missing the injection tables)
+- **Baseline claim in `AGENTS.md` is wildly stale:** says "3 events (1 onboarding, 2 reentry)"; actual is **141 events (76 onboarding + 65 reentry) across 30 unique sessions** since 2026-07-13
+- **Wiring works:** every fresh session in this repo produces paired onboarding + re-entry rows with full per-layer provenance
+- **Attribution quality gap:** `source_kind` schema has `'memory' | 'document_section' | 'derived_state'`, but only 1 of 1064 items used `memory` — the `relevant-memories` layer emits `derived_state` with `source_id='memory store'` instead of per-memory items with `source_kind='memory'`. The provenance is recoverable from `source_id` but item-level memory attribution is lost.
+
 ## Common Operations
 
 ### Manual Embedding Backfill
@@ -283,3 +355,29 @@ await hooks['experimental.chat.system.transform']({
   sessionID: 'sqlite-lifecycle-session',
   messages: [{ role: 'user', content: 'inspect the current project' }],
 }, o...
+
+**test/governor-profile-fallback.test.ts** (2026-07-15)
+import assert from 'node:assert/strict';
+import { it } from 'node:test';
+import { getEffectiveGovernorThresholds } from '../src/context-governor.js';
+import { DEFAULT_GOVERNOR_CONFIG, getGovernorProfile } from '../src/context-governor-profiles.js';
+
+it('falls back to balanced thresholds for an unknown runtime profile', () => {
+  const config = { ...DEFAULT_GOVERNOR_CONFIG, profiles: { ...DEFAULT_GOVERNOR_CONFIG.profiles } };
+  const profile = getGovernorProfile(config, 'missing_profile' as never...
+
+**test/memory-extractor-dedup.test.ts** (2026-07-16)
+import { strict as assert } from 'assert';
+import { test } from 'node:test';
+import { MemoryExtractor } from '../src/memory-extractor.js';
+import type { Memory, MemoryManager } from '../src/memory-manager.js';
+import type { Database } from '../src/database.js';
+import type { ExtractorConfig } from '../src/types.js';
+
+const testConfig: ExtractorConfig = {
+  enabled: true,
+  minTurnsBeforeExtract: 1,
+  maxCandidatesPerTurn: 5,
+  confidenceThreshold: 0.5,
+  autoApproveThreshold: 0.8,
+}...

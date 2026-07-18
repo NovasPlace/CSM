@@ -1,6 +1,4 @@
 import type { DatabasePool } from '../types.js';
-import { EMBEDDING_DIMENSIONS } from '../embeddings.js';
-
 const MEMORY_COLUMNS = [
   'project_id TEXT',
   'search_vector TSVECTOR',
@@ -15,7 +13,7 @@ const MEMORY_COLUMNS = [
   'superseded_at TIMESTAMPTZ',
 ] as const;
 
-export async function initializeMemoryTable(pool: DatabasePool): Promise<void> {
+export async function initializeMemoryTable(pool: DatabasePool, dimensions: number): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS memories (
       id BIGSERIAL PRIMARY KEY,
@@ -26,7 +24,7 @@ export async function initializeMemoryTable(pool: DatabasePool): Promise<void> {
           'lesson', 'episodic', 'procedural', 'concept', 'code', 'config', 'error'
       )),
       content TEXT NOT NULL,
-      embedding VECTOR(${EMBEDDING_DIMENSIONS}),
+      embedding VECTOR(${dimensions}),
       search_vector TSVECTOR,
       importance FLOAT DEFAULT 0.5 CHECK (importance BETWEEN 0 AND 1),
       emotion TEXT DEFAULT 'neutral' CHECK (emotion IN (

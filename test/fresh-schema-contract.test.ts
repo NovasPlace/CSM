@@ -6,7 +6,7 @@ import { Database } from '../dist/database.js';
 import { buildOnboardingPacket } from '../dist/agent-onboarding.js';
 import { CausalThreadHydrator } from '../dist/self-continuity-causal-thread.js';
 import { MemoryManager } from '../dist/memory-manager.js';
-import { EmbeddingGenerator, EMBEDDING_DIMENSIONS } from '../dist/embeddings.js';
+import { EmbeddingGenerator } from '../dist/embeddings.js';
 import { StatsWriter } from '../dist/stats-writer.js';
 import type { PluginConfig } from '../dist/types.js';
 
@@ -77,7 +77,8 @@ describe('Phase 19 — fresh schema contract repair', () => {
          AND NOT a.attisdropped`,
     );
 
-    assert.equal(typeResult.rows[0].column_type, `vector(${EMBEDDING_DIMENSIONS})`);
+    const dimensions = new EmbeddingGenerator(config).getExpectedDimensions();
+    assert.equal(typeResult.rows[0].column_type, `vector(${dimensions})`);
 
     await memoryManager.createSession('fresh-schema-session', 'fresh-project');
     const memory = await memoryManager.saveMemory({

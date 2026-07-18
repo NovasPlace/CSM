@@ -1,6 +1,4 @@
 import type { DatabasePool } from '../types.js';
-import { EMBEDDING_DIMENSIONS } from '../embeddings.js';
-
 const MEMORY_INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_memories_session ON memories(session_id)',
   'CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(memory_type)',
@@ -13,7 +11,7 @@ const MEMORY_INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_memories_created_ttl ON memories(created_at)',
 ] as const;
 
-export async function initializeMemoryChunks(pool: DatabasePool): Promise<void> {
+export async function initializeMemoryChunks(pool: DatabasePool, dimensions: number): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS memory_chunks (
       id BIGSERIAL PRIMARY KEY,
@@ -21,7 +19,7 @@ export async function initializeMemoryChunks(pool: DatabasePool): Promise<void> 
       chunk_index INT NOT NULL,
       content TEXT NOT NULL,
       token_count INT NOT NULL,
-      embedding VECTOR(${EMBEDDING_DIMENSIONS}) NOT NULL,
+      embedding VECTOR(${dimensions}) NOT NULL,
       embedding_model TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (memory_id, chunk_index)

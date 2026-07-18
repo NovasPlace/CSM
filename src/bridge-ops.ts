@@ -5,7 +5,6 @@ import type { MemoryManager } from './memory-manager.js';
 import type { PrimingEngine } from './priming-engine.js';
 import { rankMemoriesByProvenance } from './bridge-provenance.js';
 import type { BackfillEmbeddingsResult, ContextBrief, Memory, MemorySaveOptions, MemorySearchOptions, PruneReport } from './types.js';
-
 export interface BridgeDeps {
   database?: Database;
   memoryManager: MemoryManager;
@@ -18,7 +17,6 @@ export interface BridgeContext {
   projectId?: string;
   sessionId?: string;
 }
-
 export interface ContextBriefPayload {
   available: boolean;
   brief: ContextBrief | null;
@@ -47,19 +45,14 @@ export async function searchMemoriesOp(
 ): Promise<{ results: Awaited<ReturnType<MemoryManager['searchMemories']>>; cascaded: Memory[] }> {
   const projectId = input.projectId ?? context.projectId;
   const telemetry = context.sessionId ? { sessionId: context.sessionId, source: 'search' as const } : undefined;
+  const searchMode = input.searchMode ?? (projectId ? 'project' : 'global');
   let results = await deps.memoryManager.searchMemories(
-    { ...input, projectId, searchMode: input.searchMode ?? (projectId ? 'project' : 'global') },
+    { ...input, projectId, searchMode },
     telemetry,
   );
-  if (results.length === 0 && projectId) {
+  if (results.length === 0 && projectId && searchMode === 'project') {
     results = await deps.memoryManager.searchMemories(
       { ...input, projectId, searchMode: 'legacy' },
-      telemetry,
-    );
-  }
-  if (results.length === 0 && projectId) {
-    results = await deps.memoryManager.searchMemories(
-      { ...input, projectId: undefined, searchMode: 'global' },
       telemetry,
     );
   }
@@ -77,19 +70,14 @@ export async function listMemoriesOp(
 ): Promise<Memory[]> {
   const projectId = input.projectId ?? context.projectId;
   const telemetry = context.sessionId ? { sessionId: context.sessionId, source: 'list' as const } : undefined;
+  const searchMode = input.searchMode ?? (projectId ? 'project' : 'global');
   let memories = await deps.memoryManager.listMemories(
-    { ...input, projectId, searchMode: input.searchMode ?? (projectId ? 'project' : 'global') },
+    { ...input, projectId, searchMode },
     telemetry,
   );
-  if (memories.length === 0 && projectId) {
+  if (memories.length === 0 && projectId && searchMode === 'project') {
     memories = await deps.memoryManager.listMemories(
-      { ...input, projectId, searchMode: 'legacy' },
-      telemetry,
-    );
-  }
-  if (memories.length === 0 && projectId) {
-    memories = await deps.memoryManager.listMemories(
-      { ...input, projectId: undefined, searchMode: 'global' },
+      { ...input, projectId: undefined, searchMode: 'legacy' },
       telemetry,
     );
   }

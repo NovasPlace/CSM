@@ -8,6 +8,7 @@ function fakePool(rows: unknown[] = []) {
 
 const fakeEmbeddings = {
   generate: mock.fn((_text: string) => Promise.resolve(new Array(1536).fill(0.1))),
+  getProviderInfo: () => ({ provider: 'hash' as const, model: 'test' }),
 };
 
 function makeBackfill(pool: ReturnType<typeof fakePool>): EmbeddingBackfill {
@@ -89,7 +90,7 @@ describe('EmbeddingBackfill', () => {
     assert.equal(result.attempted, 1);
     assert.equal(result.succeeded, 0);
     assert.equal(result.failed, 1);
-    assert.equal(result.isComplete, true);
+    assert.equal(result.isComplete, false);
   });
 
   it('backfill respects maxTotal limit', async () => {
@@ -102,5 +103,22 @@ describe('EmbeddingBackfill', () => {
     const result = await bf.backfill({ maxTotal: 5, dryRun: true });
     // dryRun returns skipped = totalMissing, not maxTotal
     assert.equal(result.skipped, 100);
+  });
+
+  it('places project scope before ORDER BY and uses keyset pagination', async () => {
+    let call = 0;
+    const pool = {
+      query: mock.fn(() => {
+        call++;
+        if (call === 1) return Promise.resolve({ rows: [{ cnt: 1 }], rowCount: 1 });
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      }),
+    };
+    const bf = makeBackfill(pool as any);
+    await bf.backfill({ projectId: 'alpha', batchDelayMs: 0 });
+    const sql = pool.query.mock.calls[1]?.arguments[0] as string;
+    assert.ok(sql.indexOf('project_id') < sql.indexOf('ORDER BY'));
+    assert.match(sql, /id > \$1/);
+    assert.doesNotMatch(sql, /OFFSET/);
   });
 });

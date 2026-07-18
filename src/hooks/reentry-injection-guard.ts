@@ -38,7 +38,7 @@ export async function injectReentryContext(
   try {
     const projectId = ctx.directory ?? 'unknown';
     const diag = await ctx.reEntryProtocol.diagnose(sessionId, projectId);
-    logDiagnosis(sessionId, diag.layersDropped.length, diag.layersTrimmed.length);
+    logDiagnosis(sessionId, diag.trimLevel);
     const built = await buildWithProvenance(ctx, sessionId, projectId);
     const block = built?.text ?? await ctx.reEntryProtocol.buildBlock(sessionId, projectId);
     if (block) {
@@ -69,9 +69,9 @@ async function buildWithProvenance(
   return candidate.buildBlockWithProvenance?.(sessionId, projectId) ?? null;
 }
 
-function logDiagnosis(sessionId: string, dropped: number, trimmed: number): void {
+function logDiagnosis(sessionId: string, trimLevel: 'none' | 'soft' | 'aggressive'): void {
   getLogger().info('Re-entry block diagnosed', { sessionId });
-  if (dropped > 0 || trimmed > 0) {
+  if (trimLevel !== 'none') {
     getLogger().info('Re-entry budget trimming applied', { sessionId });
   }
 }

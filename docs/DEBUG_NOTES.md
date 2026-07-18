@@ -317,6 +317,320 @@ import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
 import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
 import { getLogger } from '../logg...
 
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/context-compiler.ts** (2026-07-15)
+Detected: ECONNREFUSED, ENOTFOUND, ETIMEDOUT
+Context: /**
+ * Phase 5: Context Compiler — Input Token Governor
+ *
+ * Keeps input under a configurable budget by compressing low-value context
+ * while preserving high-signal information (errors, active files, constraints).
+ *
+ * Architecture: raw messages → classify importance → preserve pinned → com...
+
+**src/embeddings.ts** (2026-07-15)
+Detected: Error:
+Context: // Embedding generation for semantic search
+// Supports OpenAI API, Ollama local API, or hash-based fallback (dev/test)
+
+import { PluginConfig } from './types.js';
+import { getLogger } from './logger.js';
+
+export const EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS) || 1536;
+...
+
+**src/embeddings.ts** (2026-07-15)
+Detected: Error:
+Context: // Embedding generation for semantic search
+// Supports OpenAI API, Ollama local API, or hash-based fallback (dev/test)
+
+import { PluginConfig } from './types.js';
+import { getLogger } from './logger.js';
+
+export const EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS) || 1536;
+...
+
+**src/memory-manager.ts** (2026-07-15)
+Detected: Error:, failed:, race condition
+Context: // Memory Manager - CRUD operations with dual-write pattern
+// Inspired by Agent Atlas memory_bridge.py
+
+import { Database } from './database.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { extractConcepts } from './concept-extractor.js';
+import { buildLinksForMemory } from...
+
+**src/memory-manager.ts** (2026-07-15)
+Detected: Error:, failed:, race condition
+Context: // Memory Manager - CRUD operations with dual-write pattern
+// Inspired by Agent Atlas memory_bridge.py
+
+import { Database } from './database.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { extractConcepts } from './concept-extractor.js';
+import { buildLinksForMemory } from...
+
+**src/memory-manager.ts** (2026-07-15)
+Detected: Error:, failed:, race condition
+Context: // Memory Manager - CRUD operations with dual-write pattern
+// Inspired by Agent Atlas memory_bridge.py
+
+import { Database } from './database.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { extractConcepts } from './concept-extractor.js';
+import { buildLinksForMemory } from...
+
+**src/embedding-backfill.ts** (2026-07-15)
+Detected: failed:, timeout
+Context: import type { Database } from './database.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { getLogger } from './logger.js';
+import { nowFn } from './db/query-dialect.js';
+
+export interface EmbeddingBackfillConfig {
+  /** Memories per batch (default 50) */
+  batchSize?: numbe...
+
+**src/embedding-backfill.ts** (2026-07-15)
+Detected: failed:, timeout
+Context: import type { Database } from './database.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { getLogger } from './logger.js';
+import { nowFn } from './db/query-dialect.js';
+
+export interface EmbeddingBackfillConfig {
+  /** Memories per batch (default 50) */
+  batchSize?: numbe...
+
+**src/embeddings.ts** (2026-07-15)
+Detected: Error:
+Context: // Embedding generation for semantic search
+// Supports OpenAI API, Ollama local API, or hash-based fallback (dev/test)
+
+import { PluginConfig } from './types.js';
+import { getLogger } from './logger.js';
+
+export const EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS) || 1536;
+...
+
+**src/database.ts** (2026-07-15)
+Detected: Error:
+Context: import type {
+  DatabaseDiagnostics,
+  DatabasePool,
+  DatabaseStartupState,
+  PluginConfig,
+} from './types.js';
+import { createDatabasePool } from './db/database-pool.js';
+import { initializeAllSchemas } from './schema/index.js';
+import { getLogger } from './logger.js';
+import type { Quer...
+
+**src/database.ts** (2026-07-15)
+Detected: Error:
+Context: import type {
+  DatabaseDiagnostics,
+  DatabasePool,
+  DatabaseStartupState,
+  PluginConfig,
+} from './types.js';
+import { createDatabasePool } from './db/database-pool.js';
+import { initializeAllSchemas } from './schema/index.js';
+import { getLogger } from './logger.js';
+import type { Quer...
+
+**src/database.ts** (2026-07-15)
+Detected: Error:
+Context: import type {
+  DatabaseDiagnostics,
+  DatabasePool,
+  DatabaseStartupState,
+  PluginConfig,
+} from './types.js';
+import { createDatabasePool } from './db/database-pool.js';
+import { initializeAllSchemas } from './schema/index.js';
+import { ensureEmbeddingColumnContract } from './schema/memo...
+
+**src/database.ts** (2026-07-15)
+Detected: Error:
+Context: import type {
+  DatabaseDiagnostics,
+  DatabasePool,
+  DatabaseStartupState,
+  PluginConfig,
+} from './types.js';
+import { createDatabasePool } from './db/database-pool.js';
+import { initializeAllSchemas } from './schema/index.js';
+import { ensureEmbeddingColumnContract } from './schema/memo...
+
+**src/hooks/tool-hooks.ts** (2026-07-16)
+Detected: Error:
+Context: import {
+  memorySaveTool, memorySearchTool, memoryListTool, memoryDeleteTool,
+  memoryContextTool, memoryLessonTool, memoryTranscriptTool,
+  memoryDistillTool, memoryDistilledViewTool, memoryCompactTool,
+  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, conti...
+
+**src/hooks/tool-hooks.ts** (2026-07-16)
+Detected: Error:
+Context: import {
+  memorySaveTool, memorySearchTool, memoryListTool, memoryDeleteTool,
+  memoryContextTool, memoryLessonTool, memoryTranscriptTool,
+  memoryDistillTool, memoryDistilledViewTool, memoryCompactTool,
+  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, conti...
+
+**src/re-entry-protocol.ts** (2026-07-16)
+Detected: TypeError
+Context: import type { DatabasePool, SelfModelCapability, BeliefEntry } from './types.js';
+import type { MemoryManager } from './memory-manager.js';
+import type { SelfModelUpdater } from './self-model-updater.js';
+import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import type...
+
+**src/re-entry-protocol.ts** (2026-07-16)
+Detected: TypeError
+Context: import type { DatabasePool, SelfModelCapability, BeliefEntry } from './types.js';
+import type { MemoryManager } from './memory-manager.js';
+import type { SelfModelUpdater } from './self-model-updater.js';
+import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import type...
+
+**src/memory-extractor.ts** (2026-07-16)
+Detected: Error:, failure:
+Context: // Memory Extractor - Auto-extract salient facts from conversation turns
+// Inspired by Agent Atlas memory_bridge.py
+
+import { Database } from './database.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { MemoryManager } from './memory-manager.js';
+import { getLogger } from '...
+
+**test/memory-extractor-dedup.test.ts** (2026-07-16)
+Detected: Error:
+Context: import { strict as assert } from 'assert';
+import { test } from 'node:test';
+import { MemoryExtractor } from '../src/memory-extractor.js';
+import type { Memory, MemoryManager } from '../src/memory-manager.js';
+import type { Database } from '../src/database.js';
+import type { ExtractorConfig } f...
+
+**src/re-entry-protocol.ts** (2026-07-16)
+Detected: TypeError
+Context: import type { DatabasePool, SelfModelCapability, BeliefEntry } from './types.js';
+import type { MemoryManager } from './memory-manager.js';
+import type { SelfModelUpdater } from './self-model-updater.js';
+import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import type...
+
 ## Recovery Procedures
 
 ### Full Reset (Nuclear)

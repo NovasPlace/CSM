@@ -1,11 +1,13 @@
 import type { PluginConfig } from './types.js';
+import type { RuntimePluginConfig } from './runtime-plugin-config.js';
 import { validateDatabaseRuntimeConfig } from './database-runtime-config.js';
 import { getEnvBoolean } from './config-env.js';
 import { validateDatabaseTarget } from './config-provider.js';
 import { allConfigRanges, type ConfigRange } from './config-validation-ranges.js';
 
-export function validateConfig(config: PluginConfig): void {
+export function validateConfig(config: RuntimePluginConfig): void {
   validateDatabaseTarget(config);
+  validateEmbeddingDimensions(config.embeddingDimensions);
   if (config.databaseRuntime) validateDatabaseRuntimeConfig(config.databaseRuntime);
   validateProductionRequirement(config);
   validateRanges(allConfigRanges(config));
@@ -16,6 +18,13 @@ export function validateConfig(config: PluginConfig): void {
     throw new Error('extractor.confidenceThreshold must not exceed autoApproveThreshold');
   }
   validateCompilerModes(config);
+}
+
+function validateEmbeddingDimensions(dimensions: number | undefined): void {
+  if (dimensions === undefined) return;
+  if (!Number.isInteger(dimensions) || dimensions <= 0) {
+    throw new Error('embeddingDimensions must be a positive integer');
+  }
 }
 
 function validateProductionRequirement(config: PluginConfig): void {

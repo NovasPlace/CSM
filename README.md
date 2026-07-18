@@ -305,6 +305,7 @@ Core environment variables:
 | `CSM_DATABASE_URL` | `postgres://localhost/csm` | PostgreSQL connection string |
 | `CSM_SQLITE_PATH` | — | SQLite database path |
 | `CSM_EMBEDDING_PROVIDER` | `ollama` | Embedding provider |
+| `CSM_EMBEDDING_DIMENSIONS` | `768` for Ollama, `1536` for OpenAI | Expected vector dimension; changing it requires a schema migration |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama endpoint |
 | `OPENAI_API_KEY` | — | Required when the OpenAI embedding provider is selected |
 | `CSM_REENTRY_PREVIEW_ONLY` | `false` | Preview re-entry instead of injecting it |

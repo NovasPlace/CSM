@@ -26,16 +26,19 @@ import { initializeSessionSchema } from './session-schema.js';
 import { initializeWorkLedgerSchema } from '../work-ledger-schema.js';
 import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
 import { initializeAgentBookSchema } from './agentbook-schema.js';
+import { migrateEmbeddingDimensions } from './embedding-dimension-migration.js';
 
 export function buildPostgresMigrations(
-  database: Database,
-  pool: DatabasePool,
+  database: Database, pool: DatabasePool, dimensions = 1_536,
 ): SchemaMigration[] {
   const graphDatabase = { dialect: database.dialect, getPool: () => pool };
   return [
     migration('20260709-001-vector-extension', 'pgvector extension', vectorExtension(pool), ['CREATE EXTENSION IF NOT EXISTS vector']),
     migration('20260709-002-session', 'sessions, events, and session contexts', () => initializeSessionSchema(pool)),
-    migration('20260709-003-memory', 'memories, chunks, merges, search, and archive metadata', () => initializeMemorySchema(pool)),
+    withAcceptedLegacy(
+      migration('20260709-003-memory', 'memories, chunks, merges, search, and archive metadata', () => initializeMemorySchema(pool, dimensions)),
+      ['6f13c75b1355c9fbfae316d894ac6e211dfaaa7f42ace36d2c01d5dd41b924e4'],
+    ),
     migration('20260709-004-core', 'distillation, compaction, candidates, projects, and quality', () => initializeCoreSchema(pool)),
     migration('20260709-005-project-isolation', 'project ids and project-scoped indexes', () => migrateProjectIsolation(pool)),
     migration('20260709-006-checkpoint', 'checkpoint persistence', () => initializeCheckpointSchema(pool)),
@@ -61,6 +64,8 @@ export function buildPostgresMigrations(
     ),
     migrationV2('20260712-024-context-injection-telemetry', 'context injection telemetry events and items', () => initializeContextInjectionTelemetrySchema(pool)),
     migrationV2('20260713-025-agentbook', 'agentbook operational ledger, summaries, current state, and rules', () => initializeAgentBookSchema(pool)),
+    migrationV2('20260718-026-postgres-embedding-dimension', 'explicit provider embedding dimension transition', () => migrateEmbeddingDimensions(pool, dimensions)),
+    migrationV2('20260718-027-postgres-embedding-dimension-repair', 'repair legacy embedding transition constraints and values', () => migrateEmbeddingDimensions(pool, dimensions)),
   ];
 }
 

@@ -1,13 +1,13 @@
-import type { PluginConfig } from './types.js';
+import type { RuntimePluginConfig } from './runtime-plugin-config.js';
 
 type ConfigOverrides = Record<string, unknown>;
 
 export function mergePluginConfig(
-  base: PluginConfig,
+  base: RuntimePluginConfig,
   overrides?: ConfigOverrides,
-): PluginConfig {
+): RuntimePluginConfig {
   if (!overrides) return base;
-  return mergeRecords(base, overrides) as unknown as PluginConfig;
+  return mergeRecords(base, overrides) as unknown as RuntimePluginConfig;
 }
 
 function mergeRecords(base: object, overrides: ConfigOverrides): Record<string, unknown> {
@@ -29,7 +29,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Keeps the SQLite MVP on its supported core path instead of starting
  * PostgreSQL-only services that depend on tables SQLite does not create.
  */
-export function normalizeProviderRuntimeConfig(config: PluginConfig): PluginConfig {
+export function normalizeProviderRuntimeConfig(config: RuntimePluginConfig): RuntimePluginConfig {
   if (config.databaseProvider !== 'sqlite') return config;
 
   return {

@@ -48,13 +48,24 @@ function fakeDatabase() {
     );
   });
 
+  it('accepts the faulty migration 026 checksum so migration 027 can repair it', () => {
+    const { database, pool } = fakeDatabase();
+    const migration = buildSource(database as never, pool)
+      .find((entry) => entry.id === '20260718-026-postgres-embedding-dimension');
+    assert.ok(migration);
+    assert.ok(migration.acceptedLegacyChecksums?.includes(
+      '0a8c85e1bb86e13822afe7c1b906834ca28807f1c0732b422821071d71cf17b5',
+    ));
+  });
+
   it('matches the committed checksum for equivalent LF and CRLF text', () => {
     const artifact = MIGRATION_ARTIFACTS['20260709-003-memory'][0];
     const canonicalLf = readFileSync(artifact.path).toString('utf8').replace(/\r\n/g, '\n');
     const lf = Buffer.from(canonicalLf, 'utf8');
     const crlf = Buffer.from(canonicalLf.replace(/\n/g, '\r\n'), 'utf8');
-    assert.equal(hashArtifactContent(artifact.path, lf), artifact.sha256);
-    assert.equal(hashArtifactContent(artifact.path, crlf), artifact.sha256);
+    const currentHash = artifact.sourceSha256 ?? artifact.sha256;
+    assert.equal(hashArtifactContent(artifact.path, lf), currentHash);
+    assert.equal(hashArtifactContent(artifact.path, crlf), currentHash);
   });
 
   it('canonicalizes recognized extensionless text dotfiles', () => {

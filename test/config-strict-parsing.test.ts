@@ -67,6 +67,19 @@ it('rejects invalid startup booleans, numbers, and provider prerequisites', asyn
   await assert.rejects(importConfig({ CSM_TARGET_CONTEXT_CAP: '50000tokens' }), /finite number/);
   await assert.rejects(importConfig({ CSM_EMBEDDING_PROVIDER: 'openai', OPENAI_API_KEY: undefined }),
     /OPENAI_API_KEY is required/);
+  await assert.rejects(importConfig({ CSM_EMBEDDING_DIMENSIONS: '0' }),
+    /CSM_EMBEDDING_DIMENSIONS must be greater than zero/);
+});
+
+it('uses provider-specific embedding dimensions unless explicitly configured', async () => {
+  const ollama = await importConfig({ CSM_EMBEDDING_PROVIDER: 'ollama', CSM_EMBEDDING_DIMENSIONS: undefined });
+  assert.equal(ollama.DEFAULT_CONFIG.embeddingDimensions, 768);
+  const openai = await importConfig({
+    CSM_EMBEDDING_PROVIDER: 'openai', OPENAI_API_KEY: 'test-key', CSM_EMBEDDING_DIMENSIONS: undefined,
+  });
+  assert.equal(openai.DEFAULT_CONFIG.embeddingDimensions, 1536);
+  const explicit = await importConfig({ CSM_EMBEDDING_DIMENSIONS: '1024' });
+  assert.equal(explicit.DEFAULT_CONFIG.embeddingDimensions, 1024);
 });
 
 it('requires an explicit PostgreSQL URL only in strict PostgreSQL mode', async () => {

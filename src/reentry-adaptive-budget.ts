@@ -1,5 +1,5 @@
 import type { DatabasePool } from './types.js';
-import type { ReEntryConfig } from './re-entry-protocol.js';
+import type { ReEntryConfig } from './reentry-types.js';
 
 export interface ReEntryBudgetDecision {
   baseMaxChars: number;

@@ -7,14 +7,14 @@ export interface MigrationArtifact {
 export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArtifact[]>> = {
   '20260709-002-session': [artifact('src/schema/session-schema.ts', '4c69e0317cd51efb83a280afcdde01ccb72b8e3722a4f476ef050c4d265a57f3')],
   '20260709-003-memory': [
-    artifact('src/schema/memory-schema.ts', 'a16b912109ece64d72c13cb7a279ae2991dd6640afbbb3bd523876b33d0b3058'),
-    artifact('src/schema/memory-embedding-contract.ts', 'bfced3721f8f310ee56c7db072dc2743716135f86372d20831b0f5b40364372c'),
-    artifact('src/schema/memory-table-schema.ts', '82e35d9381659c3040b12a4c1cc5aac3cda74c512725cd832c6f7b03c82a66bd'),
-    artifact('src/schema/memory-support-schema.ts', '9a650343461f04a547f79a78bc3aaab9b323154494d22582b07f512c8173cf3d'),
+    artifact('src/schema/memory-schema.ts', 'a16b912109ece64d72c13cb7a279ae2991dd6640afbbb3bd523876b33d0b3058', 'e1599a9374ed713d2a41d16692e6bb3669b6e5cfced78c33d5453f48b88a8df9'),
+    artifact('src/schema/memory-embedding-contract.ts', 'bfced3721f8f310ee56c7db072dc2743716135f86372d20831b0f5b40364372c', 'b67f8cf2602c63e37655b3e965aae699c122d8f52e3c2da7aaad7ef4a1561e35'),
+    artifact('src/schema/memory-table-schema.ts', '82e35d9381659c3040b12a4c1cc5aac3cda74c512725cd832c6f7b03c82a66bd', '7eb6381e6fbf5964e5f3809990e6863ae962d2d7b5c515a4fe5158f99d45f6ea'),
+    artifact('src/schema/memory-support-schema.ts', '9a650343461f04a547f79a78bc3aaab9b323154494d22582b07f512c8173cf3d', '18ace11bbb5f8c3d9c81c145c3bd2450fd74eb7f1aed6d06eaf6729e083116f1'),
     artifact(
       'src/embeddings.ts',
       'cc668cc041bc38510dbd72970ae697b11bae3470186a3da94781f4c9bc7f936b',
-      '161c52981bb6d865530953c38e7f5cc4aa3c0c31c290620cb6f17a4c1a6e943d',
+      '3ccf20fbe761ba020ef74913eee0a749e60719c516c9af23a0595e23721af93c',
     ),
   ],
   '20260709-004-core': [artifact('src/schema/core-schema.ts', 'f7ac5f2b0aa8892cc4b8c168a0a3e4d1e60fbc42afff917a4b0c9540aaeee233', '2dade867455651b8157909b48df246af8c777377f5d2c3f7a2feef474a2c9b5b')],
@@ -69,6 +69,16 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
   ],
   '20260713-025-agentbook': [
     artifact('src/schema/agentbook-schema.ts', '09fa9b9c1545cc358bd06e5356f49b7baab518fa49e0f107fa361c4877a064e3'),
+  ],
+  '20260718-026-postgres-embedding-dimension': [
+    artifact(
+      'src/schema/embedding-dimension-migration.ts',
+      '33124f555b7eb8b2893529f857e13f6f155dd211497aed9b3b129824c060ce58',
+      '420c4c55db208592c769af2bbe5ca06bc3446854c2bc9c33f8d6cb4a88e2d143',
+    ),
+  ],
+  '20260718-027-postgres-embedding-dimension-repair': [
+    artifact('src/schema/embedding-dimension-migration.ts', '420c4c55db208592c769af2bbe5ca06bc3446854c2bc9c33f8d6cb4a88e2d143'),
   ],
   '20260713-026-sqlite-agentbook': [
     artifact('src/schema/agentbook-schema.ts', '09fa9b9c1545cc358bd06e5356f49b7baab518fa49e0f107fa361c4877a064e3'),

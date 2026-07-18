@@ -341,6 +341,670 @@ interface TransformToolState {
   status: string;
   in...
 
+**src/context-governor.ts** - 2026-07-15
+import { compileContext } from './context-compiler.js';
+import { DEFAULT_GOVERNOR_CONFIG, getGovernorProfile } from './context-governor-profiles.js';
+import { measureGovernorMetrics } from './context-governor-monitor.js';
+import { optimizeGovernorContext } from './context-governor-optimizer.js';
+import {
+  buildCheckpointDistilledState,
+  buildCheckpointRefSummary,
+} from './context-governor-checkpoint.js';
+import { estimateSlopeGrowth } from './context-governor-slope.js';
+import { getL...
+
+**src/context-governor.ts** - 2026-07-15
+import { compileContext } from './context-compiler.js';
+import { DEFAULT_GOVERNOR_CONFIG, getGovernorProfile } from './context-governor-profiles.js';
+import { measureGovernorMetrics } from './context-governor-monitor.js';
+import { optimizeGovernorContext } from './context-governor-optimizer.js';
+import {
+  buildCheckpointDistilledState,
+  buildCheckpointRefSummary,
+} from './context-governor-checkpoint.js';
+import { estimateSlopeGrowth } from './context-governor-slope.js';
+import { getL...
+
+**src/belief-promotion.ts** - 2026-07-15
+import type { DatabasePool, MemoryType, BeliefPromotionConfig } from './types.js';
+import { CAPABILITY_PROVENANCE_TAG, canonicalCapabilityKey } from './types.js';
+import { dialectFromPool, jsonExtractText, nowFn, type QueryDialect } from './db/query-dialect.js';
+import { getLogger } from './logger.js';
+import { BELIEF_CANDIDATE_TYPES, type BeliefCandidateType } from './candidate-schema.js';
+import type { MemoryManager } from './memory-manager.js';
+
+export interface PromotionConfig {
+  dr...
+
+**test/belief-promotion.test.ts** - 2026-07-15
+import { describe, it, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import pg from 'pg';
+import type { BeliefPromotionConfig, MemorySaveOptions, Memory } from '../src/types.js';
+
+const TEST_DB_URL = process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
+
+const testPromotionConfig: BeliefPromotionConfig = {
+  enabled: true,
+  dryRunByDefault: true,
+  minConfidenc...
+
+**src/wiki-note-renderer.ts** - 2026-07-15
+/**
+ * Pure renderers for Obsidian wiki export.
+ *
+ * All functions are pure: they take data and return strings. No file I/O.
+ * This makes them easy to unit-test against fixtures.
+ */
+
+import type { Memory, MemoryType } from './types.js';
+import { renderFrontmatter } from './wiki-yaml-frontmatter.js';
+import { memoryFilename, memoryWikilink, entityFilename } from './wiki-slug.js';
+
+// --- Types used by renderers ---
+
+export interface ExportedLink {
+  targetMemoryId: number;
+  linkType: string;
+...
+
+**src/wiki-export.ts** - 2026-07-15
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-export-tool.ts** - 2026-07-16
+import { tool } from '@opencode-ai/plugin/tool';
+import type { Database } from './database.js';
+import { exportWiki } from './wiki-export.js';
+
+export function wikiExportTool(database: Database) {
+  return tool({
+    description:
+      'Export CSM memories to an Obsidian-style wiki with [[wikilinks]], frontmatter, and entity index. ' +
+      'Curated mode (default) exports lessons, decisions, promoted knowledge, and high-importance memories. ' +
+      'Full mode exports everything to a separate ...
+
+**src/hooks/tool-hooks.ts** - 2026-07-16
+import {
+  memorySaveTool, memorySearchTool, memoryListTool, memoryDeleteTool,
+  memoryContextTool, memoryLessonTool, memoryTranscriptTool,
+  memoryDistillTool, memoryDistilledViewTool, memoryCompactTool,
+  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool, reentryPreviewTool,
+} from '../tools.js';
+import { memoryBackfillEmbeddingsTool, memoryDedupDetectTool, memoryMergeDuplicatesTool, memoryCandidateGenerateTool, memoryCandidateReport...
+
+**src/hooks/tool-hooks.ts** - 2026-07-16
+import {
+  memorySaveTool, memorySearchTool, memoryListTool, memoryDeleteTool,
+  memoryContextTool, memoryLessonTool, memoryTranscriptTool,
+  memoryDistillTool, memoryDistilledViewTool, memoryCompactTool,
+  runtimeStatusTool, compactionAuditTool, recallQualityReportTool, memoryRelatedTool, continuityReportTool, reentryPreviewTool,
+} from '../tools.js';
+import { memoryBackfillEmbeddingsTool, memoryDedupDetectTool, memoryMergeDuplicatesTool, memoryCandidateGenerateTool, memoryCandidateReport...
+
+**src/wiki-note-renderer.ts** - 2026-07-16
+/**
+ * Pure renderers for Obsidian wiki export.
+ *
+ * All functions are pure: they take data and return strings. No file I/O.
+ * This makes them easy to unit-test against fixtures.
+ */
+
+import type { Memory, MemoryType } from './types.js';
+import { renderFrontmatter } from './wiki-yaml-frontmatter.js';
+import { memoryFilename, memoryWikilink, entityFilename } from './wiki-slug.js';
+
+// --- Types used by renderers ---
+
+export interface ExportedLink {
+  targetMemoryId: number;
+  linkType: string;
+...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**test/wiki-export.test.ts** - 2026-07-16
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { renderFrontmatter } from '../dist/wiki-yaml-frontmatter.js';
+import { slugify, entityFilename, memoryFilename, memoryWikilink } from '../dist/wiki-slug.js';
+import {
+  smartTitle,
+  renderMemoryNote,
+  renderEntityNote,
+  renderIndexPage,
+  renderLogEntry,
+  categoryForMemory,
+  type ExportedLink,
+  type ExportedEntity,
+} from '../dist/wiki-note-renderer.js';
+
+// ==========================================...
+
+**test/wiki-export.test.ts** - 2026-07-16
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { renderFrontmatter } from '../dist/wiki-yaml-frontmatter.js';
+import { slugify, entityFilename, memoryFilename, memoryWikilink } from '../dist/wiki-slug.js';
+import {
+  smartTitle,
+  renderMemoryNote,
+  renderEntityNote,
+  renderIndexPage,
+  renderLogEntry,
+  categoryForMemory,
+  type ExportedLink,
+  type ExportedEntity,
+} from '../dist/wiki-note-renderer.js';
+
+// ==========================================...
+
+**test/wiki-export.test.ts** - 2026-07-16
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { renderFrontmatter } from '../dist/wiki-yaml-frontmatter.js';
+import { slugify, entityFilename, memoryFilename, memoryWikilink } from '../dist/wiki-slug.js';
+import {
+  smartTitle,
+  renderMemoryNote,
+  renderEntityNote,
+  renderIndexPage,
+  renderLogEntry,
+  categoryForMemory,
+  type ExportedLink,
+  type ExportedEntity,
+} from '../dist/wiki-note-renderer.js';
+
+// ==========================================...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-note-renderer.ts** - 2026-07-16
+/**
+ * Pure renderers for Obsidian wiki export.
+ *
+ * All functions are pure: they take data and return strings. No file I/O.
+ * This makes them easy to unit-test against fixtures.
+ */
+
+import type { Memory, MemoryType } from './types.js';
+import { renderFrontmatter } from './wiki-yaml-frontmatter.js';
+import { memoryFilename, memoryWikilink } from './wiki-slug.js';
+
+// --- Types used by renderers ---
+
+export interface ExportedLink {
+  targetMemoryId: number;
+  linkType: string;
+  strength: numb...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-note-renderer.ts** - 2026-07-16
+/**
+ * Pure renderers for Obsidian wiki export.
+ *
+ * All functions are pure: they take data and return strings. No file I/O.
+ * This makes them easy to unit-test against fixtures.
+ */
+
+import type { Memory, MemoryType } from './types.js';
+import { renderFrontmatter } from './wiki-yaml-frontmatter.js';
+import { memoryFilename, memoryWikilink } from './wiki-slug.js';
+
+// --- Types used by renderers ---
+
+export interface ExportedLink {
+  targetMemoryId: number;
+  linkType: string;
+  strength: numb...
+
+**src/wiki-note-renderer.ts** - 2026-07-16
+/**
+ * Pure renderers for Obsidian wiki export.
+ *
+ * All functions are pure: they take data and return strings. No file I/O.
+ * This makes them easy to unit-test against fixtures.
+ */
+
+import type { Memory, MemoryType } from './types.js';
+import { renderFrontmatter } from './wiki-yaml-frontmatter.js';
+import { memoryFilename, memoryWikilink } from './wiki-slug.js';
+
+// --- Types used by renderers ---
+
+export interface ExportedLink {
+  targetMemoryId: number;
+  linkType: string;
+  strength: numb...
+
+**src/wiki-note-renderer.ts** - 2026-07-16
+/**
+ * Pure renderers for Obsidian wiki export.
+ *
+ * All functions are pure: they take data and return strings. No file I/O.
+ * This makes them easy to unit-test against fixtures.
+ */
+
+import type { Memory, MemoryType } from './types.js';
+import { renderFrontmatter } from './wiki-yaml-frontmatter.js';
+import { memoryFilename, memoryWikilink, entityFilename } from './wiki-slug.js';
+
+// --- Types used by renderers ---
+
+export interface ExportedLink {
+  targetMemoryId: number;
+  linkType: string;
+...
+
+**src/wiki-note-renderer.ts** - 2026-07-16
+/**
+ * Pure renderers for Obsidian wiki export.
+ *
+ * All functions are pure: they take data and return strings. No file I/O.
+ * This makes them easy to unit-test against fixtures.
+ */
+
+import type { Memory, MemoryType } from './types.js';
+import { renderFrontmatter } from './wiki-yaml-frontmatter.js';
+import { memoryFilename, memoryWikilink, entityFilename } from './wiki-slug.js';
+
+// --- Types used by renderers ---
+
+export interface ExportedLink {
+  targetMemoryId: number;
+  linkType: string;
+...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**src/wiki-export.ts** - 2026-07-16
+/**
+ * CSM → Obsidian wiki export engine.
+ *
+ * Core export pipeline:
+ *  1. Single read transaction for consistent snapshot
+ *  2. Memory selection (curated / full mode)
+ *  3. One-hop linked inclusion (not recursive)
+ *  4. Entity index from extracted concepts of included memories
+ *  5. Note rendering via pure renderers
+ *  6. Manifest-based incremental detection
+ *  7. Atomic writes (temp + rename)
+ *  8. Pruning of manifest-owned files no longer eligible
+ */
+
+import { createHash } from 'nod...
+
+**test/belief-promotion.test.ts** - 2026-07-16
+import { describe, it, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import pg from 'pg';
+import type { BeliefPromotionConfig, MemorySaveOptions, Memory } from '../src/types.js';
+
+const TEST_DB_URL = process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
+
+const testPromotionConfig: BeliefPromotionConfig = {
+  enabled: true,
+  dryRunByDefault: true,
+  minConfidenc...
+
+**src/recall-quality-tool.ts** - 2026-07-16
+/**
+ * Phase 6B: Recall Quality Audit Tool
+ * Phase 6D: Advisory scoring + recommendations layer
+ *
+ * Read-only audit surface for measuring recall quality.
+ * Report-first approach with human-readable text output.
+ *
+ * PG-specific SQL (FILTER, interval, ARRAY_AGG). SQLite degrades to advisory "sparse_data".
+ */
+
+import type { DatabasePool } from './types.js';
+import { dialectFromPool } from './db/query-dialect.js';
+
+// ==============================================================...
+
+**src/recall-quality-tool.ts** - 2026-07-16
+/**
+ * Phase 6B: Recall Quality Audit Tool
+ * Phase 6D: Advisory scoring + recommendations layer
+ *
+ * Read-only audit surface for measuring recall quality.
+ * Report-first approach with human-readable text output.
+ *
+ * PG-specific SQL (FILTER, interval, ARRAY_AGG). SQLite degrades to advisory "sparse_data".
+ */
+
+import type { DatabasePool } from './types.js';
+import { dialectFromPool } from './db/query-dialect.js';
+
+// ==============================================================...
+
+**src/recall-quality-tool.ts** - 2026-07-16
+/**
+ * Phase 6B: Recall Quality Audit Tool
+ * Phase 6D: Advisory scoring + recommendations layer
+ *
+ * Read-only audit surface for measuring recall quality.
+ * Report-first approach with human-readable text output.
+ *
+ * PG-specific SQL (FILTER, interval, ARRAY_AGG). SQLite degrades to advisory "sparse_data".
+ */
+
+import type { DatabasePool } from './types.js';
+import { dialectFromPool } from './db/query-dialect.js';
+
+// ==============================================================...
+
+**src/re-entry-protocol.ts** - 2026-07-16
+import type { DatabasePool, SelfModelCapability, BeliefEntry } from './types.js';
+import type { MemoryManager } from './memory-manager.js';
+import type { SelfModelUpdater } from './self-model-updater.js';
+import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import type { AgentWorkJournal } from './agent-work-journal.js';
+import {
+  type BuiltContextInjection,
+} from './context-injection-contract.js';
+import { buildReentryProvenance } from './reentry-injection-prove...
+
+**src/re-entry-protocol.ts** - 2026-07-16
+import type { DatabasePool, SelfModelCapability, BeliefEntry } from './types.js';
+import type { MemoryManager } from './memory-manager.js';
+import type { SelfModelUpdater } from './self-model-updater.js';
+import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import type { AgentWorkJournal } from './agent-work-journal.js';
+import {
+  type BuiltContextInjection,
+} from './context-injection-contract.js';
+import { buildReentryProvenance } from './reentry-injection-prove...
+
+**src/memory-extractor.ts** - 2026-07-16
+// Memory Extractor - Auto-extract salient facts from conversation turns
+// Inspired by Agent Atlas memory_bridge.py
+
+import { Database } from './database.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { MemoryManager } from './memory-manager.js';
+import { getLogger } from './logger.js';
+import { nowFn, jsonExtractText } from './db/query-dialect.js';
+import {
+  MemoryType,
+  MemoryEmotion,
+  MemoryCandidate,
+  MemoryCandidateStatus,
+  MemoryApproval,
+  ExtractorC...
+
+**test/phase-8c-reentry-smart-trimming.test.ts** - 2026-07-16
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  applyLayerBudget,
+  estimateTokens,
+  DEFAULT_REENTRY_CONFIG,
+  type ReEntryLayerResult,
+  type ReEntryConfig,
+  type TrimReason,
+} from '../src/re-entry-protocol.js';
+import { deriveAdaptiveReentryBudget } from '../src/reentry-adaptive-budget.js';
+
+function makeLayer(
+  name: string,
+  text: string,
+  overrides: Partial<ReEntryLayerResult> = {},
+): ReEntryLayerResult {
+  return {
+    nam...
+
+**test/phase-8c-reentry-smart-trimming.test.ts** - 2026-07-16
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  applyLayerBudget,
+  estimateTokens,
+  DEFAULT_REENTRY_CONFIG,
+  type ReEntryLayerResult,
+  type ReEntryConfig,
+  type TrimReason,
+} from '../src/re-entry-protocol.js';
+import { deriveAdaptiveReentryBudget } from '../src/reentry-adaptive-budget.js';
+
+function makeLayer(
+  name: string,
+  text: string,
+  overrides: Partial<ReEntryLayerResult> = {},
+): ReEntryLayerResult {
+  return {
+    nam...
+
+**test/phase-8c-reentry-smart-trimming.test.ts** - 2026-07-16
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  applyLayerBudget,
+  estimateTokens,
+  DEFAULT_REENTRY_CONFIG,
+  type ReEntryLayerResult,
+  type ReEntryConfig,
+  type TrimReason,
+} from '../src/re-entry-protocol.js';
+import { deriveAdaptiveReentryBudget } from '../src/reentry-adaptive-budget.js';
+
+function makeLayer(
+  name: string,
+  text: string,
+  overrides: Partial<ReEntryLayerResult> = {},
+): ReEntryLayerResult {
+  return {
+    nam...
+
+**src/re-entry-protocol.ts** - 2026-07-16
+import type { DatabasePool, SelfModelCapability, BeliefEntry } from './types.js';
+import type { MemoryManager } from './memory-manager.js';
+import type { SelfModelUpdater } from './self-model-updater.js';
+import type { BeliefKnowledgeConsolidator } from './belief-knowledge-store.js';
+import type { AgentWorkJournal } from './agent-work-journal.js';
+import {
+  type BuiltContextInjection,
+} from './context-injection-contract.js';
+import { buildReentryProvenance } from './reentry-injection-prove...
+
+**test/phase-8c-reentry-smart-trimming.test.ts** - 2026-07-16
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  applyLayerBudget,
+  estimateTokens,
+  DEFAULT_REENTRY_CONFIG,
+  type ReEntryLayerResult,
+  type ReEntryConfig,
+  type TrimReason,
+} from '../src/re-entry-protocol.js';
+import { deriveAdaptiveReentryBudget } from '../src/reentry-adaptive-budget.js';
+
+function makeLayer(
+  name: string,
+  text: string,
+  overrides: Partial<ReEntryLayerResult> = {},
+): ReEntryLayerResult {
+  return {
+    nam...
+
 ### 1. PostgreSQL over SQLite (External DB)
 - **Decision**: Use PostgreSQL as primary memory store
 - **Why**: Survives OpenCode reinstalls; built-in SQLite at `~/.config/opencode/` gets wiped

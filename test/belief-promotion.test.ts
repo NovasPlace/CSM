@@ -387,6 +387,154 @@ describe('BeliefPromotionEngine', () => {
     await cleanup(pool, [packetId], [candidateId]);
   });
 
+  it('skip_dedup_match marks candidate applied (not left pending forever)', async () => {
+    // Candidate crosses all thresholds but matches an existing memory's dedup_key.
+    // Re-evaluation would never produce a different result, so the candidate
+    // should be marked applied in the queue to stop shadowing pending candidates.
+    // (Closure Criterion 6: structural dedup_key idempotency.)
+    const packetId1 = await insertTestPacket(pool, { session_id: 'dedup-sess-1' });
+    const packetId2 = await insertTestPacket(pool, { session_id: 'dedup-sess-2' });
+    const dedupKey = `dedup-applied-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    // First: insert a memory with this dedup_key so the candidate will match it
+    await pool.query(
+      `INSERT INTO memories (memory_type, content, importance, confidence, source, tags, metadata, session_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+      [
+        'preference',
+        'Existing memory with matching dedup_key',
+        0.6,
+        0.8,
+        'manual',
+        ['test-fixture'],
+        JSON.stringify({ promotion_source: 'manual', dedup_key: dedupKey }),
+      ],
+    );
+
+    const candidateId = await insertTestCandidate(pool, {
+      confidence: 0.9,
+      reinforcement_count: 5,
+      source_packet_ids: [packetId1, packetId2],
+      dedup_key: dedupKey,
+      reason: `Dedup-applied test ${Date.now()}`,
+    });
+
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
+
+    // Live (non-dry-run) promotion: candidate should skip due to dedup match
+    const report = await engine.promote({
+      dryRun: false,
+      minConfidence: 0.7,
+      minReinforcement: 3,
+      minEvidenceRefs: 2,
+      minSessions: 1,
+    });
+
+    const decision = report.decisions.find(d => d.candidateId === candidateId);
+    assert.ok(decision, 'decision should exist');
+    assert.equal(decision.action, 'skip_dedup_match', 'candidate should match existing memory');
+    assert.ok(decision.dedupMatchId, 'dedupMatchId should be set');
+    assert.equal(report.promoted, 0, 'no memory should be promoted for dedup match');
+
+    // The candidate should be marked 'applied' in the DB so it doesn't keep reappearing
+    const candResult = await pool.query('SELECT status FROM memory_candidate_queue WHERE id = $1', [candidateId]);
+    assert.equal(candResult.rows[0].status, 'applied', 'dedup-matched candidate should be marked applied (not left pending)');
+
+    // Second run: candidate should not appear at all since it is now applied
+    const report2 = await engine.promote({
+      dryRun: false,
+      minConfidence: 0.7,
+      minReinforcement: 3,
+      minEvidenceRefs: 2,
+      minSessions: 1,
+    });
+    const stillAppears = report2.decisions.find(d => d.candidateId === candidateId);
+    assert.equal(stillAppears, undefined, 'applied dedup candidate should not appear in subsequent runs');
+
+    await cleanup(pool, [packetId1, packetId2], [candidateId]);
+    // Clean up the manually inserted memory
+    await pool.query("DELETE FROM memories WHERE metadata->>'dedup_key' = $1", [dedupKey]).catch(() => {});
+  });
+
+  it('dry-run skip_dedup_match does NOT mark candidate applied (no writes in dry-run)', async () => {
+    const packetId1 = await insertTestPacket(pool, { session_id: 'dedup-dry-sess-1' });
+    const packetId2 = await insertTestPacket(pool, { session_id: 'dedup-dry-sess-2' });
+    const dedupKey = `dedup-dry-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    // Insert matching memory
+    await pool.query(
+      `INSERT INTO memories (memory_type, content, importance, confidence, source, tags, metadata, session_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+      [
+        'preference',
+        'Existing memory for dry-run dedup test',
+        0.6,
+        0.8,
+        'manual',
+        ['test-fixture'],
+        JSON.stringify({ promotion_source: 'manual', dedup_key: dedupKey }),
+      ],
+    );
+
+    const candidateId = await insertTestCandidate(pool, {
+      confidence: 0.9,
+      reinforcement_count: 5,
+      source_packet_ids: [packetId1, packetId2],
+      dedup_key: dedupKey,
+      reason: `Dedup dry-run test ${Date.now()}`,
+    });
+
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
+
+    // Dry-run: should skip but NOT mutate candidate status
+    const report = await engine.promote({
+      dryRun: true,
+      minConfidence: 0.7,
+      minReinforcement: 3,
+      minEvidenceRefs: 2,
+      minSessions: 1,
+    });
+
+    const decision = report.decisions.find(d => d.candidateId === candidateId);
+    assert.ok(decision, 'decision should exist');
+    assert.equal(decision.action, 'skip_dedup_match', 'should detect dedup match even in dry-run');
+
+    const candResult = await pool.query('SELECT status FROM memory_candidate_queue WHERE id = $1', [candidateId]);
+    assert.equal(candResult.rows[0].status, 'pending', 'dry-run must not mutate candidate status');
+
+    await cleanup(pool, [packetId1, packetId2], [candidateId]);
+    await pool.query("DELETE FROM memories WHERE metadata->>'dedup_key' = $1", [dedupKey]).catch(() => {});
+  });
+
+  it('low-confidence skips do NOT mark candidate applied (may cross threshold later)', async () => {
+    // Low-evidence candidates stay pending so they can be re-evaluated when
+    // reinforcement accumulates. Only skip_dedup_match is terminal.
+    const packetId = await insertTestPacket(pool);
+    const candidateId = await insertTestCandidate(pool, {
+      confidence: 0.3,
+      reinforcement_count: 2,
+      source_packet_ids: [packetId],
+      dedup_key: `low-conf-pending-${Date.now()}`,
+      reason: `Low-confidence pending test ${Date.now()}`,
+    });
+
+    const { BeliefPromotionEngine } = await import('../dist/belief-promotion.js');
+    const engine = new BeliefPromotionEngine(pool as any, makePromotionMemoryManager(pool), testPromotionConfig);
+
+    const report = await engine.promote({ dryRun: false, minConfidence: 0.7 });
+    const decision = report.decisions.find(d => d.candidateId === candidateId);
+    assert.ok(decision, 'decision should exist');
+    assert.equal(decision.action, 'skip_low_confidence');
+
+    // Low-confidence skip must NOT mark applied — candidate stays pending
+    const candResult = await pool.query('SELECT status FROM memory_candidate_queue WHERE id = $1', [candidateId]);
+    assert.equal(candResult.rows[0].status, 'pending', 'low-confidence skip should leave candidate pending');
+
+    await cleanup(pool, [packetId], [candidateId]);
+  });
+
   it('live promotion is idempotent (re-running does not re-promote applied candidates)', async () => {
     const packetId1 = await insertTestPacket(pool, { session_id: 'test-sess-1' });
     const packetId2 = await insertTestPacket(pool, { session_id: 'test-sess-2' });
@@ -546,8 +694,8 @@ describe('Phase 4G: tool registration', () => {
     assert.ok(CSM_TOOL_NAMES.includes('csm_belief_promote'), 'csm_belief_promote should be in CSM_TOOL_NAMES');
   });
 
-  it('tool count is 32 (31 + 1 reentry preview tool)', async () => {
+  it('tool count is 35 (34 + 1 wiki export tool)', async () => {
     const { CSM_TOOL_NAMES } = await import('../dist/tool-names.js');
-    assert.equal(CSM_TOOL_NAMES.length, 34, `expected 34 tools, got ${CSM_TOOL_NAMES.length}`);
+    assert.equal(CSM_TOOL_NAMES.length, 35, `expected 35 tools, got ${CSM_TOOL_NAMES.length}`);
   });
 });

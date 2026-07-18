@@ -54,6 +54,15 @@ export class MemoryManager {
     this.redactor = redactor;
   }
 
+  /**
+   * Format embedding model name for telemetry storage in memory_chunks.embedding_model.
+   * Returns 'provider:model' (e.g. 'ollama:nomic-embed-text') or 'hash-fallback' for dev mode.
+   */
+  private formatEmbeddingModel(): string {
+    const info = this.embeddings.getProviderInfo();
+    return `${info.provider}:${info.model}`;
+  }
+
   // ==================== Session Operations ====================
 
   /**
@@ -302,7 +311,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
               contentToProcess,
               Math.ceil(contentToProcess.length / 4), // Rough token estimate
               `[${embedding.join(',')}]`,
-              'hash-fallback', // Will be replaced with actual model name
+              this.formatEmbeddingModel(),
             ]
           );
         } catch (error) {
@@ -959,10 +968,6 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     const vector = `[${embedding.join(',')}]`;
     const now = nowFn(this.database.dialect);
     await pool.query(
-      `UPDATE memories SET embedding = $1, updated_at = ${now} WHERE id = $2`,
-      [vector, memoryId],
-    );
-    await pool.query(
       `INSERT INTO memory_chunks
        (memory_id, chunk_index, content, token_count, embedding, embedding_model)
        VALUES ($1, 0, $2, $3, $4, $5)
@@ -971,7 +976,11 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
          token_count = EXCLUDED.token_count,
          embedding = EXCLUDED.embedding,
          embedding_model = EXCLUDED.embedding_model`,
-      [memoryId, content, Math.ceil(content.length / 4), vector, 'hash-fallback'],
+      [memoryId, content, Math.ceil(content.length / 4), vector, this.formatEmbeddingModel()],
+    );
+    await pool.query(
+      `UPDATE memories SET embedding = $1, updated_at = ${now} WHERE id = $2`,
+      [vector, memoryId],
     );
   }
 

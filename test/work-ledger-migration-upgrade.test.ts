@@ -69,7 +69,7 @@ after(async () => {
   if (errors.length) throw new AggregateError(errors, 'Work Ledger upgrade cleanup failed');
 });
 
-it('upgrades csm-postgres-v1 through migrations 21 and 22', async () => {
+it('upgrades csm-postgres-v1 through current migrations', async () => {
   const beforePool = new Pool({ connectionString: config.databaseUrl });
   const before = await beforePool.query(
     `SELECT COUNT(*)::int AS count,
@@ -87,15 +87,36 @@ it('upgrades csm-postgres-v1 through migrations 21 and 22', async () => {
             to_regclass('public.coordination_events') AS coordination_table
      FROM csm_schema_migrations`,
   );
-  assert.equal(afterResult.rows[0].count, 25);
+  assert.equal(afterResult.rows[0].count, 27);
   assert.equal(afterResult.rows[0].ledger_table, 'work_ledger_changes');
   assert.equal(afterResult.rows[0].coordination_table, 'coordination_events');
+  const vectors = await current.getPool().query(
+    `SELECT c.relname AS table_name, a.attname AS column_name,
+            a.atttypmod AS dimensions, a.attnotnull AS not_null
+     FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname IN ('memories', 'memory_chunks')
+       AND a.attname IN ('embedding', 'embedding_legacy_1536_before_768')
+     ORDER BY c.relname, a.attname`,
+  );
+  const active = vectors.rows.filter((row) => row.column_name === 'embedding');
+  const legacy = vectors.rows.filter((row) => row.column_name.startsWith('embedding_legacy_'));
+  assert.deepEqual(active.map((row) => row.dimensions), [768, 768]);
+  assert.equal(legacy.length, 2);
+  assert.equal(legacy.every((row) => row.not_null === false), true);
   const migration = await current.getPool().query(
     `SELECT migration_id FROM csm_schema_migrations
-     WHERE migration_id IN ('20260710-021-work-ledger', '20260710-022-coordination-persistence')
+     WHERE migration_id IN (
+       '20260710-021-work-ledger', '20260710-022-coordination-persistence',
+       '20260718-026-postgres-embedding-dimension',
+       '20260718-027-postgres-embedding-dimension-repair'
+     )
      ORDER BY migration_id`,
   );
   assert.deepEqual(migration.rows.map((row) => row.migration_id), [
     '20260710-021-work-ledger', '20260710-022-coordination-persistence',
+    '20260718-026-postgres-embedding-dimension',
+    '20260718-027-postgres-embedding-dimension-repair',
   ]);
 });

@@ -10,7 +10,7 @@ type BaseDefaults = Pick<PluginConfig,
   | 'contextPressureRecommend' | 'contextPressureDemand' | 'targetContextCap'
   | 'loopDetectionThreshold' | 'logToolUsage' | 'logCommands' | 'logSessionLifecycle'
   | 'filterBuildArtifacts' | 'promptDebug' | 'extractor' | 'ttl' | 'distiller'
-  | 'compactor' | 'assistantCompactor' | 'checkpoint'>;
+  | 'compactor' | 'assistantCompactor' | 'checkpoint'> & { embeddingDimensions: number };
 
 export function baseDefaultsFromEnv(): BaseDefaults {
   return {

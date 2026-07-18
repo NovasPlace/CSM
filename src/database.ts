@@ -6,11 +6,14 @@ import type {
 } from './types.js';
 import { createDatabasePool } from './db/database-pool.js';
 import { initializeAllSchemas } from './schema/index.js';
+import { validateEmbeddingColumnContract } from './schema/memory-embedding-contract.js';
 import { getLogger } from './logger.js';
 import type { QueryDialect } from './db/query-dialect.js';
 import { dialectFromProvider } from './db/query-dialect.js';
 import { formatDatabaseDiagnostic } from './database-diagnostic.js';
 import { RetryablePoolCloser } from './database-pool-closer.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { diagnoseDatabase } from './database-health.js';
 export class Database {
   private pool: DatabasePool | null = null;
   private config: PluginConfig;
@@ -84,8 +87,13 @@ export class Database {
 
   private async initializeSchema(): Promise<void> {
     if (!this.pool) throw new Error('Database not connected');
-    await initializeAllSchemas(this);
-    getLogger().info('Schema initialized');
+    const embeddings = new EmbeddingGenerator(this.config);
+    const dimensions = embeddings.getExpectedDimensions();
+    await initializeAllSchemas(this, dimensions);
+    if (this.pool.getDialect?.() === 'pg') {
+      await validateEmbeddingColumnContract(this.pool, dimensions);
+    }
+    getLogger().info(`Schema initialized with embedding dimension ${dimensions}`);
   }
 
   getPool(): DatabasePool {
@@ -163,37 +171,11 @@ export class Database {
   }
 
   async diagnose(): Promise<DatabaseDiagnostics> {
-    const checkedAt = new Date().toISOString();
-    const startedAt = performance.now();
-    const readiness = await this.probeReadiness(startedAt);
-    return {
-      provider: this.config.databaseProvider,
-      checkedAt,
-      startup: { state: this.startupState, ...(this.startupError ? { error: this.startupError } : {}) },
-      liveness: { status: 'pass' },
-      readiness,
-      ...(this.pool?.getStats ? { pool: this.pool.getStats() } : {}),
-    };
+    return diagnoseDatabase(
+      this.pool,
+      this.config.databaseProvider,
+      this.startupState,
+      this.startupError,
+    );
   }
-
-  private async probeReadiness(startedAt: number): Promise<DatabaseDiagnostics['readiness']> {
-    if (!this.pool || this.startupState !== 'ready') {
-      return { status: 'fail', latencyMs: elapsedMs(startedAt), reason: 'not_connected' };
-    }
-    try {
-      await this.pool.query('SELECT 1 AS healthy');
-      return { status: 'pass', latencyMs: elapsedMs(startedAt) };
-    } catch (error) {
-      return {
-        status: 'fail',
-        latencyMs: elapsedMs(startedAt),
-        reason: 'probe_failed',
-        error: formatDatabaseDiagnostic(error),
-      };
-    }
-  }
-}
-
-function elapsedMs(startedAt: number): number {
-  return Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100);
 }

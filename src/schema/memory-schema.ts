@@ -1,5 +1,4 @@
 import type { DatabasePool } from '../types.js';
-import { ensureEmbeddingColumnContract } from './memory-embedding-contract.js';
 import { initializeMemoryColumns, initializeMemoryTable } from './memory-table-schema.js';
 import {
   initializeMemoryChunks,
@@ -8,13 +7,12 @@ import {
   initializeMemorySearch,
 } from './memory-support-schema.js';
 
-export { ensureEmbeddingColumnContract } from './memory-embedding-contract.js';
+export { validateEmbeddingColumnContract } from './memory-embedding-contract.js';
 
-export async function initializeMemorySchema(pool: DatabasePool): Promise<void> {
-  await initializeMemoryTable(pool);
-  await ensureEmbeddingColumnContract(pool);
+export async function initializeMemorySchema(pool: DatabasePool, dimensions: number): Promise<void> {
+  await initializeMemoryTable(pool, dimensions);
   await initializeMemoryColumns(pool);
-  await initializeMemoryChunks(pool);
+  await initializeMemoryChunks(pool, dimensions);
   await initializeMemoryIndexes(pool);
   await initializeMemorySearch(pool);
   await initializeMemoryMerges(pool);

@@ -35,8 +35,9 @@ export const CSM_TOOL_NAMES = [
    'csm_memory_related',
    'csm_continuity_report',
     'csm_reentry_preview',
-    'csm_onboard_agent',
-    'csm_work_ledger_surviving',
- ] as const;
+     'csm_onboard_agent',
+     'csm_work_ledger_surviving',
+     'csm_wiki_export',
+  ] as const;
 
 export type CsmToolName = typeof CSM_TOOL_NAMES[number];

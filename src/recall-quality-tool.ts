@@ -368,7 +368,7 @@ export class RecallQualityAuditReportBuilder {
     const surfacesMissing = expectedSurfaces.filter(s => !surfacesFired.includes(s));
     const totalEvents = Object.values(sourceDistribution).reduce((a, b) => a + b, 0);
 
-    // Relevance
+    // Relevance — measured on search results only (context_recall is not a ranked search)
     const { sql: relSql, params: relParams } = this.buildQuery(win, `
       SELECT
         COUNT(*) FILTER (WHERE rank <= 3) * 100.0 / NULLIF(COUNT(*), 0) as top3,
@@ -376,7 +376,8 @@ export class RecallQualityAuditReportBuilder {
         COUNT(*) as total
       FROM (
         SELECT rank FROM memory_recall_events
-        WHERE recalled_at >= $1 AND recalled_at < $2 AND rank > 0${win.scopeFilter}
+        WHERE recalled_at >= $1 AND recalled_at < $2 AND rank > 0
+          AND source IN ('search', 'vector_only', 'text_only', 'text_fallback')${win.scopeFilter}
         LIMIT $LIMIT
       ) sub
     `);
@@ -409,14 +410,15 @@ export class RecallQualityAuditReportBuilder {
     const vecRow = vecResult.rows[0] as RateRow | undefined;
     const vectorHealthRate = vecRow && vecRow.rate != null ? Number(vecRow.rate) || 0 : 0;
 
-    // Low-result searches
+    // Low-result searches — search sources only
     const { sql: lowSql, params: lowParams } = this.buildQuery(win, `
       SELECT
         COUNT(*) FILTER (WHERE per_query.cnt < 3) * 100.0 / NULLIF(COUNT(*), 0) as rate
       FROM (
         SELECT query_hash, COUNT(*) as cnt
         FROM memory_recall_events
-        WHERE recalled_at >= $1 AND recalled_at < $2${win.scopeFilter}
+        WHERE recalled_at >= $1 AND recalled_at < $2
+          AND source IN ('search', 'vector_only', 'text_only', 'text_fallback')${win.scopeFilter}
         GROUP BY query_hash
         LIMIT $LIMIT
       ) per_query
@@ -539,6 +541,8 @@ export class RecallQualityAuditReportBuilder {
   }
 
   private async buildRelevanceSection(win: AuditWindow): Promise<string> {
+    // Relevance metrics: search sources only (context_recall is not a ranked search)
+    const searchSourceFilter = `AND source IN ('search', 'vector_only', 'text_only', 'text_fallback')`;
     const { sql: top3Sql, params: top3Params } = this.buildQuery(win, `
       SELECT
         COUNT(*) FILTER (WHERE rank <= 3) * 100.0 / NULLIF(COUNT(*), 0) as rate,
@@ -547,7 +551,7 @@ export class RecallQualityAuditReportBuilder {
       FROM (
         SELECT rank FROM memory_recall_events
         WHERE recalled_at >= $1 AND recalled_at < $2
-          AND rank > 0${win.scopeFilter}
+          AND rank > 0${searchSourceFilter}${win.scopeFilter}
         LIMIT $LIMIT
       ) sub
     `);
@@ -556,7 +560,7 @@ export class RecallQualityAuditReportBuilder {
       FROM (
         SELECT rank FROM memory_recall_events
         WHERE recalled_at >= $1 AND recalled_at < $2
-          AND rank > 0${win.scopeFilter}
+          AND rank > 0${searchSourceFilter}${win.scopeFilter}
         LIMIT $LIMIT
       ) sub
     `);

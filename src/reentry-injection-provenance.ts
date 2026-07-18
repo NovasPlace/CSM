@@ -5,7 +5,7 @@ import {
   type ContextInjectionItem,
   type ContextInjectionLayerSummary,
 } from './context-injection-contract.js';
-import type { ReEntryConfig, ReEntryLayerResult } from './re-entry-protocol.js';
+import type { ReEntryConfig, ReEntryLayerResult } from './reentry-types.js';
 import type { ReEntryBudgetDecision } from './reentry-adaptive-budget.js';
 
 export function buildReentryProvenance(
