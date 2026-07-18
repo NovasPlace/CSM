@@ -132,11 +132,11 @@ node .tmp_opencode_diag/attribution_breakdown.cjs
 Expect:
 - One new `onboarding` event + one new `reentry` event for the new `session_id`
 - Onboarding block: ~11–12k chars, ~2.9–3.2k tokens, `trim_level='none'`
-- Re-entry block: ~3k chars, ~750 tokens, `trim_level='soft'`, `metadata.budgetTier='short'`
+- Re-entry block: ~3k chars, ~750 tokens, `trim_level='soft'` or `'aggressive'`, `metadata.budgetTier='short'`
 
 ### Step 4 — Read the attribution breakdown
 
-The schema distinguishes CSM vs AGENTS.md via `context_injection_items.source_id` (not `source_kind`). The expected attribution split for a normal session:
+The schema distinguishes CSM vs AGENTS.md-derived layers via `context_injection_items.source_id`. Selected memories are more precise: each one uses `source_kind='memory'`, `source_id='memory:<id>'`, and a populated `memory_id`.
 
 **Onboarding block layers:**
 | Layer | `source_id` | Attribution |
@@ -145,7 +145,7 @@ The schema distinguishes CSM vs AGENTS.md via `context_injection_items.source_id
 | `project-continuity` | `package.json + README + filesystem` | CSM (live scan) |
 | `phase-checkpoint` | `AGENTS.md` | AGENTS.md |
 | `constraints` | `hardwired + AGENTS.md` | mixed |
-| `relevant-memories` | `memory store` | CSM (DB query) |
+| `relevant-memories` | `memory:<id>` (one item per selected memory) | CSM (DB query, item-level attribution) |
 | `promoted-beliefs` | `belief_knowledge_store` | CSM |
 | `advisories` | `living-state pipeline` | CSM |
 | `tool-guidance` | `defaults + AGENTS.md` | mixed |
@@ -156,14 +156,17 @@ The schema distinguishes CSM vs AGENTS.md via `context_injection_items.source_id
 
 ### Step 5 — Confirm the agent actually used CSM context
 
-This is the soft test the schema cannot answer alone — the rows prove injection happened, not that the model cited it. Quick check: in the fresh session, ask the agent *"without reading any files, what phase is the project in?"*. If it cites "Phase 9B / observation window" or the 7-warning lint baseline, that's CSM-derived (not in AGENTS.md verbatim under a section the model would quote cold). If it recites `## Constraints` or `## Key Decisions` bullet-for-bullet, that's AGENTS.md.
+This is the soft test the schema cannot answer alone — the rows prove injection happened, not that the model used it. Do not use the project phase or lint baseline as attribution canaries because both are present in `AGENTS.md`.
 
-### Findings as of 2026-07-16
+Instead, choose a distinctive fact from one of the `relevant-memories` rows recorded for the fresh session, confirm that fact is absent from `AGENTS.md`, and ask for it without allowing file reads or tools. If the model answers from the fact, that is evidence the injected memory contributed. If it calls a tool or the fact also appears in a document layer, mark the behavioral test inconclusive rather than attributing it to CSM.
+
+### Findings as of 2026-07-18
 
 - **Live DB:** `opencode_memory` (NOT `cross_session_memory` — that one is stale, missing the injection tables)
-- **Baseline claim in `AGENTS.md` is wildly stale:** says "3 events (1 onboarding, 2 reentry)"; actual is **141 events (76 onboarding + 65 reentry) across 30 unique sessions** since 2026-07-13
-- **Wiring works:** every fresh session in this repo produces paired onboarding + re-entry rows with full per-layer provenance
-- **Attribution quality gap:** `source_kind` schema has `'memory' | 'document_section' | 'derived_state'`, but only 1 of 1064 items used `memory` — the `relevant-memories` layer emits `derived_state` with `source_id='memory store'` instead of per-memory items with `source_kind='memory'`. The provenance is recoverable from `source_id` but item-level memory attribution is lost.
+- **Baseline claim in `AGENTS.md` is stale:** says "3 events (1 onboarding, 2 reentry)"; actual is **180 events (96 onboarding + 84 reentry)** across 46 onboarding sessions and 45 re-entry sessions since 2026-07-13
+- **Wiring works:** fresh session `ses_0891cc1e4ffeXVnZTgzae0sgEy` produced paired onboarding event 194 and re-entry event 195 using local Ollama only
+- **Item-level memory attribution fixed:** the runtime onboarding event recorded all 8 selected memories as separate `source_kind='memory'` items with populated `memory_id`, `selection_rank`, `selection_score`, and `selection_reason_code='importance_rank'`
+- **Behavioral proof:** the same local session followed the no-tools instruction and returned the requested canary response. This proves a clean startup path, but the canary itself did not require memory content; a controlled memory-specific canary is still needed to prove model use rather than injection alone.
 
 ## Common Operations
 

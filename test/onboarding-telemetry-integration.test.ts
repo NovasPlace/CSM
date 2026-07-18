@@ -110,7 +110,7 @@ describe('Onboarding integration — live injection produces telemetry', () => {
     }
   });
 
-  it('onboarding telemetry: all items have sourceKind=derived_state', async () => {
+  it('onboarding telemetry: sections without item-level sources remain derived_state', async () => {
     const result = await buildOnboardingPacketWithProvenance({
       projectId: 'test-project',
       sessionId: 's3',
@@ -120,12 +120,60 @@ describe('Onboarding integration — live injection produces telemetry', () => {
     });
 
     if (result) {
-      // Onboarding items are all derived_state (no memory IDs)
       for (const item of result.built.items) {
         assert.equal(item.sourceKind, 'derived_state');
         assert.equal(item.memoryId, null);
       }
     }
+  });
+
+  it('onboarding telemetry preserves item-level memory attribution', async () => {
+    const inserted = await pool.query(
+      `INSERT INTO memories (project_id, memory_type, content, importance)
+       VALUES ('test-project', 'lesson', 'Use item-level attribution', 0.9)
+       RETURNING id`,
+    );
+    const memoryId = Number((inserted.rows[0] as Record<string, unknown>).id);
+    const result = await buildOnboardingPacketWithProvenance({
+      projectId: 'test-project',
+      sessionId: 's3-memory',
+      workspacePath: 'test-project',
+      pool,
+      config: {} as PluginConfig,
+    });
+
+    const item = result.built.items.find((candidate) => candidate.layerName === 'relevant-memories');
+    assert.ok(item, 'must build provenance for the relevant memory');
+    assert.equal(item.sourceKind, 'memory');
+    assert.equal(item.sourceId, `memory:${memoryId}`);
+    assert.equal(item.memoryId, memoryId);
+    assert.equal(item.provenanceGranularity, 'item');
+    assert.equal(item.selectionReason, 'importance_rank');
+
+    await logger.logInjection({
+      idempotencyKey: 'onboarding:s3-memory',
+      projectId: 'test-project',
+      sessionId: 's3-memory',
+      injectionKind: 'onboarding',
+      sourceTurnId: null,
+      built: result.built,
+      blockHash: null,
+      status: 'injected',
+    });
+    await logger.flush();
+
+    const stored = await pool.query(
+      `SELECT source_kind, source_id, memory_id, provenance_granularity, selection_reason_code
+       FROM context_injection_items
+       WHERE layer_name = 'relevant-memories'`,
+    );
+    assert.equal(stored.rows.length, 1);
+    const storedItem = stored.rows[0] as Record<string, unknown>;
+    assert.equal(storedItem.source_kind, 'memory');
+    assert.equal(storedItem.source_id, `memory:${memoryId}`);
+    assert.equal(Number(storedItem.memory_id), memoryId);
+    assert.equal(storedItem.provenance_granularity, 'item');
+    assert.equal(storedItem.selection_reason_code, 'importance_rank');
   });
 
   it('logger failure does not block onboarding', async () => {

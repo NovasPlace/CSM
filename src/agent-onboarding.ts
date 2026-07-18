@@ -16,6 +16,7 @@ import { dialectFromPool } from './db/query-dialect.js';
 import { getLogger } from './logger.js';
 import {
   type BuiltContextInjection,
+  type ContextInjectionItem,
 } from './context-injection-contract.js';
 import { buildOnboardingProvenance } from './onboarding-injection-provenance.js';
 
@@ -29,6 +30,7 @@ export interface OnboardingSection {
   source: string;
   content: string;
   warnings?: string[];
+  provenanceItems?: ContextInjectionItem[];
 }
 
 export interface OnboardingPacket {
@@ -55,7 +57,7 @@ export interface OnboardingContext {
 
 // ─── Row DTOs ─────────────────────────────────────────────────────────────────
 
-interface MemoryRow { content: string; memory_type: string; importance: number; created_at?: string; }
+interface MemoryRow { id: number | string; content: string; memory_type: string; importance: number; created_at?: string; }
 interface BeliefRow { belief_kind: string; subject: string; claim: string; stance: string; confidence: number; uncertainty: number; }
 interface PacketCountRow { cnt: string | number; }
 interface CandidateRow { candidate_type: string; status: string; cnt: string | number; }
@@ -352,6 +354,7 @@ async function provideConstraints(ctx: OnboardingContext): Promise<OnboardingSec
 async function provideMemories(ctx: OnboardingContext): Promise<OnboardingSection> {
   const lines: string[] = [];
   const warnings: string[] = [];
+  const provenanceItems: ContextInjectionItem[] = [];
 
   try {
     const result = await ctx.pool.query(
@@ -367,10 +370,32 @@ async function provideMemories(ctx: OnboardingContext): Promise<OnboardingSectio
     );
 
     if (result.rows.length > 0) {
-      for (const r of result.rows) {
+      for (const [rank, r] of result.rows.entries()) {
         const row = r as MemoryRow;
         const content = truncate(String(row.content), 150);
-        lines.push(`- [${row.memory_type}] ${content} (importance: ${row.importance})`);
+        const line = `- [${row.memory_type}] ${content} (importance: ${row.importance})`;
+        lines.push(line);
+
+        const memoryId = Number(row.id);
+        if (Number.isSafeInteger(memoryId) && memoryId > 0) {
+          provenanceItems.push({
+            layerName: 'relevant-memories',
+            sourceKind: 'memory',
+            sourceId: `memory:${memoryId}`,
+            memoryId,
+            position: provenanceItems.length,
+            selectionRank: rank,
+            selectionScore: Number(row.importance),
+            selectionReason: 'importance_rank',
+            disposition: 'injected',
+            provenanceGranularity: 'item',
+            charCount: line.length,
+            metadata: {
+              memoryType: String(row.memory_type),
+              importance: Number(row.importance),
+            },
+          });
+        }
       }
       lines.push(`Source: ${result.rows.length} high-importance project memories`);
     } else {
@@ -388,6 +413,7 @@ async function provideMemories(ctx: OnboardingContext): Promise<OnboardingSectio
     source: 'memory store',
     content: lines.join('\n'),
     warnings,
+    ...(provenanceItems.length > 0 ? { provenanceItems } : {}),
   };
 }
 
