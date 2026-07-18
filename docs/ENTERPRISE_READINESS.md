@@ -31,6 +31,8 @@ As of 2026-07-09, local verification proves:
 - Fresh-schema PostgreSQL tests and a real SQLite plugin lifecycle probe run in the suite.
 - PostgreSQL pool size, connection/statement/idle timeouts, and TLS enforcement policy are validated configuration.
 - `Database.diagnose()` exposes machine-readable startup, liveness, readiness latency, failure reason, provider, and pool state.
+- The npm artifact uses an explicit allowlist, excludes workspace/generated state, and has an executable dry-run boundary test.
+- The customer database setup command runs from compiled JavaScript and is smoke-tested against a fresh SQLite database.
 
 These results establish a reliable engineering baseline. They do not establish production certification, a security attestation, or a service-level commitment.
 
@@ -61,7 +63,7 @@ These results establish a reliable engineering baseline. They do not establish p
 ### Quality and Release Operations
 
 - Generate code coverage in CI and enforce justified thresholds. CI currently does not generate coverage.
-- Add release versioning, compatibility policy, support matrix, signed artifacts, and rollback criteria.
+- Complete release versioning automation, signed artifacts, SBOM generation, and provenance verification. The package boundary, compatibility policy, support matrix, and rollback criteria are documented and tested.
 - Resolve or formally ratify legacy file-size debt in touched runtime modules.
 - Run an independent final review of persistence and migration behavior before a certification claim.
 

@@ -257,7 +257,7 @@ Run the destructive proof only against the temporary databases created by the dr
 npm run drill:backup-restore
 ```
 
-The command requires `CSM_DATABASE_URL` and PostgreSQL client tools matching the server major version. It preserves connection URL TLS parameters, passes the decoded password through `PGPASSWORD`, creates uniquely named source and restore databases, verifies migration history and sentinel data after `pg_restore`, and reports success only after both databases and the temporary dump are confirmed removed. Set `CSM_PG_BIN` to the matching client `bin` directory when the tools are not on `PATH`; `CSM_PG_TOOL_TIMEOUT_MS` defaults to 120000.
+The command requires `CSM_BACKUP_DRILL_DATABASE_URL` (with `CSM_DATABASE_URL` retained as a legacy fallback) and PostgreSQL client tools matching the server major version. The dedicated variable prevents a release drill target from leaking into the test-suite database configuration. The drill preserves connection URL TLS parameters, passes the decoded password through `PGPASSWORD`, creates uniquely named source and restore databases, verifies migration history and sentinel data after `pg_restore`, and reports success only after both databases and the temporary dump are confirmed removed. Set `CSM_PG_BIN` to the matching client `bin` directory when the tools are not on `PATH`; `CSM_PG_TOOL_TIMEOUT_MS` defaults to 120000.
 
 The complete local enterprise gate is:
 

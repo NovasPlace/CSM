@@ -191,6 +191,8 @@ CSM includes:
 
 CSM is currently source-first. Build the repository, configure a storage provider, and load the generated `dist/index.js` entrypoint through your local OpenCode plugin setup.
 
+Runtime requirement: Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`, matching the current OpenCode plugin dependency line.
+
 ### 1. Clone and install
 
 ```bash
@@ -199,7 +201,15 @@ cd CSM
 npm install
 ```
 
-### 2. Choose a database
+### 2. Build
+
+```bash
+npm run build
+```
+
+The package entrypoint is `dist/index.js`, exported as the default OpenCode plugin.
+
+### 3. Choose a database
 
 <details open>
 <summary><strong>PostgreSQL — full feature path</strong></summary>
@@ -226,14 +236,6 @@ npm run db:setup
 SQLite removes PostgreSQL-only tools during registration rather than exposing unsupported behavior.
 
 </details>
-
-### 3. Build
-
-```bash
-npm run build
-```
-
-The package entrypoint is `dist/index.js`, exported as the default OpenCode plugin.
 
 ### 4. Enable turn-1 continuity
 

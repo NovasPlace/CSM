@@ -16,6 +16,7 @@ Start with the product documentation. Use phase documents when you need design h
 | [Product Architecture](PRODUCT_ARCHITECTURE.md) | Stable runtime layers, write paths, read paths, and provider boundaries |
 | [Contributing](../CONTRIBUTING.md) | Development workflow, gates, migration rules, and PR expectations |
 | [Security](../SECURITY.md) | Vulnerability reporting and memory-system security considerations |
+| [Release Process](RELEASE_PROCESS.md) | Artifact boundary, release gate, publishing, and rollback contract |
 
 ## Continuity runtime
 

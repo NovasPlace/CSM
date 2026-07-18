@@ -2,9 +2,55 @@
   "name": "opencode-cross-session-memory",
   "version": "1.0.0",
   "description": "Cross-session memory plugin for opencode - Persistent memory across conversations",
+  "license": "MIT",
+  "author": {
+    "name": "Donovan"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NovasPlace/CSM.git"
+  },
+  "homepage": "https://github.com/NovasPlace/CSM#readme",
+  "bugs": {
+    "url": "https://github.com/NovasPlace/CSM/issues"
+  },
+  "keywords": [
+    "ai-agent",
+    "opencode",
+    "codex",
+    "memory",
+    "context",
+    "continuity",
+    "postgresql",
+    "sqlite"
+  ],
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "csm-init": "dist/cli/init-db.js"
+  },
+  "files": [
+    "dist/",
+    ".codex-plugin/",
+    ".mcp.json",
+    ".env.example",
+    "SECURITY.md",
+    "docs/README.md",
+    "docs/FEATURES.md",
+    "docs/PRODUCT_ARCHITECTURE.md",
+    "docs/CONFIGURATION_RELIABILITY.md",
+    "docs/SCHEMA_SUPPORT_MATRIX.md",
+    "docs/STARTUP_ROLLBACK.md",
+    "docs/RELEASE_PROCESS.md"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -62,13 +108,17 @@
     "verify": "npm run build && npm run typecheck && npx tsx --test test/*.test.ts",
     "drill:backup-restore": "npm run build && npx tsx scripts/backup-restore-drill.ts",
     "verify:enterprise": "npm run verify && npm run lint:src && npm run drill:backup-restore",
+    "verify:package": "npm run build && npx tsx --test test/package-release-boundary.test.ts",
+    "verify:release": "node scripts/verify-release.mjs",
+    "package:dry-run": "npm run build && node scripts/release-package-stage.mjs --dry-run",
+    "package:create": "npm run build && node scripts/release-package-stage.mjs --output .release",
     "benchmark:long-session": "npx tsx src/benchmark.ts",
     "lint": "npm run lint:src",
     "lint:src": "eslint src --max-warnings=7",
     "lint:all": "eslint .",
     "lint:fix": "eslint src --fix",
     "csm": "npx tsx scripts/csm-query.ts",
-    "db:setup": "npx tsx scripts/init-db.ts"
+    "db:setup": "node dist/cli/init-db.js"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.17.13",
@@ -79,13 +129,16 @@
   "peerDependencies": {
     "@opentui/core": ">=0.1.0",
     "@opentui/solid": ">=0.1.0",
-    "solid-js": "^1.9.13"
+    "solid-js": ">=1.9.12 <2"
   },
   "peerDependenciesMeta": {
     "@opentui/solid": {
       "optional": true
     },
     "@opentui/core": {
+      "optional": true
+    },
+    "solid-js": {
       "optional": true
     }
   },

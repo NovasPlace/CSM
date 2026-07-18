@@ -1,0 +1,15 @@
+# npm always considers root documentation aliases in addition to package.json's
+# files allowlist. Keep local review/recovery notes out of customer artifacts.
+README.txt
+FIX_README.txt
+*-README.txt
+
+# Defense in depth for workspace and generated state.
+AGENTBOOK_STATE.md
+.csm/
+.obsidian/
+.tmp*/
+*.patch
+full-test-output.txt
+workflow-project/
+.release/

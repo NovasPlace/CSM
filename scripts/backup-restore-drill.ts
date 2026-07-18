@@ -131,8 +131,12 @@ function databasePassword(): string {
 }
 
 function requireDatabaseUrl(): string {
-  const url = process.env.CSM_DATABASE_URL;
-  if (!url) throw new Error('CSM_DATABASE_URL is required for the isolated backup/restore drill');
+  const url = process.env.CSM_BACKUP_DRILL_DATABASE_URL ?? process.env.CSM_DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      'CSM_BACKUP_DRILL_DATABASE_URL (or legacy CSM_DATABASE_URL) is required for the isolated backup/restore drill',
+    );
+  }
   return url;
 }
 
