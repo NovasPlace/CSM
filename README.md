@@ -15,7 +15,7 @@ Persistent memory, operational state, re-entry, context governance, and durable 
   <a href="LICENSE"><img src="https://img.shields.io/github/license/NovasPlace/CSM" alt="License"></a>
 </p>
 
-[Quick start](#quick-start) · [Feature map](docs/FEATURES.md) · [Architecture](docs/PRODUCT_ARCHITECTURE.md) · [Privacy](docs/DATA_PRIVACY_AND_LIFECYCLE.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start) · [Codex setup](docs/CODEX_INSTALLATION.md) · [Feature map](docs/FEATURES.md) · [Architecture](docs/PRODUCT_ARCHITECTURE.md) · [Privacy](docs/DATA_PRIVACY_AND_LIFECYCLE.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Documentation](docs/README.md) · [Contributing](https://github.com/NovasPlace/CSM/blob/master/CONTRIBUTING.md)
 
 </div>
 
@@ -50,7 +50,7 @@ CSM turns continuity into infrastructure.
 | Recall | Vector, text, entity, relationship, and fallback retrieval paths |
 | Internal state | Experience packets, self-model, belief knowledge, and advisory context |
 | Governance | Deduplication, merge/supersede, archive candidates, quality reports, and continuity health |
-| Host | OpenCode plugin with exported runtime modules for broader integration |
+| Host | OpenCode plugin plus a packaged Codex MCP command and installable PostgreSQL Codex plugin |
 
 ## Capability map
 
@@ -189,11 +189,11 @@ CSM includes:
 
 ## Quick start
 
-Runtime requirement: Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`, matching the current OpenCode plugin dependency line.
+Runtime requirement: Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`.
 
 ### 1. Configure the project
 
-Create a `.env` in the project where OpenCode will run. SQLite is the smallest local setup:
+Create a `.env` in the project where the agent host will run. SQLite is the smallest local setup:
 
 ```dotenv
 CSM_DATABASE_PROVIDER=sqlite
@@ -214,9 +214,25 @@ OLLAMA_HOST=http://localhost:11434
 
 Use `CSM_EMBEDDING_PROVIDER=openai` with `OPENAI_API_KEY` if OpenAI embeddings are preferred. Never commit `.env`.
 
-### 2. Add the packaged plugin
+### 2. Initialize storage
 
-Add the pinned package and turn-1 continuity file to `opencode.json`:
+```bash
+npx --yes --package=opencode-cross-session-memory@1.0.0 csm-init
+```
+
+This applies the versioned schema safely and can be rerun during an upgrade. Back up production storage before upgrading.
+
+### 3. Verify before first use
+
+```bash
+npx --yes --package=opencode-cross-session-memory@1.0.0 csm-doctor --online
+```
+
+Doctor checks the package, Node runtime, strict configuration, security baseline, database, complete migration history, and configured embedding model. It never includes credentials or memory content in its report. See [CSM Doctor and Troubleshooting](docs/TROUBLESHOOTING.md) for JSON output and common fixes.
+
+### 4. Connect an agent host
+
+For OpenCode, add the pinned package and turn-1 continuity file to `opencode.json`:
 
 ```json
 {
@@ -226,27 +242,30 @@ Add the pinned package and turn-1 continuity file to `opencode.json`:
 }
 ```
 
-OpenCode installs configured npm plugins on demand. Pin the version so an upgrade is an intentional, testable change.
+For Codex, add the packaged MCP command to project `.codex/config.toml`:
 
-### 3. Initialize storage
-
-```bash
-npx --yes --package=opencode-cross-session-memory@1.0.0 csm-init
+```toml
+[mcp_servers.cross_session_memory]
+command = "npx"
+args = ["--yes", "--package=opencode-cross-session-memory@1.0.0", "csm-mcp"]
+cwd = "."
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+required = true
+default_tools_approval_mode = "writes"
 ```
 
-This applies the versioned schema safely and can be rerun during an upgrade. Back up production storage before upgrading.
+The Codex MCP bridge exposes explicit memory, context, lesson, checkpoint, and handoff tools; it does
+not receive OpenCode's automatic lifecycle hooks. See [Codex Installation](docs/CODEX_INSTALLATION.md)
+for live verification and the PostgreSQL-only marketplace-plugin option.
 
-### 4. Verify before first use
+Pin the package version so an upgrade is an intentional, testable change.
 
-```bash
-npx --yes --package=opencode-cross-session-memory@1.0.0 csm-doctor --online
-```
+### 5. Start a fresh task
 
-Doctor checks the package, Node runtime, strict configuration, security baseline, database, complete migration history, and configured embedding model. It never includes credentials or memory content in its report. See [CSM Doctor and Troubleshooting](docs/TROUBLESHOOTING.md) for JSON output and common fixes.
-
-### 5. Start OpenCode
-
-Start OpenCode in the configured project. CSM creates and updates `AGENTBOOK_STATE.md` as activity is captured, allowing the host to read current project state before a later session begins normal tool execution.
+Start the configured host in the project. OpenCode creates and updates `AGENTBOOK_STATE.md` as
+activity is captured. In Codex, verify `csm_runtime_status`, then explicitly request a context brief
+or memory operation for the current project before normal work begins.
 
 ### Source checkout for contributors
 
@@ -341,19 +360,20 @@ npm run drill:backup-restore
 
 The source lint gate is locked at zero errors and a bounded warning baseline. Database-sensitive changes should also exercise schema initialization, migration compatibility, and the backup/restore drill.
 
-Contribution expectations are defined in [CONTRIBUTING.md](CONTRIBUTING.md).
+Contribution expectations are defined in the
+[repository contribution guide](https://github.com/NovasPlace/CSM/blob/master/CONTRIBUTING.md).
 
 ## Documentation
 
 - [Documentation index](docs/README.md)
 - [Feature and tool map](docs/FEATURES.md)
 - [Product architecture](docs/PRODUCT_ARCHITECTURE.md)
-- [Re-entry protocol](docs/PHASE7_REENTRY_PROTOCOL.md)
-- [Continuity resilience report](docs/PHASE6E_CONTINUITY_RESILIENCE_REPORT.md)
-- [Recall-quality scoring](docs/PHASE6D_RECALL_QUALITY_SCORING.md)
-- [Belief-promotion pipeline](docs/PHASE4G_BELIEF_PROMOTION_PIPELINE.md)
-- [SQLite MVP](docs/PHASE3G_SQLITE_MVP.md)
-- [Project phase history](docs/PHASE_HISTORY.md)
+- [Codex installation](docs/CODEX_INSTALLATION.md)
+- [Configuration reliability](docs/CONFIGURATION_RELIABILITY.md)
+- [Data privacy and lifecycle](docs/DATA_PRIVACY_AND_LIFECYCLE.md)
+- [Schema support matrix](docs/SCHEMA_SUPPORT_MATRIX.md)
+- [Startup and rollback](docs/STARTUP_ROLLBACK.md)
+- [Release process](docs/RELEASE_PROCESS.md)
 
 ## Project status
 

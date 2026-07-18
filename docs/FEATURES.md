@@ -256,9 +256,7 @@ Context injection is priority-aware and token-bounded. The system is designed to
 
 1. [README](../README.md) — product overview and setup
 2. [Product architecture](PRODUCT_ARCHITECTURE.md) — runtime and data flow
-3. [Re-entry protocol](PHASE7_REENTRY_PROTOCOL.md) — continuity injection
-4. [Continuity resilience report](PHASE6E_CONTINUITY_RESILIENCE_REPORT.md) — health model
-5. [Recall-quality scoring](PHASE6D_RECALL_QUALITY_SCORING.md) — retrieval evaluation
-6. [Belief-promotion pipeline](PHASE4G_BELIEF_PROMOTION_PIPELINE.md) — Living State promotion
-7. [SQLite MVP](PHASE3G_SQLITE_MVP.md) — local provider contract
-8. [Phase history](PHASE_HISTORY.md) — implementation chronology
+3. [Codex installation](CODEX_INSTALLATION.md) — direct MCP and marketplace setup
+4. [Data privacy and lifecycle](DATA_PRIVACY_AND_LIFECYCLE.md) — trust and operator boundaries
+5. [Schema support matrix](SCHEMA_SUPPORT_MATRIX.md) — provider and upgrade compatibility
+6. [Source documentation tree](https://github.com/NovasPlace/CSM/tree/master/docs) — phase contracts and engineering evidence

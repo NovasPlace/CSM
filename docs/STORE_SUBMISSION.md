@@ -1,6 +1,8 @@
 # Store Submission Checklist
 
-This plugin is ready to be packaged for the Codex directory once the public MCP endpoint and dashboard review flow are available.
+This checklist covers a future hosted public-directory submission. It is separate from the
+self-hosted npm package, direct `csm-mcp` setup, and PostgreSQL-only Codex marketplace plugin already
+described in `CODEX_INSTALLATION.md`.
 
 ## Positioning
 - Problem: agents lose continuity, burn quota, and repeat work across long sessions.
@@ -9,8 +11,8 @@ This plugin is ready to be packaged for the Codex directory once the public MCP 
 
 ## Public Listing Copy
 - Name: `Cross-Session Memory Bridge`
-- Short description: `Reuse cross-session memory from Codex.`
-- Long description: `Postgres-backed memory, compaction, checkpointing, and context briefs that keep long coding sessions coherent while reducing token spend.`
+- Short description: `Resume Codex work across sessions.`
+- Long description: `Self-hosted memory, context briefs, lessons, checkpoints, and handoff tools for durable Codex project continuity.`
 - Category: `Productivity`
 - Capabilities: `Search`, `Write`, `Long-term memory`
 
@@ -45,11 +47,11 @@ This plugin is ready to be packaged for the Codex directory once the public MCP 
 - The plugin shows visible pressure state so the session can compact before overflow.
 
 ## Launch Path
-1. Keep the repo-local plugin for local testing.
-2. Host the MCP server on a public URL.
-3. Fill out the OpenAI dashboard submission form.
-4. Submit for review.
-5. Publish after approval.
+1. Keep the packaged self-hosted paths verified and version-pinned.
+2. Build a separately authenticated public MCP service with a stable URL and tenant boundary.
+3. Publish the required privacy, terms, support, and deletion surfaces.
+4. Fill out the OpenAI dashboard submission form.
+5. Submit for review and publish only after approval.
 
 ## Docs To Keep In Sync
 - `README.md`

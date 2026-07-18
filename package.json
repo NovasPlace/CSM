@@ -1,7 +1,7 @@
 {
   "name": "opencode-cross-session-memory",
   "version": "1.0.0",
-  "description": "Cross-session memory plugin for opencode - Persistent memory across conversations",
+  "description": "Self-hosted continuity infrastructure for OpenCode and Codex agents",
   "license": "MIT",
   "author": {
     "name": "Donovan"
@@ -36,12 +36,14 @@
   "types": "dist/index.d.ts",
   "bin": {
     "csm-init": "dist/cli/init-db.js",
-    "csm-doctor": "dist/cli/doctor.js"
+    "csm-doctor": "dist/cli/doctor.js",
+    "csm-mcp": "dist/cli/mcp.js"
   },
   "files": [
     "dist/",
     ".codex-plugin/",
     ".mcp.json",
+    "runtime/",
     ".env.example",
     "SECURITY.md",
     "docs/README.md",
@@ -50,6 +52,7 @@
     "docs/CONFIGURATION_RELIABILITY.md",
     "docs/DATA_PRIVACY_AND_LIFECYCLE.md",
     "docs/TROUBLESHOOTING.md",
+    "docs/CODEX_INSTALLATION.md",
     "docs/SCHEMA_SUPPORT_MATRIX.md",
     "docs/STARTUP_ROLLBACK.md",
     "docs/RELEASE_PROCESS.md",

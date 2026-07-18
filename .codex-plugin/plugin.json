@@ -1,10 +1,12 @@
 {
   "name": "cross-session-memory-bridge",
-  "version": "1.1.0",
-  "description": "Repo-local Codex plugin wrapper for the cross-session memory bridge.",
+  "version": "1.0.0",
+  "description": "Self-hosted cross-session memory and continuity tools for Codex.",
   "author": {
     "name": "Donovan"
   },
+  "homepage": "https://github.com/NovasPlace/CSM",
+  "repository": "https://github.com/NovasPlace/CSM",
   "license": "MIT",
   "keywords": [
     "memory",
@@ -15,8 +17,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Cross-Session Memory Bridge",
-    "shortDescription": "Reuse cross-session memory from Codex.",
-    "longDescription": "Postgres-backed memory, compaction, checkpointing, and context briefs that keep long coding sessions coherent while reducing token spend.",
+    "shortDescription": "Resume Codex work across sessions.",
+    "longDescription": "Self-hosted PostgreSQL memory, context briefs, lessons, checkpoints, and handoff tools for durable Codex project continuity.",
     "developerName": "Donovan",
     "category": "Productivity",
     "capabilities": [
@@ -29,6 +31,8 @@
       "Build a context brief for this task from prior sessions.",
       "Show the current context pressure before we continue."
     ],
-    "brandColor": "#2563EB"
+    "brandColor": "#2563EB",
+    "websiteURL": "https://github.com/NovasPlace/CSM",
+    "privacyPolicyURL": "https://github.com/NovasPlace/CSM/blob/master/docs/DATA_PRIVACY_AND_LIFECYCLE.md"
   }
 }

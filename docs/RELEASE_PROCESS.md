@@ -8,7 +8,7 @@ The npm artifact contains only:
 
 - compiled runtime and type declarations under `dist/`
 - compiled `csm-init` and `csm-doctor` customer commands
-- the repo-local Codex/MCP launcher metadata
+- the packaged `csm-mcp` command plus Codex plugin manifest, MCP config, and root-level launcher
 - the environment example
 - the license, security policy, and curated product/operator documentation
 
@@ -36,6 +36,8 @@ Review the dry-run manifest before publishing. Confirm the version, pinned packa
 - Match the current OpenCode plugin runtime: Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`.
 - `csm-init` and `npm run db:setup` use the compiled runtime, not development-only TypeScript tooling.
 - `csm-doctor` and `npm run doctor` validate runtime, configuration, security baseline, connectivity, and the complete migration ledger without mutating storage; `--online` adds one bounded embedding-provider probe.
+- `csm-mcp` is the recommended Codex project entrypoint and supports PostgreSQL or SQLite when installed normally through `npx`.
+- The npm-backed Codex marketplace plugin is PostgreSQL-only and requires an explicit `CSM_DATABASE_URL`; marketplace installs do not run the native lifecycle step required by `better-sqlite3`.
 - SQLite uses `better-sqlite3`, so normal dependency lifecycle scripts must be allowed to install its native binding.
 - PostgreSQL is the complete feature path; SQLite is the documented local core mode.
 - Production PostgreSQL deployments must use an explicit database URL and follow `SCHEMA_SUPPORT_MATRIX.md` before an upgrade.

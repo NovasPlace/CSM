@@ -37,6 +37,7 @@ As of 2026-07-18, the isolated commercial release gate proves:
 - Customer memory, transcript, onboarding, AgentBook event/state, recall-quality, governance, export, and lifecycle surfaces are bound to the registered project, with adversarial two-project regression tests. Installation-level state is explicitly documented and is not presented as multi-tenant isolation.
 - The full release gate verifies the package boundary, zero-loss backup/restore, production dependency audit, reviewed licenses, CycloneDX SBOM, pinned CI actions, and secret-policy controls before removing its disposable database.
 - Runtime logs use stderr, redact credential patterns, and carry concurrency-safe project/session/tool correlation. The stdio MCP adapter is regression-tested to keep stdout JSON-only, report malformed input, drain active requests, and close on host EOF.
+- The release artifact exposes a compiled `csm-mcp` Codex entrypoint, aligns its Codex manifest version with the npm package, keeps only the manifest under `.codex-plugin/`, and smoke-tests both direct and plugin launchers from a non-repository working directory. The marketplace plugin is explicitly PostgreSQL-only because Codex suppresses the lifecycle step required by the native SQLite binding.
 
 These results establish a reliable engineering baseline. They do not establish production certification, a security attestation, or a service-level commitment.
 

@@ -4,7 +4,19 @@
       "cwd": ".",
       "command": "node",
       "args": [
-        "./.codex-plugin/runtime/launch-mcp.mjs"
+        "./runtime/launch-mcp.mjs"
+      ],
+      "env": {
+        "CSM_DATABASE_PROVIDER": "postgres",
+        "CSM_REQUIRE_EXPLICIT_DATABASE_URL": "true"
+      },
+      "env_vars": [
+        "CSM_DATABASE_URL",
+        "CSM_DB_TLS_MODE",
+        "CSM_EMBEDDING_PROVIDER",
+        "CSM_EMBEDDING_DIMENSIONS",
+        "OLLAMA_HOST",
+        "OPENAI_API_KEY"
       ]
     }
   }

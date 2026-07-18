@@ -8,7 +8,8 @@
 2. Set `CSM_DATABASE_URL`.
 3. Ensure the `vector` extension exists.
 4. Start the plugin. PostgreSQL schema initialization is serialized with a transaction-scoped advisory lock and runs atomically. An unexpected schema failure rolls back and aborts startup.
-5. For Codex-hosted usage, import `dist/codex-bridge.js` instead of starting the OpenCode plugin hooks.
+5. For Codex-hosted usage, run the packaged `csm-mcp` command from project MCP configuration. Import
+   `dist/codex-bridge.js` only when embedding CSM inside a custom host process.
 
 PostgreSQL transport controls are `CSM_DB_POOL_MAX`, `CSM_DB_CONNECTION_TIMEOUT_MS`, `CSM_DB_STATEMENT_TIMEOUT_MS`, `CSM_DB_IDLE_TIMEOUT_MS`, and `CSM_DB_TLS_MODE`. TLS mode `url` preserves the connection string policy, `disable` forbids TLS, `require` encrypts without certificate verification, and `verify-full` requires certificate and hostname verification. Production should use `verify-full` with a trusted system CA or `sslrootcert` in `CSM_DATABASE_URL`.
 
@@ -209,9 +210,13 @@ Rules:
 - It never runs automatically on startup.
 - Start with `dryRun=true` on large legacy databases.
 
-### Codex Bridge Bootstrap
+### Codex MCP and Bridge Bootstrap
 
-Use `CodexMemoryBridge.connect({ databaseUrl, ...config })`.
+The supported customer setup is documented in `CODEX_INSTALLATION.md`. It keeps `csm-mcp` in the
+project working directory so CSM reads the intended `.env`. The installable marketplace plugin is a
+separate PostgreSQL-only path.
+
+Custom host applications can use `CodexMemoryBridge.connect({ databaseUrl, ...config })` directly.
 
 Recommended first call per task:
 

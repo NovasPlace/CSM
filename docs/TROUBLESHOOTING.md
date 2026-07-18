@@ -100,3 +100,14 @@ Hook and tool logs include request-local project/session/tool correlation when t
 Credential patterns are redacted before emission, but logs can still contain project paths,
 operational metadata, and caller-provided error text. Apply access controls and retention limits,
 and review the exact excerpt before sharing it.
+
+## Codex cannot start CSM
+
+For project MCP setup, confirm `.codex/config.toml` invokes the pinned `csm-mcp` command with the
+project as its working directory. Run `codex mcp list`, then run `csm-doctor --online` from that same
+directory. Restart Codex after changing MCP configuration.
+
+The npm-backed Codex marketplace plugin is PostgreSQL-only and refuses the insecure default database
+URL. Make `CSM_DATABASE_URL` available to the Codex host before it launches the plugin. If SQLite is
+required, use the direct project MCP path in [Codex Installation](CODEX_INSTALLATION.md); marketplace
+installs do not run the native SQLite binding's lifecycle step.

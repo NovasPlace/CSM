@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { describe, it } from 'node:test';
 import { buildReleasePackageJson } from '../scripts/release-package-manifest.mjs';
 import { isSupportedNodeVersion } from '../src/doctor.js';
@@ -44,12 +44,34 @@ describe('commercial package boundary', () => {
     assert.equal(packageJson.scripts.doctor, 'node dist/cli/doctor.js');
     assert.equal(packageJson.bin['csm-init'], 'dist/cli/init-db.js');
     assert.equal(packageJson.bin['csm-doctor'], 'dist/cli/doctor.js');
+    assert.equal(packageJson.bin['csm-mcp'], 'dist/cli/mcp.js');
+    const packageLock = JSON.parse(readFileSync(join(process.cwd(), 'package-lock.json'), 'utf8'));
+    assert.deepEqual(packageLock.packages[''].bin, packageJson.bin);
     const pinnedPackage = `${packageJson.name}@${packageJson.version}`;
     assert.match(readFileSync(join(process.cwd(), 'README.md'), 'utf8'), new RegExp(pinnedPackage, 'u'));
     assert.match(
       readFileSync(join(process.cwd(), 'docs', 'TROUBLESHOOTING.md'), 'utf8'),
       new RegExp(pinnedPackage, 'u'),
     );
+  });
+
+  it('keeps the Codex plugin manifest, launcher, and support boundary aligned', () => {
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
+    const plugin = JSON.parse(
+      readFileSync(join(process.cwd(), '.codex-plugin', 'plugin.json'), 'utf8'),
+    );
+    const mcp = JSON.parse(readFileSync(join(process.cwd(), '.mcp.json'), 'utf8'));
+    const server = mcp.mcpServers['cross-session-memory-bridge'];
+    assert.equal(plugin.version, packageJson.version);
+    assert.deepEqual(readdirSync(join(process.cwd(), '.codex-plugin')), ['plugin.json']);
+    assert.equal(plugin.mcpServers, './.mcp.json');
+    assert.deepEqual(server.args, ['./runtime/launch-mcp.mjs']);
+    assert.equal(server.env.CSM_DATABASE_PROVIDER, 'postgres');
+    assert.equal(server.env.CSM_REQUIRE_EXPLICIT_DATABASE_URL, 'true');
+    assert.ok(server.env_vars.includes('CSM_DATABASE_URL'));
+    const launcher = readFileSync(join(process.cwd(), 'runtime', 'launch-mcp.mjs'), 'utf8');
+    assert.match(launcher, /PLUGIN_ROOT/u);
+    assert.doesNotMatch(launcher, /homedir|Desktop|Documents/u);
   });
 
   it('publishes a buyer manifest without unavailable maintainer commands', () => {
@@ -70,7 +92,8 @@ describe('commercial package boundary', () => {
     const required = [
       'package.json', 'README.md', 'LICENSE', 'SECURITY.md',
       'dist/index.js', 'dist/index.d.ts', 'dist/cli/init-db.js', 'dist/cli/doctor.js',
-      '.codex-plugin/plugin.json', '.codex-plugin/runtime/launch-mcp.mjs', '.mcp.json',
+      'dist/cli/mcp.js', '.codex-plugin/plugin.json', 'runtime/launch-mcp.mjs', '.mcp.json',
+      'docs/CODEX_INSTALLATION.md',
       'docs/RELEASE_PROCESS.md', 'docs/SUPPLY_CHAIN_SECURITY.md', 'docs/TROUBLESHOOTING.md',
     ];
     for (const path of required) assert.ok(paths.has(path), `missing packaged file: ${path}`);
@@ -78,14 +101,27 @@ describe('commercial package boundary', () => {
     const forbidden = [
       /^AGENTBOOK_STATE\.md$/u, /^README\.txt$/u, /^FIX_README\.txt$/u,
       /^\.csm\//u, /^\.obsidian\//u, /^\.tmp/u,
+      /^\.codex-plugin\/(?!plugin\.json$)/u,
+      /^runtime\/(?!launch-mcp\.mjs$)/u,
       /^src\//u, /^test\//u, /^wip-tests\//u, /^workflow-project\//u,
       /^scripts\//u, /(?:^|\/)full-test-output\.txt$/u, /-README\.txt$/u, /\.patch$/u,
     ];
     for (const path of paths) {
       assert.ok(!forbidden.some((pattern) => pattern.test(path)), `forbidden packaged file: ${path}`);
     }
+    assertPackagedMarkdownLinks(paths);
     assert.ok(packed.entryCount < 1_800, `package has too many files: ${packed.entryCount}`);
     assert.ok(packed.unpackedSize < 10_000_000, `package is too large: ${packed.unpackedSize}`);
+  });
+
+  it('starts both packaged Codex MCP entrypoints with JSON-only stdout', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'csm-codex-entrypoints-'));
+    try {
+      assertMcpEntrypoint(join(process.cwd(), 'dist', 'cli', 'mcp.js'), directory);
+      assertMcpEntrypoint(join(process.cwd(), 'runtime', 'launch-mcp.mjs'), directory);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('initializes a customer SQLite database through the compiled CLI', () => {
@@ -174,3 +210,42 @@ describe('commercial package boundary', () => {
     }
   });
 });
+
+function assertMcpEntrypoint(entrypoint: string, cwd: string): void {
+  const input = [
+    JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2025-11-25', clientInfo: { name: 'package-test', version: '1' } },
+    }),
+    JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
+    '',
+  ].join('\n');
+  const result = spawnSync(process.execPath, [entrypoint], {
+    cwd,
+    input,
+    encoding: 'utf8',
+    timeout: 30_000,
+    env: { ...process.env, CSM_PROMPT_DEBUG: 'false' },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const records = result.stdout.split(/\r?\n/u).filter(Boolean).map((line) => JSON.parse(line));
+  assert.equal(records.length, 2, result.stdout);
+  assert.ok(records.some((record) => record.id === 1 && record.result));
+  assert.ok(records.some((record) => record.id === 2 && record.result));
+}
+
+function assertPackagedMarkdownLinks(paths: Set<string>): void {
+  for (const document of paths) {
+    if (!document.endsWith('.md')) continue;
+    const sourcePath = join(process.cwd(), ...document.split('/'));
+    const source = readFileSync(sourcePath, 'utf8');
+    for (const match of source.matchAll(/\]\(([^)]+)\)/gu)) {
+      const link = match[1].trim().replace(/^<|>$/gu, '');
+      if (/^(?:[a-z][a-z\d+.-]*:|#)/iu.test(link)) continue;
+      const relative = decodeURIComponent(link.split('#', 1)[0]);
+      if (!relative) continue;
+      const target = posix.normalize(posix.join(posix.dirname(document), relative));
+      assert.ok(paths.has(target), `${document} links to missing packaged file: ${link}`);
+    }
+  }
+}
