@@ -15,7 +15,7 @@ Persistent memory, operational state, re-entry, context governance, and durable 
   <a href="LICENSE"><img src="https://img.shields.io/github/license/NovasPlace/CSM" alt="License"></a>
 </p>
 
-[Quick start](#quick-start) · [Feature map](docs/FEATURES.md) · [Architecture](docs/PRODUCT_ARCHITECTURE.md) · [Privacy](docs/DATA_PRIVACY_AND_LIFECYCLE.md) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start) · [Feature map](docs/FEATURES.md) · [Architecture](docs/PRODUCT_ARCHITECTURE.md) · [Privacy](docs/DATA_PRIVACY_AND_LIFECYCLE.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -189,82 +189,82 @@ CSM includes:
 
 ## Quick start
 
-CSM is currently source-first. Build the repository, configure a storage provider, and load the generated `dist/index.js` entrypoint through your local OpenCode plugin setup.
-
 Runtime requirement: Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`, matching the current OpenCode plugin dependency line.
 
-### 1. Clone and install
+### 1. Configure the project
+
+Create a `.env` in the project where OpenCode will run. SQLite is the smallest local setup:
+
+```dotenv
+CSM_DATABASE_PROVIDER=sqlite
+CSM_SQLITE_PATH=.data/csm-memory.db
+CSM_EMBEDDING_PROVIDER=ollama
+OLLAMA_HOST=http://localhost:11434
+```
+
+For the complete feature path, use PostgreSQL instead:
+
+```dotenv
+CSM_DATABASE_PROVIDER=postgres
+CSM_DATABASE_URL=postgresql://csm_user:replace-me@localhost:5432/csm
+CSM_REQUIRE_EXPLICIT_DATABASE_URL=true
+CSM_EMBEDDING_PROVIDER=ollama
+OLLAMA_HOST=http://localhost:11434
+```
+
+Use `CSM_EMBEDDING_PROVIDER=openai` with `OPENAI_API_KEY` if OpenAI embeddings are preferred. Never commit `.env`.
+
+### 2. Add the packaged plugin
+
+Add the pinned package and turn-1 continuity file to `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md", "AGENTBOOK_STATE.md"],
+  "plugin": [["opencode-cross-session-memory@1.0.0", {}]]
+}
+```
+
+OpenCode installs configured npm plugins on demand. Pin the version so an upgrade is an intentional, testable change.
+
+### 3. Initialize storage
+
+```bash
+npx --yes --package=opencode-cross-session-memory@1.0.0 csm-init
+```
+
+This applies the versioned schema safely and can be rerun during an upgrade. Back up production storage before upgrading.
+
+### 4. Verify before first use
+
+```bash
+npx --yes --package=opencode-cross-session-memory@1.0.0 csm-doctor --online
+```
+
+Doctor checks the package, Node runtime, strict configuration, security baseline, database, complete migration history, and configured embedding model. It never includes credentials or memory content in its report. See [CSM Doctor and Troubleshooting](docs/TROUBLESHOOTING.md) for JSON output and common fixes.
+
+### 5. Start OpenCode
+
+Start OpenCode in the configured project. CSM creates and updates `AGENTBOOK_STATE.md` as activity is captured, allowing the host to read current project state before a later session begins normal tool execution.
+
+### Source checkout for contributors
+
+The package entrypoint is `dist/index.js`. For local development rather than a packaged install:
 
 ```bash
 git clone https://github.com/NovasPlace/CSM.git
 cd CSM
-npm install
-```
-
-### 2. Build
-
-```bash
+npm ci
 npm run build
-```
-
-The package entrypoint is `dist/index.js`, exported as the default OpenCode plugin.
-
-### 3. Choose a database
-
-<details open>
-<summary><strong>PostgreSQL — full feature path</strong></summary>
-
-```bash
-export CSM_DATABASE_PROVIDER=postgres
-export CSM_DATABASE_URL=postgres://user:password@localhost:5432/csm
 npm run db:setup
+npm run doctor -- --online
 ```
 
-PostgreSQL is the complete runtime path and the path exercised by the PostgreSQL 14/16 CI matrix.
-
-</details>
-
-<details>
-<summary><strong>SQLite — local core mode</strong></summary>
+Maintainers can run the complete release gate with:
 
 ```bash
-export CSM_DATABASE_PROVIDER=sqlite
-export CSM_SQLITE_PATH=.data/csm.sqlite
-npm run db:setup
-```
-
-SQLite removes PostgreSQL-only tools during registration rather than exposing unsupported behavior.
-
-</details>
-
-### 4. Enable turn-1 continuity
-
-Add the generated AgentBook front page to your project instructions:
-
-```json
-{
-  "instructions": [
-    "AGENTS.md",
-    "AGENTBOOK_STATE.md"
-  ]
-}
-```
-
-CSM updates `AGENTBOOK_STATE.md` as project activity is captured. OpenCode can then read the current state before a fresh session begins normal tool execution.
-
-### 5. Verify the installation
-
-```bash
-npm run typecheck
-npm run build
-npm run lint:src
-npm test
-```
-
-For the full PostgreSQL reliability gate:
-
-```bash
-npm run verify:enterprise
+npm run verify:release
 ```
 
 ## Database modes

@@ -6,10 +6,10 @@ CSM is in enterprise hardening, not enterprise certified. The current baseline h
 
 ## Proven Baseline
 
-As of 2026-07-09, local verification proves:
+As of 2026-07-18, the isolated commercial release gate proves:
 
 - TypeScript build and typecheck pass.
-- 969 of 969 tests pass against real PostgreSQL and SQLite paths.
+- 1,787 of 1,787 tests pass against a fresh isolated PostgreSQL database plus real SQLite paths.
 - Source lint passes with zero errors and seven locked external-declaration warnings.
 - PostgreSQL schema startup is transaction-bound, advisory-lock serialized, and fail-fast.
 - Schema step failures report the exact failed initializer and roll back the transaction.
@@ -33,6 +33,9 @@ As of 2026-07-09, local verification proves:
 - `Database.diagnose()` exposes machine-readable startup, liveness, readiness latency, failure reason, provider, and pool state.
 - The npm artifact uses an explicit allowlist, excludes workspace/generated state, and has an executable dry-run boundary test.
 - The customer database setup command runs from compiled JavaScript and is smoke-tested against a fresh SQLite database.
+- The packaged `csm-doctor` command emits human or support-safe JSON diagnostics, checks Node/configuration/security/database/schema readiness, verifies the complete migration ledger, and leaves a missing SQLite database uncreated.
+- Customer memory, transcript, onboarding, AgentBook event/state, recall-quality, governance, export, and lifecycle surfaces are bound to the registered project, with adversarial two-project regression tests. Installation-level state is explicitly documented and is not presented as multi-tenant isolation.
+- The full release gate verifies the package boundary, zero-loss backup/restore, production dependency audit, reviewed licenses, CycloneDX SBOM, pinned CI actions, and secret-policy controls before removing its disposable database.
 
 These results establish a reliable engineering baseline. They do not establish production certification, a security attestation, or a service-level commitment.
 

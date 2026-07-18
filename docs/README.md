@@ -17,6 +17,7 @@ Start with the product documentation. Use phase documents when you need design h
 | [Contributing](../CONTRIBUTING.md) | Development workflow, gates, migration rules, and PR expectations |
 | [Security](../SECURITY.md) | Vulnerability reporting and memory-system security considerations |
 | [Data Privacy and Lifecycle](DATA_PRIVACY_AND_LIFECYCLE.md) | Stored data, project isolation, retention, deletion, export, and encryption responsibilities |
+| [CSM Doctor and Troubleshooting](TROUBLESHOOTING.md) | Safe installation diagnostics, common fixes, and support escalation bundle |
 | [Release Process](RELEASE_PROCESS.md) | Artifact boundary, release gate, publishing, and rollback contract |
 | [Supply-Chain Security](SUPPLY_CHAIN_SECURITY.md) | Dependency, license, SBOM, secret-scan, attestation, and publishing controls |
 

@@ -1,12 +1,13 @@
 # Release Process
 
-CSM is currently source-first and not represented as a generally available hosted service. A release is customer-ready only when the artifact boundary, compatibility evidence, upgrade path, and rollback path are all verified.
+CSM ships as a versioned npm plugin package and is not represented as a generally available hosted service. Source checkout is the contributor path, not the customer installation path. A release is customer-ready only when the artifact boundary, compatibility evidence, upgrade path, diagnostics, and rollback path are all verified.
 
 ## Supported release artifact
 
 The npm artifact contains only:
 
 - compiled runtime and type declarations under `dist/`
+- compiled `csm-init` and `csm-doctor` customer commands
 - the repo-local Codex/MCP launcher metadata
 - the environment example
 - the license, security policy, and curated product/operator documentation
@@ -26,14 +27,15 @@ npm run package:dry-run
 
 On POSIX shells, set the same value with `export CSM_RELEASE_DATABASE_URL=...`.
 
-`verify:release` creates a uniquely named disposable PostgreSQL database, runs the complete build, typecheck, supported test suite, and locked source lint gate against it, then removes it. It supplies the server URL to the PostgreSQL backup/restore drill through a separate environment boundary before running the package-boundary test, compiled SQLite setup smoke test, production vulnerability and license checks, and CycloneDX SBOM generation. Never set the release URL to a database account that cannot create and drop isolated databases.
+`verify:release` creates a uniquely named disposable PostgreSQL database, runs the complete build, typecheck, supported test suite, and locked source lint gate against it, then removes it. It supplies the server URL to the PostgreSQL backup/restore drill through a separate environment boundary before running the package-boundary test, compiled SQLite setup and read-only doctor smoke tests, production vulnerability and license checks, and CycloneDX SBOM generation. Never set the release URL to a database account that cannot create and drop isolated databases.
 
-Review the dry-run manifest before publishing. Confirm the version, release notes, supported schema window, and database backup guidance match the candidate artifact. Build the tarball only through `npm run package:create`; do not publish by running `npm publish` from the repository root.
+Review the dry-run manifest before publishing. Confirm the version, pinned package examples in the README and troubleshooting guide, release notes, supported schema window, and database backup guidance match the candidate artifact. Build the tarball only through `npm run package:create`; do not publish by running `npm publish` from the repository root.
 
 ## Installation contract
 
 - Match the current OpenCode plugin runtime: Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`.
 - `csm-init` and `npm run db:setup` use the compiled runtime, not development-only TypeScript tooling.
+- `csm-doctor` and `npm run doctor` validate runtime, configuration, security baseline, connectivity, and the complete migration ledger without mutating storage; `--online` adds one bounded embedding-provider probe.
 - SQLite uses `better-sqlite3`, so normal dependency lifecycle scripts must be allowed to install its native binding.
 - PostgreSQL is the complete feature path; SQLite is the documented local core mode.
 - Production PostgreSQL deployments must use an explicit database URL and follow `SCHEMA_SUPPORT_MATRIX.md` before an upgrade.
