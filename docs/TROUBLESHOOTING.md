@@ -92,3 +92,11 @@ When asking for support, include:
 
 Never include `.env`, database dumps, raw memories, transcripts, API keys, or unredacted connection
 strings in a support ticket.
+
+## Log collection
+
+CSM emits runtime logs on stderr so stdout remains safe for JSON reports and MCP JSON-RPC traffic.
+Hook and tool logs include request-local project/session/tool correlation when the host supplies it.
+Credential patterns are redacted before emission, but logs can still contain project paths,
+operational metadata, and caller-provided error text. Apply access controls and retention limits,
+and review the exact excerpt before sharing it.

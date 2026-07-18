@@ -52,6 +52,9 @@ Treat the memory database, generated operational documents, logs, exports, and b
 - Do not expose PostgreSQL directly to untrusted networks.
 - Review retention, archive, and deletion behavior before storing regulated or customer data.
 - Redact secrets before attaching logs to issues or pull requests.
+- Keep stdout reserved for command output and stdio protocols; CSM runtime logs are emitted on stderr.
+- CSM applies credential-pattern redaction to runtime logs, but operators must still review, restrict,
+  rotate, and expire logs as sensitive project data.
 - Review `AGENTBOOK_STATE.md` and generated auto-docs before publishing a repository.
 - Keep local model, embedding, and API endpoints within the intended trust boundary.
 

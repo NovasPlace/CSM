@@ -16,6 +16,7 @@ import {
 } from './schema/migration-ledger.js';
 import type { RuntimePluginConfig } from './runtime-plugin-config.js';
 import type { DatabasePool } from './types.js';
+import { redactSensitiveText } from './sensitive-redaction.js';
 
 export type DoctorCheckStatus = 'pass' | 'warn' | 'fail' | 'skip';
 export type DoctorOverallStatus = 'pass' | 'warn' | 'fail';
@@ -144,15 +145,7 @@ export function formatDoctorReport(report: DoctorReport): string {
 }
 
 export function redactDoctorError(error: unknown, env: NodeJS.ProcessEnv = process.env): string {
-  let message = formatDatabaseDiagnostic(error);
-  for (const key of ['CSM_DATABASE_URL', 'OPENAI_API_KEY', 'OLLAMA_HOST'] as const) {
-    const value = env[key];
-    if (value && value.length >= 4) message = message.replaceAll(value, '[REDACTED]');
-  }
-  return message
-    .replace(/((?:https?):\/\/)[^@\s/]+@/giu, '$1[REDACTED]@')
-    .replace(/(authorization\s*:\s*bearer\s+)[^\s,;]+/giu, '$1[REDACTED]')
-    .replace(/((?:api[_-]?key|token|secret)\s*[=:]\s*)[^\s,;]+/giu, '$1[REDACTED]');
+  return redactSensitiveText(formatDatabaseDiagnostic(error), env);
 }
 
 async function loadRuntimeConfig(): Promise<RuntimePluginConfig> {

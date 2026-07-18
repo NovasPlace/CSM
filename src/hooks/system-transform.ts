@@ -24,6 +24,7 @@ import type {
   SystemTransformInput,
   SystemTransformOutput,
 } from './system-transform-live-types.js';
+import { withLogContext } from '../logger.js';
 
 export { isGreetingLikeTurn, isWorkspaceFactTurn };
 export { isReentrySourceOnlyTurn } from './reentry-source-only.js';
@@ -58,10 +59,12 @@ export function createSystemTransformHook(ctx: PluginContext) {
     input: SystemTransformInput,
     output: SystemTransformOutput,
   ): Promise<void> => {
+    return withLogContext({ projectId: ctx.directory, sessionId: input.sessionID }, async () => {
     try {
       await runSystemTransform(ctx, input, output);
     } catch (error) {
       logTransformFailure(error, output);
     }
+    });
   };
 }

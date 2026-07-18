@@ -2,7 +2,7 @@ import type { PluginContext } from '../plugin-context.js';
 import type { ToolCallRecord } from '../types.js';
 import { extractTextParts, rememberUserTurn } from './reentry-source-only.js';
 import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
-import { getLogger } from '../logger.js';
+import { getLogger, withLogContext } from '../logger.js';
 import { isAlreadyCompacted } from '../compaction-utils.js';
 import type { GovernorMessage, GovernorPart } from '../context-governor.js';
 import { storeItem, type CacheKind } from '../context-cache-store.js';
@@ -35,6 +35,9 @@ interface TransformMessage extends GovernorMessage {
 
 export function createMessagesTransformHook(ctx: PluginContext) {
   return async (_input: unknown, output: { messages: TransformMessage[] }) => {
+    const observedSession = latestSessionId(output.messages)
+      ?? ctx.state.currentSessionId ?? undefined;
+    return withLogContext({ projectId: ctx.directory, sessionId: observedSession }, async () => {
     try {
       const messages = output.messages;
       if (!messages || messages.length === 0) return;
@@ -140,7 +143,17 @@ export function createMessagesTransformHook(ctx: PluginContext) {
     } catch (error) {
       getLogger().error(`messages.transform hook failed: ${String(error)}`);
     }
+    });
   };
+}
+
+function latestSessionId(messages: readonly TransformMessage[] | undefined): string | undefined {
+  if (!messages) return undefined;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const sessionId = messages[index].info?.sessionID;
+    if (sessionId) return sessionId;
+  }
+  return undefined;
 }
 
 

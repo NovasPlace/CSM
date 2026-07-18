@@ -1,6 +1,6 @@
 import type { PluginInput } from '@opencode-ai/plugin';
 import type { PluginContext } from '../plugin-context.js';
-import { getLogger } from '../logger.js';
+import { getLogger, withLogContext } from '../logger.js';
 import {
   buildSourceOnlyInjectedText,
   disableToolsForSourceOnlyTurn,
@@ -20,6 +20,10 @@ export function createEventHook(
   pluginCtx: PluginContext,
 ): (args: { event: unknown }) => Promise<void> {
   return async ({ event }) => {
+    return withLogContext({
+      projectId: pluginCtx.directory,
+      sessionId: eventSessionId(event) ?? pluginCtx.state.currentSessionId ?? undefined,
+    }, async () => {
     const record = event as Record<string, unknown>;
     try {
       await handleSessionCreated(ctx, pluginCtx, record);
@@ -29,6 +33,7 @@ export function createEventHook(
     } catch (error) {
       getLogger().error('Event handler failed', error as Error);
     }
+    });
   };
 }
 
@@ -39,6 +44,7 @@ export function createChatMessageHook(
   model?: { providerID: string; modelID: string };
 }, output: { parts: unknown[] }) => Promise<void> {
   return async (input, output) => {
+    return withLogContext({ projectId: pluginCtx.directory, sessionId: input.sessionID }, async () => {
     captureModelIdentity(pluginCtx, input);
     const userText = extractTextParts(output.parts);
     if (userText) rememberUserTurn(pluginCtx.state, input.sessionID, userText);
@@ -52,7 +58,17 @@ export function createChatMessageHook(
     const sourceOnlySystem = buildSourceOnlyInjectedText(block);
     message.system = message.system
       ? `${sourceOnlySystem}\n\n${message.system}` : sourceOnlySystem;
+    });
   };
+}
+
+function eventSessionId(event: unknown): string | undefined {
+  if (!event || typeof event !== 'object') return undefined;
+  const properties = (event as { properties?: unknown }).properties;
+  if (!properties || typeof properties !== 'object') return undefined;
+  const record = properties as { sessionID?: unknown; info?: { id?: unknown; sessionID?: unknown } };
+  const value = record.sessionID ?? record.info?.sessionID ?? record.info?.id;
+  return typeof value === 'string' && value ? value : undefined;
 }
 
 function captureModelIdentity(

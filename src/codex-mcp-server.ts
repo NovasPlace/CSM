@@ -2,6 +2,8 @@ import readline from 'node:readline';
 import { CodexMemoryBridge } from './codex-bridge.js';
 import { invokeMcpTool, MCP_TOOLS } from './codex-mcp-tools.js';
 import { setClientIdentity } from './bridge-provenance.js';
+import { withLogContext } from './logger.js';
+import { redactSensitiveText } from './sensitive-redaction.js';
 
 const SERVER_NAME = 'Cross-Session Memory Bridge';
 const SERVER_VERSION = '1.0.0';
@@ -19,7 +21,7 @@ function sendResult(id: JsonRpcId, result: unknown): void {
 }
 
 function sendError(id: JsonRpcId, message: string): void {
-  send({ jsonrpc: '2.0', id, error: { code: -32602, message } });
+  send({ jsonrpc: '2.0', id, error: { code: -32602, message: redactSensitiveText(message) } });
 }
 
 function textResult(payload: unknown) {
@@ -72,11 +74,75 @@ async function cleanup(): Promise<void> {
 }
 
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+const pending = new Set<Promise<void>>();
+let shutdownPromise: Promise<void> | null = null;
+
 input.on('line', (line) => {
   if (!line.trim()) return;
-  handle(JSON.parse(line) as { id?: JsonRpcId; method?: string; params?: { name?: string; arguments?: Record<string, unknown>; protocolVersion?: string; clientInfo?: { name?: string; version?: string } } })
-    .catch((error: unknown) => send({ jsonrpc: '2.0', error: { code: -32603, message: String(error) } }));
+  const task = handleLine(line).finally(() => pending.delete(task));
+  pending.add(task);
 });
 
-process.on('SIGINT', () => cleanup().finally(() => process.exit(0)));
-process.on('SIGTERM', () => cleanup().finally(() => process.exit(0)));
+input.on('close', () => {
+  void shutdown().catch((error: unknown) => {
+    process.stderr.write(`CSM MCP shutdown failed: ${redactSensitiveText(error instanceof Error ? error.message : String(error))}\n`);
+    process.exitCode = 1;
+  });
+});
+
+process.on('SIGINT', () => shutdown().finally(() => process.exit(0)));
+process.on('SIGTERM', () => shutdown().finally(() => process.exit(0)));
+
+async function handleLine(line: string): Promise<void> {
+  let message: unknown;
+  try {
+    message = JSON.parse(line);
+  } catch {
+    send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+    return;
+  }
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    send({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request' } });
+    return;
+  }
+  try {
+    const request = message as {
+      id?: JsonRpcId;
+      method?: string;
+      params?: {
+        name?: string;
+        arguments?: Record<string, unknown>;
+        protocolVersion?: string;
+        clientInfo?: { name?: string; version?: string };
+      };
+    };
+    const argumentsRecord = request.params?.arguments;
+    await withLogContext({
+      projectId: stringValue(argumentsRecord?.projectRoot),
+      sessionId: stringValue(argumentsRecord?.sessionId),
+      toolName: request.params?.name,
+      correlationId: request.id === undefined ? undefined : String(request.id),
+    }, () => handle(request));
+  } catch (error) {
+    const id = (message as { id?: JsonRpcId }).id ?? null;
+    send({
+      jsonrpc: '2.0', id,
+      error: {
+        code: -32603,
+        message: redactSensitiveText(error instanceof Error ? error.message : String(error)),
+      },
+    });
+  }
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+function shutdown(): Promise<void> {
+  shutdownPromise ??= (async () => {
+    await Promise.allSettled([...pending]);
+    await cleanup();
+  })();
+  return shutdownPromise;
+}

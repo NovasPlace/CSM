@@ -8,7 +8,7 @@ import { createAutocontinueHook, createSessionCompactingHook } from './hooks/ses
 import { createSystemTransformHook } from './hooks/system-transform.js';
 import { registerTools } from './hooks/tool-hooks.js';
 import { disposeAll } from './hooks/dispose-hooks.js';
-import { Logger } from './logger.js';
+import { Logger, withLogContext } from './logger.js';
 import type { PluginContext } from './plugin-context.js';
 import { startPluginContext } from './plugin-runtime-start.js';
 import { mergePluginConfig, normalizeProviderRuntimeConfig } from './provider-runtime-config.js';
@@ -24,12 +24,12 @@ export async function registerHooks(
     sessionId: undefined, projectId: ctx.directory ?? null, verbose: config.promptDebug,
   });
   logging.info('Initializing AUTOMATED memory system...');
-  return startPluginContext<Hooks>(ctx, config, logging, {
+  return withLogContext({ projectId: ctx.directory }, () => startPluginContext<Hooks>(ctx, config, logging, {
     activate: (pluginCtx) => {
       logContextCap(config.targetContextCap, logging);
       return buildHooks(ctx, pluginCtx);
     },
-  });
+  }));
 }
 
 function buildHooks(ctx: PluginInput, pluginCtx: PluginContext): Hooks {

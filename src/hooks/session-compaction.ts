@@ -1,7 +1,7 @@
 import type { PluginContext } from '../plugin-context.js';
 import { getRolloverRecord, clearHardRolloverFlag } from '../context-rollover-schema.js';
 import { estimateTokens } from '../token-bucket-analyzer.js';
-import { getLogger } from '../logger.js';
+import { getLogger, withLogContext } from '../logger.js';
 
 function boxErr(e: unknown): Error {
   return e instanceof Error ? e : new Error(String(e));
@@ -17,6 +17,7 @@ function boxErr(e: unknown): Error {
  */
 export function createSessionCompactingHook(ctx: PluginContext) {
   return async (input: { sessionID: string }, output: { context: string[]; prompt?: string }) => {
+    return withLogContext({ projectId: ctx.directory, sessionId: input.sessionID }, async () => {
     try {
       ctx.syncActiveSession(input.sessionID);
       const sid = ctx.state.currentSessionId;
@@ -40,6 +41,7 @@ export function createSessionCompactingHook(ctx: PluginContext) {
     } catch (e) {
       getLogger().error('session.compacting hook error', boxErr(e));
     }
+    });
   };
 }
 
@@ -78,6 +80,7 @@ Rules: terse bullets only. Preserve exact file paths, symbols, commands, error s
 
 export function createAutocontinueHook(ctx: PluginContext) {
   return async (input: { sessionID: string; overflow: boolean }, _output: { enabled: boolean }) => {
+    return withLogContext({ projectId: ctx.directory, sessionId: input.sessionID }, async () => {
     try {
       ctx.syncActiveSession(input.sessionID);
       const sid = ctx.state.currentSessionId;
@@ -120,5 +123,6 @@ export function createAutocontinueHook(ctx: PluginContext) {
     } catch (e) {
       getLogger().error('compaction.autocontinue hook error', boxErr(e));
     }
+    });
   };
 }

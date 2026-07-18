@@ -5,7 +5,7 @@ import type { ToolCallRecord } from '../types.js';
 import { ensureProjectDocsInitialized } from './auto-docs.js';
 import { autoDistill, logToolUsage } from './tool-execute-memory.js';
 import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
-import { getLogger } from '../logger.js';
+import { getLogger, withLogContext } from '../logger.js';
 import { buildAgentBookToolEventInput } from '../agentbook-tool-event.js';
 import { generateFrontPage, writeFrontPageFile } from '../agentbook-frontpage.js';
 
@@ -60,14 +60,20 @@ const WORK_LEDGER_EDIT_TOOLS = new Set([
 
 export function createPermissionAskHook(ctx: PluginContext) {
   return async (input: PermissionAskInput, output: PermissionAskOutput) => {
+    return withLogContext({ projectId: ctx.directory, sessionId: input.sessionID }, async () => {
     const sessionId = input.sessionID ?? ctx.state.currentSessionId ?? undefined;
     if (!isReentrySourceOnlyActive(ctx.state, sessionId)) return;
     output.status = 'deny';
+    });
   };
 }
 
 export function createToolExecuteBeforeHook(ctx: PluginContext) {
   return async (input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput) => {
+    return withLogContext({
+      projectId: ctx.directory, sessionId: input.sessionID,
+      toolName: input.tool, correlationId: input.callID,
+    }, async () => {
     ctx.syncActiveSession(input.sessionID);
     if (isReentrySourceOnlyActive(ctx.state, input.sessionID)) {
       throw new Error(REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE);
@@ -81,11 +87,16 @@ export function createToolExecuteBeforeHook(ctx: PluginContext) {
     } catch (error) {
       getLogger().error('Loop detection error', error instanceof Error ? error : new Error(String(error)));
     }
+    });
   };
 }
 
 export function createToolExecuteAfterHook(ctx: PluginContext) {
   return async (input: ToolExecuteAfterInput, output: ToolExecuteAfterOutput) => {
+    return withLogContext({
+      projectId: ctx.directory, sessionId: input.sessionID,
+      toolName: input.tool, correlationId: input.callID,
+    }, async () => {
     ctx.syncActiveSession(input.sessionID);
     await captureWorkLedgerAfter(ctx, input);
     try {
@@ -117,6 +128,7 @@ export function createToolExecuteAfterHook(ctx: PluginContext) {
     } catch (error) {
       getLogger().error('Tool tracking error', error instanceof Error ? error : new Error(String(error)));
     }
+    });
   };
 }
 

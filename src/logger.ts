@@ -1,4 +1,6 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { PluginContext } from './plugin-context.js';
+import { redactSensitiveText } from './sensitive-redaction.js';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -8,6 +10,7 @@ export interface LoggerContext {
   turnId?: string;
   memoryId?: string;
   toolName?: string;
+  correlationId?: string;
   eventType?: 'context_governor';
   profile?: string;
   thresholds?: string;
@@ -41,6 +44,7 @@ export class Logger {
   private formatMessage(level: LogLevel, message: string, context: LoggerContext = {}): string {
     const allContext = {
       ...this.context,
+      ...LOG_CONTEXT.getStore(),
       ...context,
       timestamp: new Date().toISOString(),
       level,
@@ -48,8 +52,8 @@ export class Logger {
 
     if (this.isJson) {
       return JSON.stringify({
-        ...allContext,
-        message,
+        ...redactContext(allContext),
+        message: redactSensitiveText(message),
       });
     }
 
@@ -75,22 +79,24 @@ export class Logger {
       parts.push(`tool:${allContext.toolName}`);
     }
 
+    if (allContext.correlationId) {
+      parts.push(`correlation:${allContext.correlationId}`);
+    }
+
     appendAuditContext(parts, allContext);
 
-    parts.push(message);
+    parts.push(redactSensitiveText(message));
     return parts.join(' ');
   }
 
   debug(message: string, context?: LoggerContext): void {
     if (this.verbose) {
-      // eslint-disable-next-line no-console -- logger's own internal debug output
-      console.log(this.formatMessage('debug', message, context));
+      console.error(this.formatMessage('debug', message, context));
     }
   }
 
   info(message: string, context?: LoggerContext): void {
-    // eslint-disable-next-line no-console -- logger's own internal info output
-    console.log(this.formatMessage('info', message, context));
+    console.error(this.formatMessage('info', message, context));
   }
 
   warn(message: string, context?: LoggerContext): void {
@@ -99,24 +105,23 @@ export class Logger {
 
   error(message: string, error?: Error, context?: LoggerContext): void {
     const errorContext = error
-      ? { ...context, error: error.message, stack: error.stack }
+      ? {
+        ...context,
+        error: redactSensitiveText(error.message),
+        stack: error.stack ? redactSensitiveText(error.stack) : undefined,
+      }
       : context;
 
     if (this.isJson) {
-      console.error(JSON.stringify({
-        ...errorContext,
-        message,
-        level: 'error',
-        timestamp: new Date().toISOString(),
-      }));
+      console.error(this.formatMessage('error', message, errorContext));
     } else {
       const parts: string[] = [this.formatMessage('error', message, errorContext)];
 
       if (error) {
         if (error.stack) {
-          parts.push(error.stack);
+          parts.push(redactSensitiveText(error.stack));
         } else {
-          parts.push(error.message);
+          parts.push(redactSensitiveText(error.message));
         }
       }
 
@@ -142,10 +147,29 @@ export class Logger {
   }
 
   clearContext(): void {
-    this.context = {};
-    const _sessionId = this.context.sessionId; // preserve session
-    const _projectId = this.context.projectId; // preserve project
+    const { sessionId, projectId } = this.context;
+    this.context = { sessionId, projectId };
   }
+}
+
+const LOG_CONTEXT = new AsyncLocalStorage<LoggerContext>();
+
+export function withLogContext<T>(context: LoggerContext, task: () => T): T {
+  const inherited = LOG_CONTEXT.getStore() ?? {};
+  const defined = Object.fromEntries(
+    Object.entries(context).filter(([, value]) => value !== undefined),
+  ) as LoggerContext;
+  return LOG_CONTEXT.run({ ...inherited, ...defined }, task);
+}
+
+function redactContext<T extends LoggerContext & { timestamp: string; level: LogLevel }>(
+  context: T,
+): T {
+  const safe = { ...context };
+  for (const key of Object.keys(safe) as Array<keyof T>) {
+    if (typeof safe[key] === 'string') safe[key] = redactSensitiveText(safe[key] as string) as T[keyof T];
+  }
+  return safe;
 }
 
 function appendAuditContext(parts: string[], context: LoggerContext): void {

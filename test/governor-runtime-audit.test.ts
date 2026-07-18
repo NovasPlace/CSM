@@ -28,15 +28,15 @@ function runtimeContext(): PluginContext {
 describe('governor runtime audit', () => {
   it('emits an observed governor record only after governing messages', async () => {
     const entries: string[] = [];
-    const original = console.log;
-    console.log = (...args: unknown[]) => entries.push(args.join(' '));
+    const original = console.error;
+    console.error = (...args: unknown[]) => entries.push(args.join(' '));
     try {
       await createMessagesTransformHook(runtimeContext())({}, { messages: [
         { info: { role: 'user', sessionID: 'governor-audit' }, parts: [{ type: 'text', text: 'continue' }] },
         { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'x'.repeat(2_000) }] },
       ] });
     } finally {
-      console.log = original;
+      console.error = original;
     }
     const audit = entries.find((entry) => entry.includes('Context governor audit'));
     assert.ok(audit);

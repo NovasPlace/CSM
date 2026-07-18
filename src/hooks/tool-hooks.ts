@@ -1,6 +1,7 @@
 import type { PluginContext } from '../plugin-context.js';
 import { isReentrySourceOnlyActive, REENTRY_SOURCE_ONLY_RECOVERY_MESSAGE } from './reentry-source-only.js';
 import { createRegisteredToolList } from './tool-registry.js';
+import { withLogContext } from '../logger.js';
 
 const SQLITE_UNSUPPORTED_TOOLS = [
   'csm_memory_backfill_embeddings', 'csm_memory_distill', 'csm_memory_distilled_view',
@@ -44,8 +45,14 @@ function guardTool(pluginCtx: PluginContext, name: string, definition: unknown):
   if (typeof toolDefinition.execute !== 'function') return;
   const execute = toolDefinition.execute as ToolExecute;
   toolDefinition.execute = async (args: unknown, context?: ToolContext) => {
-    if (!isReentrySourceOnlyActive(pluginCtx.state, context?.sessionID)) return execute(args, context);
-    return blockedToolResult(name);
+    return withLogContext({
+      projectId: pluginCtx.directory,
+      sessionId: context?.sessionID,
+      toolName: name,
+    }, async () => {
+      if (!isReentrySourceOnlyActive(pluginCtx.state, context?.sessionID)) return execute(args, context);
+      return blockedToolResult(name);
+    });
   };
 }
 

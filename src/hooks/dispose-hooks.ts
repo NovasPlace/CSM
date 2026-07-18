@@ -9,6 +9,7 @@ import {
   persistSessionSnapshot,
   persistWorkJournal,
 } from './dispose-persistence.js';
+import { withLogContext } from '../logger.js';
 
 interface DisposalState {
   completed: Set<string>;
@@ -23,7 +24,10 @@ export function disposeAll(ctx: PluginInput, pluginCtx: PluginContext): Promise<
   DISPOSALS.set(pluginCtx, state);
   if (state.done) return Promise.resolve();
   if (state.promise) return state.promise;
-  state.promise = runDisposal(ctx, pluginCtx, state).then(
+  state.promise = withLogContext({
+    projectId: pluginCtx.directory,
+    sessionId: pluginCtx.state.currentSessionId ?? undefined,
+  }, () => runDisposal(ctx, pluginCtx, state)).then(
     () => { state.promise = null; state.done = true; },
     (error) => { state.promise = null; throw error; },
   );

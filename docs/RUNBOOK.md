@@ -14,6 +14,16 @@ PostgreSQL transport controls are `CSM_DB_POOL_MAX`, `CSM_DB_CONNECTION_TIMEOUT_
 
 ## Health Checks
 
+Run the packaged customer diagnostic first:
+
+```bash
+csm-doctor --online
+```
+
+Use `csm-doctor --json` for a support-safe snapshot of package, runtime, configuration, security,
+database, schema, and embedding readiness. The database and schema portion is read-only. See
+`TROUBLESHOOTING.md` for interpretation and escalation guidance.
+
 ### Machine-readable Diagnostics
 
 `Database.diagnose()` returns a JSON-safe object with the provider, startup state, liveness, readiness probe latency/reason, and PostgreSQL pool counts when available:
@@ -25,6 +35,26 @@ process.stdout.write(`${JSON.stringify(diagnostic)}\n`);
 ```
 
 Liveness passes when the diagnostic code can execute. Readiness passes only after schema startup reaches `ready` and a real `SELECT 1` probe succeeds. Startup states are `idle`, `connecting`, `migrating`, `ready`, `failed`, and `closed`.
+
+### Runtime log contract
+
+CSM reserves stdout for command results and stdio protocols. Runtime debug, information, warning,
+and error logs go to stderr. This is required for the Codex MCP adapter, whose stdout must contain
+JSON-RPC records only.
+
+OpenCode hook and tool boundaries add project, session, tool, and tool-call correlation when the
+host provides them. Correlation uses asynchronous request-local context, so concurrent projects do
+not overwrite one another's labels. `Logger.clearContext()` removes transient turn, memory, and tool
+labels while retaining the logger's base session/project identity.
+
+Before emission, CSM redacts configured database URLs, release-database URLs, OpenAI keys, Ollama
+URLs, URI user information, authorization values, password/token query parameters, and common
+named-secret forms. Redaction is defense in depth, not permission to log memory content or attach
+unreviewed logs to a ticket. Operators own stderr collection, access control, rotation, retention,
+and final review.
+
+The stdio MCP process returns a JSON-RPC parse error for malformed input, drains active requests,
+disconnects storage, and exits when its host closes stdin.
 
 ### Database Connectivity
 

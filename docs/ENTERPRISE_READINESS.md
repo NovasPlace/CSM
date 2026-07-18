@@ -36,6 +36,7 @@ As of 2026-07-18, the isolated commercial release gate proves:
 - The packaged `csm-doctor` command emits human or support-safe JSON diagnostics, checks Node/configuration/security/database/schema readiness, verifies the complete migration ledger, and leaves a missing SQLite database uncreated.
 - Customer memory, transcript, onboarding, AgentBook event/state, recall-quality, governance, export, and lifecycle surfaces are bound to the registered project, with adversarial two-project regression tests. Installation-level state is explicitly documented and is not presented as multi-tenant isolation.
 - The full release gate verifies the package boundary, zero-loss backup/restore, production dependency audit, reviewed licenses, CycloneDX SBOM, pinned CI actions, and secret-policy controls before removing its disposable database.
+- Runtime logs use stderr, redact credential patterns, and carry concurrency-safe project/session/tool correlation. The stdio MCP adapter is regression-tested to keep stdout JSON-only, report malformed input, drain active requests, and close on host EOF.
 
 These results establish a reliable engineering baseline. They do not establish production certification, a security attestation, or a service-level commitment.
 
@@ -54,7 +55,7 @@ These results establish a reliable engineering baseline. They do not establish p
 
 - Export structured metrics and traces for schema startup, search, writes, queues, and shutdown flushes.
 - Add alerts for persistence failures, queue backlog, slow queries, schema drift, and embedding-provider degradation.
-- Define log retention, redaction, correlation identifiers, and operator escalation procedures.
+- Completed in-product: stderr routing, credential-pattern redaction, concurrency-safe correlation identifiers, and operator escalation guidance. Deployment-specific collection, access control, rotation, and retention remain operator responsibilities.
 
 ### Security and Governance
 
