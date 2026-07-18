@@ -1,12 +1,11 @@
 import { CodexMemoryBridge } from './codex-bridge.js';
-import type { MemoryListOptions, MemorySaveOptions, MemorySearchMode, MemorySearchOptions, MemoryType, SortBy } from './types.js';
+import type { MemoryListOptions, MemorySaveOptions, MemorySearchOptions, MemoryType, SortBy } from './types.js';
 import { VAULT_TOOL_SPECS, teacherTraceArgs, traceVaultArgs, traceVaultPreviewArgs } from './codex-mcp-vault-tools.js';
 import { EXTRA_MCP_TOOLS } from './codex-mcp-extra-tools.js';
 
 type ToolArgs = Record<string, unknown>;
 
 const MEMORY_TYPES: MemoryType[] = ['conversation', 'workspace', 'repo', 'preference', 'lesson', 'episodic', 'procedural', 'self_continuity'];
-const SEARCH_MODES: MemorySearchMode[] = ['project', 'legacy', 'global'];
 const SORT_OPTIONS: SortBy[] = ['recent', 'important', 'accessed'];
 const TOOL_OUTPUT_SCHEMA = {
   type: 'object',
@@ -21,39 +20,37 @@ export const MCP_TOOLS = [
     sessionId: { type: 'string', description: 'Optional bridge session id.' },
     tags: { type: 'array', items: { type: 'string' }, description: 'Optional memory tags.' },
     importance: { type: 'number', description: 'Optional importance score from 0 to 1.' },
-  }, ['content', 'type'], hints(false, false, false)),
-  toolSpec('search_memories', 'Search memories with bridge fallback behavior.', {
+  }, ['content', 'type', 'projectRoot'], hints(false, false, false)),
+  toolSpec('search_memories', 'Search memories within one project, with legacy fallback only when that project has no matches.', {
     query: { type: 'string', description: 'Search query.' },
     projectId: { type: 'string', description: 'Project id or root to search within.' },
     sessionId: { type: 'string', description: 'Optional bridge session id.' },
     limit: { type: 'number', description: 'Max result count.', default: 5 },
-    searchMode: { type: 'string', enum: SEARCH_MODES, description: 'Search scope strategy.' },
-  }, ['query'], hints(true, false, false)),
+  }, ['query', 'projectId'], hints(true, false, false)),
   toolSpec('list_memories', 'List recent or important memories for a project.', {
     projectId: { type: 'string', description: 'Project id or root to list from.' },
     sessionId: { type: 'string', description: 'Optional bridge session id.' },
     limit: { type: 'number', description: 'Max result count.', default: 10 },
     type: { type: 'string', enum: MEMORY_TYPES, description: 'Filter by memory type.' },
     sortBy: { type: 'string', enum: SORT_OPTIONS, description: 'Sort order.' },
-    searchMode: { type: 'string', enum: SEARCH_MODES, description: 'Project, legacy, or global.' },
-  }, [], hints(true, false, false)),
+  }, ['projectId'], hints(true, false, false)),
   toolSpec('get_context_brief', 'Build a compact context brief for a task.', {
     task: { type: 'string', description: 'Task to prime for.' },
     projectRoot: { type: 'string', description: 'Project root or identifier.' },
     sessionId: { type: 'string', description: 'Optional bridge session id.' },
-  }, ['task'], hints(true, false, false)),
+  }, ['task', 'projectRoot'], hints(true, false, false)),
   toolSpec('recall_lessons', 'Recall lesson and procedural memories for a task.', {
     task: { type: 'string', description: 'Task to search against.' },
     projectRoot: { type: 'string', description: 'Project root or identifier.' },
     sessionId: { type: 'string', description: 'Optional bridge session id.' },
     limit: { type: 'number', description: 'Max lesson count.', default: 5 },
-  }, ['task'], hints(true, false, false)),
+  }, ['task', 'projectRoot'], hints(true, false, false)),
   toolSpec('bridge_resume_context', 'Resume the bridge workflow with context brief plus recent memory.', {
     task: { type: 'string', description: 'Task being resumed.' },
     projectRoot: { type: 'string', description: 'Project root or identifier.' },
     sessionId: { type: 'string', description: 'Optional bridge session id.' },
     recentLimit: { type: 'number', description: 'Recent memory rows to include.', default: 5 },
-  }, ['task'], hints(false, false, false)),
+  }, ['task', 'projectRoot'], hints(false, false, false)),
   toolSpec('bridge_sync_turn', 'Mirror a Codex turn into long-term memory and emit a bridge event.', {
     role: { type: 'string', enum: ['user', 'assistant', 'system'], description: 'Turn role.' },
     content: { type: 'string', description: 'Turn content to mirror.' },
@@ -61,13 +58,13 @@ export const MCP_TOOLS = [
     sessionId: { type: 'string', description: 'Optional bridge session id.' },
     tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags.' },
     memoryType: { type: 'string', enum: MEMORY_TYPES, description: 'Override stored memory type.' },
-  }, ['role', 'content'], hints(false, false, false)),
+  }, ['role', 'content', 'projectRoot'], hints(false, false, false)),
   toolSpec('bridge_handoff_summary', 'Build a handoff summary for the current bridge session.', {
     task: { type: 'string', description: 'Current or next task label.' },
     projectRoot: { type: 'string', description: 'Project root or identifier.' },
     sessionId: { type: 'string', description: 'Optional bridge session id.' },
     recentLimit: { type: 'number', description: 'Recent memory rows to include.', default: 5 },
-  }, [], hints(true, false, false)),
+  }, ['projectRoot'], hints(true, false, false)),
   toolSpec('prune_memories_dry_run', 'Preview prune candidates without mutating data.', {}, [], hints(true, false, false)),
   toolSpec('backfill_missing_embeddings', 'Repair missing embeddings on demand.', {
     limit: { type: 'number', description: 'Max rows to scan.', default: 25 },
@@ -125,7 +122,7 @@ function buildSaveInput(args: ToolArgs): MemorySaveOptions & { projectRoot?: str
   return {
     content: requiredString(args.content, 'content'),
     type: requiredString(args.type, 'type') as MemoryType,
-    projectRoot: defaultProject(args.projectRoot),
+    projectRoot: requiredString(args.projectRoot, 'projectRoot'),
     sessionId: optionalString(args.sessionId),
     tags: stringArray(args.tags),
     importance: optionalNumber(args.importance),
@@ -135,26 +132,26 @@ function buildSaveInput(args: ToolArgs): MemorySaveOptions & { projectRoot?: str
 function buildSearchInput(args: ToolArgs): MemorySearchOptions & { sessionId?: string } {
   return {
     query: requiredString(args.query, 'query'),
-    projectId: defaultProject(args.projectId),
+    projectId: requiredString(args.projectId, 'projectId'),
     sessionId: optionalString(args.sessionId),
     limit: optionalNumber(args.limit) ?? 5,
-    searchMode: optionalString(args.searchMode) as MemorySearchMode | undefined,
+    searchMode: 'project',
   };
 }
 
 function buildListInput(args: ToolArgs): MemoryListOptions & { sessionId?: string } {
   return {
-    projectId: defaultProject(args.projectId),
+    projectId: requiredString(args.projectId, 'projectId'),
     sessionId: optionalString(args.sessionId),
     limit: optionalNumber(args.limit) ?? 10,
     type: optionalString(args.type) as MemoryType | undefined,
     sortBy: optionalString(args.sortBy) as SortBy | undefined,
-    searchMode: optionalString(args.searchMode) as MemorySearchMode | undefined,
+    searchMode: 'project',
   };
 }
 
 function contextArgs(args: ToolArgs) {
-  return { task: requiredString(args.task, 'task'), projectRoot: defaultProject(args.projectRoot), sessionId: optionalString(args.sessionId) };
+  return { task: requiredString(args.task, 'task'), projectRoot: requiredString(args.projectRoot, 'projectRoot'), sessionId: optionalString(args.sessionId) };
 }
 
 function lessonArgs(args: ToolArgs) {
@@ -169,7 +166,7 @@ function syncArgs(args: ToolArgs) {
   return {
     role: requiredString(args.role, 'role') as 'user' | 'assistant' | 'system',
     content: requiredString(args.content, 'content'),
-    projectRoot: defaultProject(args.projectRoot),
+    projectRoot: requiredString(args.projectRoot, 'projectRoot'),
     sessionId: optionalString(args.sessionId),
     tags: stringArray(args.tags),
     memoryType: optionalString(args.memoryType) as MemoryType | undefined,
@@ -177,11 +174,11 @@ function syncArgs(args: ToolArgs) {
 }
 
 function handoffArgs(args: ToolArgs) {
-  return { task: optionalString(args.task) ?? 'handoff summary', projectRoot: defaultProject(args.projectRoot), sessionId: optionalString(args.sessionId), recentLimit: optionalNumber(args.recentLimit) ?? 5 };
+  return { task: optionalString(args.task) ?? 'handoff summary', projectRoot: requiredString(args.projectRoot, 'projectRoot'), sessionId: optionalString(args.sessionId), recentLimit: optionalNumber(args.recentLimit) ?? 5 };
 }
 
 function backfillArgs(args: ToolArgs) {
-  return { limit: optionalNumber(args.limit) ?? 25, projectId: defaultProject(args.projectId), dryRun: args.dryRun === true };
+  return { limit: optionalNumber(args.limit) ?? 25, projectId: optionalString(args.projectId), dryRun: args.dryRun === true };
 }
 
 function requiredString(value: unknown, name: string): string {
@@ -199,8 +196,4 @@ function optionalNumber(value: unknown): number | undefined {
 
 function stringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined;
-}
-
-function defaultProject(value: unknown): string {
-  return optionalString(value) ?? process.cwd().split(/[\\/]/).pop() ?? 'cross-session-memory';
 }

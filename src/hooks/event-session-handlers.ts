@@ -22,6 +22,7 @@ export async function handleSessionCreated(
       content: `Session started in ${ctx.directory}`, type: 'episodic', importance: 0.3,
       source: 'auto', tags: ['session-start'],
       metadata: { sessionId: session.id, directory: ctx.directory }, sessionId: session.id,
+      projectId: ctx.directory,
     });
   }
   await recordStartPacket(pluginCtx, session.id, ctx.directory);

@@ -69,6 +69,7 @@ function createRuntime(config: RuntimePluginConfig, database: Database): CodexBr
     memoryExtractor: new MemoryExtractor(database, memoryManager, config.extractor),
     checkpointStore: new CheckpointStore(database.getPool(), redactor),
     checkpointConfig: config.checkpoint, distillerConfig: config.distiller,
+    ttlConfig: config.ttl,
   };
   const workLedger = config.workLedger.enabled
     ? new WorkLedger(database.getPool(), config.workLedger) : undefined;

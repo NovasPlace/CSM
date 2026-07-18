@@ -1,7 +1,7 @@
 import { tool } from '@opencode-ai/plugin/tool';
 import { BeliefPromotionScanner, BELIEF_CANDIDATE_TYPES, type BeliefScanConfig, type BeliefCandidateType } from './belief-promotion-scanner.js';
 
-export function beliefScanTool(scanner: BeliefPromotionScanner) {
+export function beliefScanTool(scanner: BeliefPromotionScanner, projectId: string) {
   return tool({
     description:
       'Scan experience packets for recurring patterns and write belief candidates ' +
@@ -14,7 +14,6 @@ export function beliefScanTool(scanner: BeliefPromotionScanner) {
       maxPerType: tool.schema.number().optional().describe('Max candidates per type (default 20)'),
       lookbackMinutes: tool.schema.number().optional().describe('How far back to scan packets (default 1440 = 24h)'),
       minPacketCount: tool.schema.number().optional().describe('Min packets to form a candidate (default 2)'),
-      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
     },
     async execute(args) {
       const config: BeliefScanConfig = {
@@ -23,7 +22,7 @@ export function beliefScanTool(scanner: BeliefPromotionScanner) {
         maxPerType: args.maxPerType ?? 20,
         lookbackMinutes: args.lookbackMinutes ?? 1440,
         minPacketCount: args.minPacketCount ?? 2,
-        projectId: args.projectId,
+        projectId,
       };
 
       const report = await scanner.scan(config);

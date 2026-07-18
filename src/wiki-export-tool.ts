@@ -5,7 +5,6 @@ import type { WikiExportResult } from './wiki-export-types.js';
 
 interface WikiToolArgs {
   outputDir?: string;
-  projectId?: string;
   mode?: string;
   importanceThreshold?: number;
   includeLinked?: boolean;
@@ -19,12 +18,12 @@ const DESCRIPTION =
   'Curated mode exports durable and high-importance memories; full mode exports all memories. ' +
   'Both modes write to the selected output directory and support incremental manifests.';
 
-export function wikiExportTool(database: Database) {
+export function wikiExportTool(database: Database, projectId: string) {
   return tool({
     description: DESCRIPTION,
     args: wikiToolArguments(),
     async execute(args) {
-      const result = await exportWiki(database, toExportOptions(args));
+      const result = await exportWiki(database, toExportOptions(args, projectId));
       return { title: resultTitle(result), output: resultOutput(result), metadata: result };
     },
   });
@@ -33,7 +32,6 @@ export function wikiExportTool(database: Database) {
 function wikiToolArguments() {
   return {
     outputDir: tool.schema.string().optional().describe('Output directory (default: "./wiki")'),
-    projectId: tool.schema.string().optional().describe('Filter by project ID'),
     mode: tool.schema.string().optional().describe('Export mode: "curated" (default) or "full"'),
     importanceThreshold: tool.schema.number().optional().describe('Curated importance threshold (default: 0.5)'),
     includeLinked: tool.schema.boolean().optional().describe('Include one-hop linked memories (default: true)'),
@@ -43,9 +41,9 @@ function wikiToolArguments() {
   };
 }
 
-function toExportOptions(args: WikiToolArgs) {
+function toExportOptions(args: WikiToolArgs, projectId: string) {
   return {
-    outputDir: args.outputDir ?? './wiki', projectId: args.projectId, mode: parseMode(args.mode),
+    outputDir: args.outputDir ?? './wiki', projectId, mode: parseMode(args.mode),
     importanceThreshold: args.importanceThreshold ?? 0.5,
     includeLinked: args.includeLinked ?? true, incremental: args.incremental ?? true,
     prune: args.prune ?? false, dryRun: args.dryRun ?? false,

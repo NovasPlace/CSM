@@ -6,9 +6,19 @@ export class CodexBridgeSessionApi {
 
   async ensure(projectRoot?: string, sessionId?: string): Promise<string | undefined> {
     if (!projectRoot && !sessionId) return undefined;
-    const resolvedProject = projectRoot ?? 'codex-bridge';
+    const existing = sessionId
+      ? await this.deps.memoryManager.getSession(sessionId)
+      : null;
+    if (existing?.projectId && projectRoot && existing.projectId !== projectRoot) {
+      throw new Error(
+        `Session ${sessionId} belongs to a different project; refusing to reassign its data boundary.`,
+      );
+    }
+    const resolvedProject = projectRoot ?? existing?.projectId ?? 'codex-bridge';
     const resolvedSession = sessionId ?? defaultSessionId(resolvedProject);
-    await this.deps.memoryManager.createSession(resolvedSession, resolvedProject);
+    if (!existing) {
+      await this.deps.memoryManager.createSession(resolvedSession, resolvedProject);
+    }
     this.deps.contextRecall.setSession(resolvedSession, resolvedProject);
     await this.deps.memoryManager.upsertProjectScope(
       resolvedProject, resolvedProject, resolvedProject,

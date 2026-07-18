@@ -71,12 +71,14 @@ export async function selectMemoriesByIds(
   client: WikiQueryClient,
   dialect: QueryDialect,
   ids: number[],
+  projectId?: string,
 ): Promise<Memory[]> {
   if (ids.length === 0) return [];
   const placeholders = ids.map((_, index) => `$${index + 1}`).join(',');
+  const projectFilter = projectId ? ` AND project_id = $${ids.length + 1}` : '';
   const result = await client.query(
-    `SELECT * FROM memories WHERE id IN (${placeholders}) ORDER BY id ASC`,
-    ids,
+    `SELECT * FROM memories WHERE id IN (${placeholders})${projectFilter} ORDER BY id ASC`,
+    projectId ? [...ids, projectId] : ids,
   );
   return (result.rows as Record<string, unknown>[]).map(row => mapMemory(row, dialect));
 }

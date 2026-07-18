@@ -86,4 +86,55 @@ describe('SQLite memory graph', () => {
     assert.equal(recentSessions[0]?.id, 'sqlite-graph-session');
     await db.close();
   });
+
+  it('does not create or reveal graph links across project boundaries', async () => {
+    const config = sqliteConfig();
+    const db = new Database(config);
+    await db.connect();
+    const manager = new MemoryManager(db, new EmbeddingGenerator(config));
+    await manager.createSession('sqlite-graph-a', 'sqlite-project-a');
+    await manager.createSession('sqlite-graph-b', 'sqlite-project-b');
+
+    const memoryA = await manager.saveMemory({
+      sessionId: 'sqlite-graph-a',
+      content: 'Project A changed src/isolation-proof.ts.',
+      type: 'workspace',
+      source: 'manual',
+    });
+    const memoryB = await manager.saveMemory({
+      sessionId: 'sqlite-graph-b',
+      content: 'Project B changed src/isolation-proof.ts.',
+      type: 'workspace',
+      source: 'manual',
+    });
+
+    assert.equal((await getRelatedMemories(db, memoryA.id)).length, 0);
+    await db.getPool().query(
+      `INSERT INTO memory_links
+         (source_id, target_id, link_type, shared_entities, strength)
+       VALUES ($1, $2, 'shared_entity', $3, 1)`,
+      [memoryA.id, memoryB.id, JSON.stringify(['src/isolation-proof.ts'])],
+    );
+
+    assert.equal((await getRelatedMemories(db, memoryA.id, 10, {
+      projectId: 'sqlite-project-a',
+    })).length, 0);
+    assert.equal((await getRelatedMemories(db, memoryA.id, 10, {
+      projectId: 'sqlite-project-b',
+    })).length, 0, 'a caller cannot use another project scope for a foreign source id');
+    assert.equal((await getRelatedMemories(db, memoryB.id, 10, {
+      projectId: 'sqlite-project-b',
+    })).length, 0);
+
+    await db.getPool().query(
+      'UPDATE memories SET linked_memory_ids = $1 WHERE id = $2',
+      [JSON.stringify([memoryB.id]), memoryA.id],
+    );
+    const scopedCascade = await new PrimingEngine(db).cascade(memoryA.id, {
+      projectId: 'sqlite-project-a',
+      searchMode: 'project',
+    });
+    assert.deepEqual(scopedCascade.memories.map((memory) => memory.id), [memoryA.id]);
+    await db.close();
+  });
 });

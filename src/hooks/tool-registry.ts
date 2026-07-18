@@ -65,14 +65,14 @@ function memoryTools(ctx: PluginContext): Record<string, unknown> {
   const { memoryManager, primingEngine, contextRecall, toolDistiller, database,
     memoryExtractor, redactor, contextCompactor } = ctx;
   return {
-    csm_memory_save: memorySaveTool(memoryManager),
-    csm_memory_search: memorySearchTool(memoryManager, primingEngine),
-    csm_memory_list: memoryListTool(memoryManager),
-    csm_memory_delete: memoryDeleteTool(memoryManager),
+    csm_memory_save: memorySaveTool(memoryManager, ctx.directory),
+    csm_memory_search: memorySearchTool(memoryManager, primingEngine, ctx.directory),
+    csm_memory_list: memoryListTool(memoryManager, ctx.directory),
+    csm_memory_delete: memoryDeleteTool(memoryManager, ctx.directory),
     csm_memory_context: memoryContextTool(contextRecall),
-    csm_memory_lesson: memoryLessonTool(memoryManager),
-    csm_memory_transcript: memoryTranscriptTool(memoryManager),
-    csm_memory_distill: memoryDistillTool(toolDistiller, database, memoryExtractor, redactor),
+    csm_memory_lesson: memoryLessonTool(memoryManager, ctx.directory),
+    csm_memory_transcript: memoryTranscriptTool(memoryManager, ctx.directory),
+    csm_memory_distill: memoryDistillTool(toolDistiller, database, memoryExtractor, ctx.directory, redactor),
     csm_memory_distilled_view: memoryDistilledViewTool(database),
     csm_memory_compact: memoryCompactTool(contextCompactor),
     csm_memory_packets: memoryPacketsTool(ctx.experiencePackets),
@@ -81,14 +81,14 @@ function memoryTools(ctx: PluginContext): Record<string, unknown> {
 
 function maintenanceTools(ctx: PluginContext, services: MaintenanceServices): Record<string, unknown> {
   return {
-    csm_memory_backfill_embeddings: memoryBackfillEmbeddingsTool(services.backfill),
-    csm_memory_dedup_detect: memoryDedupDetectTool(services.dedup),
-    csm_memory_merge: memoryMergeDuplicatesTool(services.merger),
-    csm_memory_candidate_generate: memoryCandidateGenerateTool(services.candidates),
-    csm_memory_candidate_report: memoryCandidateReportTool(services.candidates),
-    csm_memory_archive_candidate_report: archiveCandidateReportTool(services.archive),
-    csm_memory_governance_report: memoryGovernanceReportTool(services.governance),
-    csm_belief_scan: beliefScanTool(services.beliefScanner),
+    csm_memory_backfill_embeddings: memoryBackfillEmbeddingsTool(services.backfill, ctx.directory),
+    csm_memory_dedup_detect: memoryDedupDetectTool(services.dedup, ctx.directory),
+    csm_memory_merge: memoryMergeDuplicatesTool(services.merger, ctx.directory),
+    csm_memory_candidate_generate: memoryCandidateGenerateTool(services.candidates, ctx.directory),
+    csm_memory_candidate_report: memoryCandidateReportTool(services.candidates, ctx.directory),
+    csm_memory_archive_candidate_report: archiveCandidateReportTool(services.archive, ctx.directory),
+    csm_memory_governance_report: memoryGovernanceReportTool(services.governance, ctx.directory),
+    csm_belief_scan: beliefScanTool(services.beliefScanner, ctx.directory),
     csm_belief_scan_report: beliefScanReportTool(services.beliefScanner),
     csm_belief_promote: beliefPromotionTool(services.beliefPromotion, ctx.config.beliefPromotion),
     csm_belief_promotion_scan: beliefPromotionScanTool(services.beliefPromotion, ctx.config.beliefPromotion),
@@ -103,11 +103,11 @@ function livingStateTools(ctx: PluginContext): Record<string, unknown> {
     csm_living_state_preview: livingStatePreviewTool(ctx.livingState),
     csm_living_state_debug: livingStateDebugTool(ctx.livingStateAdvisor),
     ...createAgentBookTools({ eventStore: ctx.agentBookEvents, rulesStore: ctx.agentBookRules,
-      stateProjector: ctx.agentBookState, summaryGenerator: ctx.agentBookSummary }),
+      stateProjector: ctx.agentBookState, summaryGenerator: ctx.agentBookSummary }, ctx.directory, ctx.worktree ?? ctx.directory),
     csm_runtime_status: runtimeStatusTool(database, memoryManager, config, ctx.state.currentSessionId),
     csm_compaction_audit: compactionAuditTool(database),
-    csm_recall_quality_report: recallQualityReportTool(database),
-    csm_memory_related: memoryRelatedTool(database),
+    csm_recall_quality_report: recallQualityReportTool(database, ctx.directory),
+    csm_memory_related: memoryRelatedTool(database, ctx.directory),
     csm_continuity_report: continuityReportTool(database, {
       protocol: ctx.reEntryProtocol, config: config.reentry,
       reentryInjected: ctx.state.reentryInjected, projectId: ctx.directory,
@@ -131,7 +131,7 @@ function operationalTools(ctx: PluginContext): Record<string, unknown> {
     context_fault: ctx.vcmManager.faultTool(),
     goal_set: goalSetTool({ pool }), goal_update: goalUpdateTool({ pool }), goal_list: goalListTool({ pool }),
     csm_onboard_agent: onboardAgentTool(ctx),
-    csm_wiki_export: wikiExportTool(ctx.database),
+    csm_wiki_export: wikiExportTool(ctx.database, ctx.directory),
   };
 }
 
@@ -153,6 +153,6 @@ function appendOptionalTools(ctx: PluginContext, tools: Record<string, unknown>)
   }
   if (ctx.reEntryProtocol) {
     const adapter = new ReEntryPreviewAdapter(ctx.reEntryProtocol, ctx.config.reentry);
-    tools.csm_reentry_preview = reentryPreviewTool(adapter);
+    tools.csm_reentry_preview = reentryPreviewTool(adapter, ctx.directory);
   }
 }

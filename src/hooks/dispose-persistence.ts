@@ -26,6 +26,7 @@ export async function persistSessionSnapshot(pluginCtx: PluginContext): Promise<
     tags: ['session-end', 'final-snapshot'],
     metadata: { sessionId: state.currentSessionId, messageCount: state.messageCount },
     sessionId: state.currentSessionId,
+    projectId: pluginCtx.directory,
   });
 }
 

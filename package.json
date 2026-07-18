@@ -47,6 +47,7 @@
     "docs/FEATURES.md",
     "docs/PRODUCT_ARCHITECTURE.md",
     "docs/CONFIGURATION_RELIABILITY.md",
+    "docs/DATA_PRIVACY_AND_LIFECYCLE.md",
     "docs/SCHEMA_SUPPORT_MATRIX.md",
     "docs/STARTUP_ROLLBACK.md",
     "docs/RELEASE_PROCESS.md",

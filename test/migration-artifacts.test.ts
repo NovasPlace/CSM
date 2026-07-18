@@ -58,6 +58,20 @@ function fakeDatabase() {
     ));
   });
 
+  it('accepts every previously shipped source pin for an evolved migration artifact', () => {
+    const { database, pool } = fakeDatabase();
+    const migration = buildSource(database as never, pool)
+      .find((entry) => entry.id === '20260709-015-graph');
+    assert.ok(migration);
+    const previous = migrationChecksum({
+      ...migration,
+      implementation: [
+        'src/memory-graph.ts:sha256:8de93a2776d7c92aed43c4095f288e63c9809d00496e8df86a518e124ef58a40',
+      ],
+    });
+    assert.ok(migration.acceptedLegacyChecksums?.includes(previous));
+  });
+
   it('matches the committed checksum for equivalent LF and CRLF text', () => {
     const artifact = MIGRATION_ARTIFACTS['20260709-003-memory'][0];
     const canonicalLf = readFileSync(artifact.path).toString('utf8').replace(/\r\n/g, '\n');

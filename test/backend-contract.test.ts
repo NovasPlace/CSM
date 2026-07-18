@@ -67,7 +67,7 @@ function assertMemoryContract(actual: unknown, expected: MemoryContract): void {
 
 function describePostgres(
   name: string,
-  fn: (getMgr: () => MemoryManager) => void,
+  fn: (getMgr: () => MemoryManager, getDb: () => Database) => void,
 ): void {
   const tempDbName = `csm_contract_${Date.now()}`;
   const adminPool = new Pool({ connectionString: buildAdminUrl(BASE_DB_URL) });
@@ -102,7 +102,7 @@ function describePostgres(
       await adminPool.end();
     });
 
-    fn(() => mgr);
+    fn(() => mgr, () => db);
   });
 }
 
@@ -112,7 +112,7 @@ function describePostgres(
 
 function describeSqlite(
   name: string,
-  fn: (getMgr: () => MemoryManager) => void,
+  fn: (getMgr: () => MemoryManager, getDb: () => Database) => void,
 ): void {
   const config: PluginConfig = {
     databaseUrl: SQLITE_PATH,
@@ -150,7 +150,7 @@ function describeSqlite(
       try { rmSync(SQLITE_DIR); } catch { /* not exists */ }
     });
 
-    fn(() => mgr);
+    fn(() => mgr, () => db);
   });
 }
 
@@ -168,7 +168,7 @@ const INPUT: MemoryContract = {
   tags: ['test', 'contract', 'phase3e'],
 };
 
-function runContractTests(label: string, getMgr: () => MemoryManager): void {
+function runContractTests(label: string, getMgr: () => MemoryManager, getDb: () => Database): void {
   it('createSession succeeds and returns a session', async () => {
     const mgr = getMgr();
     const session = await mgr.createSession(`${label}-session`, `${label}-project`);
@@ -192,6 +192,23 @@ function runContractTests(label: string, getMgr: () => MemoryManager): void {
     assert.ok(saved, 'saveMemory should return a memory');
     assert.ok((saved as Record<string, unknown>).id, 'saved memory should have an id');
     assertMemoryContract(saved, INPUT);
+  });
+
+  it('saveMemory refuses a session/project ownership collision', async () => {
+    const mgr = getMgr();
+    const sessionId = `${label}-ownership-session`;
+    await mgr.createSession(sessionId, `${label}-ownership-project-a`);
+
+    await assert.rejects(
+      mgr.saveMemory({
+        sessionId,
+        projectId: `${label}-ownership-project-b`,
+        content: 'Must not cross the project boundary',
+        type: 'episodic',
+        source: 'manual',
+      }),
+      /belongs to project .* refusing memory write/,
+    );
   });
 
   it('listMemories returns saved memories with correct field values', async () => {
@@ -270,6 +287,71 @@ function runContractTests(label: string, getMgr: () => MemoryManager): void {
     const list = await mgr.listMemories({ sessionId: `${label}-touch-session` });
     const touched = list[0] as Record<string, unknown>;
     assert.ok((touched.accessCount as number) >= 2, 'accessCount should be >= 2');
+  });
+
+  it('deleteMemory cannot delete a memory owned by another project', async () => {
+    const mgr = getMgr();
+    const projectA = `${label}-delete-project-a`;
+    const projectB = `${label}-delete-project-b`;
+    await mgr.createSession(`${label}-delete-session-a`, projectA);
+    await mgr.createSession(`${label}-delete-session-b`, projectB);
+    const memoryA = await mgr.saveMemory({
+      sessionId: `${label}-delete-session-a`,
+      content: 'Project A deletion boundary target',
+      type: 'episodic',
+      source: 'manual',
+    });
+    const memoryB = await mgr.saveMemory({
+      sessionId: `${label}-delete-session-b`,
+      content: 'Project B must survive a project A deletion attempt',
+      type: 'episodic',
+      source: 'manual',
+    });
+
+    assert.equal(await mgr.deleteMemory(memoryB.id, projectA), false);
+    assert.equal((await mgr.getMemory(memoryB.id))?.projectId, projectB);
+    assert.equal(await mgr.deleteMemory(memoryA.id, projectA), true);
+    assert.equal(await mgr.getMemory(memoryA.id), null);
+  });
+
+  it('retention cleanup previews first and applies only within one project', async () => {
+    const mgr = getMgr();
+    const db = getDb();
+    const projectA = `${label}-retention-project-a`;
+    const projectB = `${label}-retention-project-b`;
+    await mgr.createSession(`${label}-retention-session-a`, projectA);
+    await mgr.createSession(`${label}-retention-session-b`, projectB);
+    const memoryA = await mgr.saveMemory({
+      sessionId: `${label}-retention-session-a`, content: 'Expired A memory',
+      type: 'episodic', source: 'manual', importance: 0.1,
+    });
+    const memoryB = await mgr.saveMemory({
+      sessionId: `${label}-retention-session-b`, content: 'Expired B memory',
+      type: 'episodic', source: 'manual', importance: 0.1,
+    });
+    await db.getPool().query(
+      'UPDATE memories SET created_at = $1 WHERE id IN ($2, $3)',
+      [new Date(Date.now() - 400 * 86_400_000).toISOString(), memoryA.id, memoryB.id],
+    );
+    const ttl = {
+      enabled: true,
+      defaultDays: 90,
+      byType: { episodic: 7 },
+      byImportance: [{ min: 0, max: 1, days: 30 }],
+      gracePeriodDays: 7,
+    };
+
+    const preview = await mgr.cleanupExpiredMemories({ projectId: projectA, ttl });
+    assert.equal(preview.dryRun, true);
+    assert.equal(preview.eligible, 1);
+    assert.equal(preview.deleted, 0);
+    assert.ok(await mgr.getMemory(memoryA.id));
+
+    const applied = await mgr.cleanupExpiredMemories({ projectId: projectA, ttl, apply: true });
+    assert.equal(applied.dryRun, false);
+    assert.equal(applied.deleted, 1);
+    assert.equal(await mgr.getMemory(memoryA.id), null);
+    assert.equal((await mgr.getMemory(memoryB.id))?.projectId, projectB);
   });
 }
 
@@ -563,12 +645,12 @@ function runSearchContractTests(label: string, getMgr: () => MemoryManager): voi
 // Run both CRUD and search contract tests against both backends
 // ---------------------------------------------------------------------------
 
-describePostgres('Phase 3E/3F contract', (getMgr) => {
-  runContractTests('pg', getMgr);
+describePostgres('Phase 3E/3F contract', (getMgr, getDb) => {
+  runContractTests('pg', getMgr, getDb);
   runSearchContractTests('pg', getMgr);
 });
 
-describeSqlite('Phase 3E/3F contract', (getMgr) => {
-  runContractTests('sqlite', getMgr);
+describeSqlite('Phase 3E/3F contract', (getMgr, getDb) => {
+  runContractTests('sqlite', getMgr, getDb);
   runSearchContractTests('sqlite', getMgr);
 });

@@ -13,15 +13,12 @@ export function onboardAgentTool(pluginCtx: PluginContext) {
   return tool({
     description: 'Build a structured startup packet for this agent session. Returns identity brief, project continuity, phase/checkpoint, constraints, relevant memories, promoted beliefs, advisories, tool guidance, handoff state, and readiness summary. Read-only: queries existing systems, never writes.',
     args: {
-      projectId: tool.schema.string().optional().describe('Project ID (defaults to workspace name)'),
-      sessionId: tool.schema.string().optional().describe('Session ID (defaults to current)'),
       sections: tool.schema.array(tool.schema.string()).optional().describe('Only return these sections (e.g. ["identity-brief", "advisories"])'),
     },
-    async execute(args, _context) {
+    async execute(args, context) {
       const workspacePath = pluginCtx.directory || process.cwd();
-      // DB project_id is usually the full workspace path for this repo.
-      const projectId = args.projectId ?? workspacePath;
-      const sessionId = args.sessionId ?? 'current';
+      const projectId = workspacePath;
+      const sessionId = context.sessionID ?? pluginCtx.state.currentSessionId ?? 'current';
 
       const packet = await buildOnboardingPacket({
         projectId,

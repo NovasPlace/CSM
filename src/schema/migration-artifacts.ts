@@ -2,6 +2,7 @@ export interface MigrationArtifact {
   path: string;
   sha256: string;
   sourceSha256?: string;
+  previousSourceSha256?: readonly string[];
 }
 
 export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArtifact[]>> = {
@@ -28,7 +29,12 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
   '20260709-012-self-continuity': [artifact('src/self-continuity-schema.ts', '37c68790e05e1631be1d2d0cef3750cfb3eb3d8048d48091540dc18e104d7985', '9248e823b035dda56237dfcc2cde2421385fc90534b88f952178c614d0c5ab95')],
   '20260709-013-cross-session-causal': [artifact('src/cross-session-causal-schema.ts', '7f218b2922a70d4efc3013a1c249d6310ebe231a78a51e5900a09dc63cea0b22')],
   '20260709-014-trace-vault': [artifact('src/trace-vault-store.ts', '6d611dd20fdbba2ae6124e9beecab4df6a1fe1a0e67611b2fd93f6d63685bf27', '58bd827117d51bbf875f95d4f1b1363168dd9b7e7c6b3433881276598b0c8a0c')],
-  '20260709-015-graph': [artifact('src/memory-graph.ts', '6abbdc0df6f4de9f37a51125f6202c86b46a13abd39a6346338cf33d3d631e26', '8de93a2776d7c92aed43c4095f288e63c9809d00496e8df86a518e124ef58a40')],
+  '20260709-015-graph': [artifact(
+    'src/memory-graph.ts',
+    '6abbdc0df6f4de9f37a51125f6202c86b46a13abd39a6346338cf33d3d631e26',
+    'fb8a21204dac9ae10318dcc5db67b59bd67755e10fa38d9cd41565012452f8aa',
+    ['8de93a2776d7c92aed43c4095f288e63c9809d00496e8df86a518e124ef58a40'],
+  )],
   '20260709-016-work-journal': [artifact('src/work-journal-schema.ts', '0ee97be5f1d22dc1e7cc28c89f506ad9ff935ee3bab188cd2f5b285ca049cc7b', 'e32fda1eddacbd23fb220263f808efee6dd1eafc07663035f1a3d9658943aaec')],
   '20260709-017-candidate-queue': [artifact('src/candidate-schema.ts', 'dfef177f0163f995838f6a0b4543bd91b1e38da55d7c304a681b97b1dbc93237', '0b596e6e330c0bb8303ad329df4c176d8d8071febcbd51e14fac82d9410c7446')],
   '20260709-018-experience-packet': [artifact('src/experience-packet-schema.ts', 'da1d7c15373e6d66663c8c0549b76ca0860c443b2e378244a1390147961b0e41', '5f935f3dd043057d2620ef70ae417bea496f3095d4dac23e790de5b3837ce1ff')],
@@ -101,6 +107,30 @@ export function legacyArtifactsFor(
   return artifacts.map(({ path, sha256 }) => `${path}:sha256:${sha256}`);
 }
 
-function artifact(path: string, sha256: string, sourceSha256?: string): MigrationArtifact {
-  return { path, sha256, sourceSha256 };
+export function historicalArtifactSetsFor(
+  migrationId: string,
+  fallback: readonly (readonly string[])[] = [],
+): readonly (readonly string[])[] {
+  const artifacts = MIGRATION_ARTIFACTS[migrationId];
+  if (!artifacts) return fallback;
+
+  const current = artifacts.map(({ path, sha256, sourceSha256 }) =>
+    `${path}:sha256:${sourceSha256 ?? sha256}`);
+  let combinations: string[][] = [[]];
+  for (const { path, sha256, sourceSha256, previousSourceSha256 } of artifacts) {
+    const hashes = [...new Set([sha256, ...(previousSourceSha256 ?? []), sourceSha256 ?? sha256])];
+    combinations = combinations.flatMap((prefix) =>
+      hashes.map((hash) => [...prefix, `${path}:sha256:${hash}`]));
+  }
+  return combinations.filter((candidate) =>
+    candidate.some((entry, index) => entry !== current[index]));
+}
+
+function artifact(
+  path: string,
+  sha256: string,
+  sourceSha256?: string,
+  previousSourceSha256?: readonly string[],
+): MigrationArtifact {
+  return { path, sha256, sourceSha256, previousSourceSha256 };
 }

@@ -74,6 +74,7 @@ function appendRows(
   seen: Set<string>,
 ): void {
   for (const row of rows) {
+    if (!eligibleIds.has(row.source_id) || !eligibleIds.has(row.target_id)) continue;
     const key = `${row.source_id}:${row.target_id}:${row.link_type}`;
     if (seen.has(key)) continue;
     seen.add(key);

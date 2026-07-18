@@ -7,8 +7,9 @@
 import { tool } from '@opencode-ai/plugin/tool';
 import { DatabasePool } from './types.js';
 import {
-  setActiveGoal, updateGoal, getActiveGoal, listGoals,
+  setActiveGoal, getActiveGoal, listGoals,
 } from './goal-schema.js';
+import { updateGoalForSession } from './goal-ownership.js';
 
 export interface GoalToolDeps {
   pool: DatabasePool;
@@ -88,7 +89,7 @@ export function goalUpdateTool(deps: GoalToolDeps) {
       if (status !== undefined) patch.status = status;
       if (context !== undefined) patch.context = context as Record<string, unknown>;
 
-      const updated = await updateGoal(deps.pool, id, patch);
+      const updated = await updateGoalForSession(deps.pool, id, ctx.sessionID, patch);
       if (!updated) {
         return {
           title: `goal_update: ${id.slice(0, 8)} (not found)`,

@@ -164,7 +164,7 @@ export class CodexMemoryBridge {
   }): Promise<number> {
     return this.ledgerApi.correlate(input.changeIds, input.commitSha);
   }
-  async invokeExtra(name: string, input: Record<string, unknown>): Promise<unknown> { return this.lifecycle.run(async () => { assertBridgeExtraSupported(this.config.databaseProvider, name); const sessionless = new Set(['memory_project_list', 'memory_cleanup', 'csm_runtime_status', 'csm_compaction_audit', 'csm_context_budget']); const sessionId = sessionless.has(name) ? undefined : await this.sessionApi.ensure(input.projectRoot as string | undefined, input.sessionId as string | undefined); return invokeCodexBridgeExtra(this.deps, name as never, input, sessionId); }); }
+  async invokeExtra(name: string, input: Record<string, unknown>): Promise<unknown> { return this.lifecycle.run(async () => { assertBridgeExtraSupported(this.config.databaseProvider, name); const sessionless = new Set(['memory_project_list', 'memory_compact', 'csm_context_pressure', 'csm_runtime_status', 'csm_compaction_audit', 'csm_context_budget']); const projectRoot = input.projectRoot as string | undefined; if (!sessionless.has(name) && (!projectRoot || !projectRoot.trim())) throw new Error(`projectRoot must be a non-empty string for ${name}.`); const sessionId = sessionless.has(name) ? undefined : await this.sessionApi.ensure(projectRoot, input.sessionId as string | undefined); return invokeCodexBridgeExtra(this.deps, name as never, input, sessionId); }); }
   listTools(): string[] {
     return this.lifecycle.active
       ? bridgeToolNames(this.config.databaseProvider, this.config.workLedger.enabled) : [];

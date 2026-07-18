@@ -51,6 +51,7 @@ describe('SQLite Codex bridge', () => {
       assert.ok(search.cascaded.every((memory) => memory.accessedAt instanceof Date));
 
       const listed = await bridge.listMemories({
+        projectId: 'sqlite-bridge-project',
         dateFrom: new Date(Date.now() - 3_600_000),
         entityType: 'file',
         entityValue: 'src/bridge-core.ts',

@@ -9,7 +9,7 @@ import {
   ALL_CANDIDATE_TYPES,
 } from './candidate-generator.js';
 
-export function memoryDedupDetectTool(detector: DedupCandidateDetector) {
+export function memoryDedupDetectTool(detector: DedupCandidateDetector, projectId: string) {
   return tool({
     description:
       'Find candidate duplicate memory clusters using exact content/title matching and embedding similarity. ' +
@@ -19,7 +19,6 @@ export function memoryDedupDetectTool(detector: DedupCandidateDetector) {
       maxClusters: tool.schema.number().optional().describe('Max clusters to return (default 50)'),
       allowedTypes: tool.schema.array(tool.schema.string()).optional().describe('Only check these memory types'),
       includeDifferentTypes: tool.schema.boolean().optional().describe('Allow cross-type embedding clusters (default false)'),
-      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
     },
     async execute(args) {
       const config: DedupDetectorConfig = {
@@ -27,7 +26,7 @@ export function memoryDedupDetectTool(detector: DedupCandidateDetector) {
         maxClusters: args.maxClusters ?? 50,
         allowedTypes: args.allowedTypes,
         includeDifferentTypes: args.includeDifferentTypes ?? false,
-        projectId: args.projectId,
+        projectId,
       };
 
       const report = await detector.findCandidates(config);
@@ -56,7 +55,7 @@ export function memoryDedupDetectTool(detector: DedupCandidateDetector) {
   });
 }
 
-export function memoryMergeDuplicatesTool(merger: MemoryMerger) {
+export function memoryMergeDuplicatesTool(merger: MemoryMerger, projectId: string) {
   return tool({
     description:
       'Merge exact content duplicate memories by marking superseded. ' +
@@ -66,7 +65,6 @@ export function memoryMergeDuplicatesTool(merger: MemoryMerger) {
       dryRun: tool.schema.boolean().optional().describe('Report without writing (default true)'),
       memoryTypes: tool.schema.array(tool.schema.string()).optional().describe('Only process these types'),
       excludeTypes: tool.schema.array(tool.schema.string()).optional().describe('Skip these types (default: ["lesson"])'),
-      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
       maxGroups: tool.schema.number().optional().describe('Max groups to process, 0 = unlimited (default 0)'),
     },
     async execute(args) {
@@ -74,7 +72,7 @@ export function memoryMergeDuplicatesTool(merger: MemoryMerger) {
         dryRun: args.dryRun ?? true,
         memoryTypes: args.memoryTypes,
         excludeTypes: args.excludeTypes,
-        projectId: args.projectId,
+        projectId,
         maxGroups: args.maxGroups,
       };
 
@@ -111,7 +109,7 @@ export function memoryMergeDuplicatesTool(merger: MemoryMerger) {
   });
 }
 
-export function memoryBackfillEmbeddingsTool(backfill: EmbeddingBackfill) {
+export function memoryBackfillEmbeddingsTool(backfill: EmbeddingBackfill, projectId: string) {
   return tool({
     description:
       'Backfill missing memory embeddings for legacy rows. ' +
@@ -120,7 +118,6 @@ export function memoryBackfillEmbeddingsTool(backfill: EmbeddingBackfill) {
     args: {
       batchSize: tool.schema.number().optional().describe('Memories per batch (default 50)'),
       maxTotal: tool.schema.number().optional().describe('Max total to process, 0 = unlimited (default 0)'),
-      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
       dryRun: tool.schema.boolean().optional().describe('Count eligible rows without updating them'),
       batchDelayMs: tool.schema.number().optional().describe('Rate-limit delay in ms between batches (default 100)'),
     },
@@ -128,7 +125,7 @@ export function memoryBackfillEmbeddingsTool(backfill: EmbeddingBackfill) {
       const config: EmbeddingBackfillConfig = {
         batchSize: args.batchSize ?? 50,
         maxTotal: args.maxTotal ?? 0,
-        projectId: args.projectId,
+        projectId,
         dryRun: args.dryRun ?? false,
         batchDelayMs: args.batchDelayMs ?? 100,
       };
@@ -150,7 +147,7 @@ export function memoryBackfillEmbeddingsTool(backfill: EmbeddingBackfill) {
   });
 }
 
-export function memoryCandidateGenerateTool(generator: CandidateGenerator) {
+export function memoryCandidateGenerateTool(generator: CandidateGenerator, projectId: string) {
   return tool({
     description:
       'Generate advisory maintenance candidates (prune, promote_to_lesson, merge, stale_preference, refresh_summary) ' +
@@ -165,7 +162,6 @@ export function memoryCandidateGenerateTool(generator: CandidateGenerator) {
       minRecallPromote: tool.schema.number().optional().describe('Promote: min recall count (default 5)'),
       minAgeDaysStalePreference: tool.schema.number().optional().describe('Stale preference: min age in days (default 60)'),
       minChunksRefresh: tool.schema.number().optional().describe('Refresh summary: min chunk count (default 3)'),
-      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
     },
     async execute(args) {
       const config: CandidateGeneratorConfig = {
@@ -177,7 +173,7 @@ export function memoryCandidateGenerateTool(generator: CandidateGenerator) {
         minRecallPromote: args.minRecallPromote,
         minAgeDaysStalePreference: args.minAgeDaysStalePreference,
         minChunksRefresh: args.minChunksRefresh,
-        projectId: args.projectId,
+        projectId,
       };
 
       const report = await generator.generate(config);
@@ -211,13 +207,13 @@ export function memoryCandidateGenerateTool(generator: CandidateGenerator) {
   });
 }
 
-export function memoryCandidateReportTool(generator: CandidateGenerator) {
+export function memoryCandidateReportTool(generator: CandidateGenerator, projectId: string) {
   return tool({
     description:
       'Show stored candidate counts by type and status from the advisory candidate queue.',
     args: {},
     async execute() {
-      const report = await generator.report();
+      const report = await generator.report(projectId);
 
       const lines = [
         '=== CANDIDATE QUEUE REPORT ===',

@@ -2,19 +2,18 @@ import { tool } from '@opencode-ai/plugin/tool';
 import type { GovernanceBucket, GovernanceReport } from './memory-governance-report.js';
 import { MemoryGovernanceReportBuilder } from './memory-governance-report.js';
 
-export function memoryGovernanceReportTool(builder: MemoryGovernanceReportBuilder) {
+export function memoryGovernanceReportTool(builder: MemoryGovernanceReportBuilder, projectId: string) {
   return tool({
     description:
       'Produce a read-only governance candidate report from stored memory scores and access signals. ' +
       'No pruning, archiving, or recall behavior changes. Reports low-quality, stale, superseded, low-access, and type-specific junk candidates.',
     args: {
-      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
       maxPerCategory: tool.schema.number().optional().describe('Max sample rows per category (default 20)'),
       staleDays: tool.schema.number().optional().describe('Age threshold for stale candidates (default 45)'),
     },
     async execute(args) {
       const report = await builder.build({
-        projectId: args.projectId,
+        projectId,
         maxPerCategory: args.maxPerCategory ?? 20,
         staleDays: args.staleDays ?? 45,
       });

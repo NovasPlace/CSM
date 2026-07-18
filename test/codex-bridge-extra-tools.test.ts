@@ -60,12 +60,47 @@ describe('Codex bridge extra plugin surfaces', () => {
     assert.equal(MCP_TOOLS.some((tool) => tool.name === 'create_checkpoint'), true);
     assert.equal(MCP_TOOLS.some((tool) => tool.name === 'csm_context_pressure'), true);
     assert.equal(MCP_TOOLS.some((tool) => tool.name === 'csm_context_budget'), true);
+    const deleteSpec = MCP_TOOLS.find((tool) => tool.name === 'memory_delete');
+    assert.ok(deleteSpec?.inputSchema.required.includes('projectRoot'));
+    const searchSpec = MCP_TOOLS.find((tool) => tool.name === 'search_memories');
+    assert.ok(searchSpec?.inputSchema.required.includes('projectId'));
+    assert.equal('searchMode' in searchSpec!.inputSchema.properties, false);
+    const cleanupSpec = MCP_TOOLS.find((tool) => tool.name === 'memory_cleanup');
+    assert.ok(cleanupSpec?.inputSchema.required.includes('projectRoot'));
+    assert.ok('apply' in cleanupSpec!.inputSchema.properties);
+    const transcriptSpec = MCP_TOOLS.find((tool) => tool.name === 'memory_transcript');
+    assert.ok(transcriptSpec?.inputSchema.required.includes('projectRoot'));
 
     await bridge.saveMemory({
       projectRoot: 'extras-project',
       content: 'Bridge extras need a visible project scope.',
       type: 'workspace',
     });
+    await bridge.saveMemory({
+      projectRoot: 'foreign-extras-project',
+      sessionId: 'foreign-extras-session',
+      content: 'A different project must not appear in customer-facing MCP list results.',
+      type: 'conversation',
+    });
+    await assert.rejects(
+      () => invokeMcpTool(bridge, 'memory_transcript', {
+        projectRoot: 'extras-project',
+        sessionId: 'foreign-extras-session',
+      }),
+      /belongs to a different project/,
+    );
+
+    const scopedList = await invokeMcpTool(bridge, 'list_memories', {
+      projectId: 'extras-project',
+      searchMode: 'global',
+      limit: 20,
+    }) as Array<{ projectId?: string }>;
+    assert.ok(scopedList.length >= 1);
+    assert.ok(scopedList.every((memory) => memory.projectId === 'extras-project'));
+    await assert.rejects(
+      () => invokeMcpTool(bridge, 'search_memories', { query: 'different project' }),
+      /projectId must be a non-empty string/,
+    );
 
     const goal = await invokeMcpTool(bridge, 'goal_set', {
       projectRoot: 'extras-project',
@@ -98,6 +133,23 @@ describe('Codex bridge extra plugin surfaces', () => {
       id: (lesson as { memory?: { id?: number } }).memory?.id,
     });
     assert.equal((deleted as { deleted?: boolean }).deleted, true);
+    await assert.rejects(
+      () => invokeMcpTool(bridge, 'memory_delete', {
+        id: (lesson as { memory?: { id?: number } }).memory?.id,
+      }),
+      /projectRoot must be a non-empty string/,
+    );
+
+    const cleanupPreview = await invokeMcpTool(bridge, 'memory_cleanup', {
+      projectRoot: 'extras-project',
+    }) as { dryRun?: boolean; projectId?: string; deleted?: number };
+    assert.equal(cleanupPreview.dryRun, true);
+    assert.equal(cleanupPreview.projectId, 'extras-project');
+    assert.equal(cleanupPreview.deleted, 0);
+    await assert.rejects(
+      () => invokeMcpTool(bridge, 'memory_cleanup', {}),
+      /projectRoot must be a non-empty string/,
+    );
 
     const distilled = await invokeMcpTool(bridge, 'memory_distilled_view', { projectRoot: 'extras-project', limit: 1 });
     assert.equal(Array.isArray((distilled as { summaries?: unknown[] }).summaries), true);

@@ -10,7 +10,12 @@ import {
   toDate,
   type QueryDialect,
 } from './db/query-dialect.js';
-import { Memory } from './types.js';
+import { Memory, type MemorySearchMode } from './types.js';
+
+export interface MemoryCascadeScope {
+  projectId?: string;
+  searchMode?: MemorySearchMode;
+}
 
 export interface CascadeResult {
   memories: Memory[];
@@ -33,11 +38,11 @@ export class PrimingEngine {
    * Cascade through linked memories starting from a seed memory
    * Returns a graph-like traversal of related memories
    */
-  async cascade(memoryId: number): Promise<CascadeResult> {
+  async cascade(memoryId: number, scope: MemoryCascadeScope = {}): Promise<CascadeResult> {
     const visited = new Set<number>();
     const allMemories: Memory[] = [];
 
-    await this.traverse(memoryId, 0, visited, allMemories);
+    await this.traverse(memoryId, 0, visited, allMemories, scope);
 
     return {
       memories: allMemories.slice(0, this.maxMemories),
@@ -49,12 +54,15 @@ export class PrimingEngine {
   /**
    * Cascade from multiple seed memories
    */
-  async cascadeFromMultiple(memoryIds: number[]): Promise<CascadeResult> {
+  async cascadeFromMultiple(
+    memoryIds: number[],
+    scope: MemoryCascadeScope = {},
+  ): Promise<CascadeResult> {
     const visited = new Set<number>();
     const allMemories: Memory[] = [];
 
     for (const memoryId of memoryIds) {
-      await this.traverse(memoryId, 0, visited, allMemories);
+      await this.traverse(memoryId, 0, visited, allMemories, scope);
     }
 
     // Sort by importance and recency
@@ -78,7 +86,8 @@ export class PrimingEngine {
     memoryId: number,
     currentDepth: number,
     visited: Set<number>,
-    allMemories: Memory[]
+    allMemories: Memory[],
+    scope: MemoryCascadeScope,
   ): Promise<void> {
     // Stop if max depth reached or already visited
     if (currentDepth > this.maxDepth || visited.has(memoryId)) {
@@ -93,7 +102,7 @@ export class PrimingEngine {
     visited.add(memoryId);
 
     // Get the memory
-    const memory = await this.getMemory(memoryId);
+    const memory = await this.getMemory(memoryId, scope);
     if (!memory) {
       return;
     }
@@ -110,7 +119,7 @@ export class PrimingEngine {
     // Recurse into linked memories
     for (const linkedId of linkedIds) {
       if (typeof linkedId === 'number') {
-        await this.traverse(linkedId, currentDepth + 1, visited, allMemories);
+        await this.traverse(linkedId, currentDepth + 1, visited, allMemories, scope);
       }
     }
   }
@@ -118,13 +127,25 @@ export class PrimingEngine {
   /**
    * Get a single memory by ID
    */
-  private async getMemory(id: number): Promise<Memory | null> {
+  private async getMemory(id: number, scope: MemoryCascadeScope): Promise<Memory | null> {
     const pool = this.database.getPool();
-    
-    const result = await pool.query(
-      'SELECT * FROM memories WHERE id = $1',
-      [id]
-    );
+    const searchMode = scope.searchMode ?? 'global';
+    let query = 'SELECT * FROM memories WHERE id = $1';
+    const params: unknown[] = [id];
+    if (searchMode === 'project') {
+      if (!scope.projectId) return null;
+      query += ' AND project_id = $2';
+      params.push(scope.projectId);
+    } else if (searchMode === 'legacy') {
+      if (scope.projectId) {
+        query += ' AND (project_id = $2 OR project_id IS NULL)';
+        params.push(scope.projectId);
+      } else {
+        query += ' AND project_id IS NULL';
+      }
+    }
+
+    const result = await pool.query(query, params);
 
     if (result.rows.length === 0) {
       return null;

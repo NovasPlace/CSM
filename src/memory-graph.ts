@@ -30,6 +30,7 @@ interface CandidateRow {
 interface SourceRow {
   content: string;
   created_at: unknown;
+  project_id: string | null;
 }
 
 interface LinkRow {
@@ -136,14 +137,29 @@ export async function buildLinksForMemory(
   const d = db.dialect;
   const entityValues = concepts.map(c => c.value);
 
+  const sourceResult = await pool.query(
+    'SELECT content, created_at, project_id FROM memories WHERE id = $1',
+    [memoryId],
+  );
+  const source = (sourceResult.rows as SourceRow[])[0];
+  if (!source) return [];
+
+  const projectClause = source.project_id === null
+    ? 'AND m.project_id IS NULL'
+    : 'AND m.project_id = $2';
+  const projectParams = source.project_id === null
+    ? [memoryId]
+    : [memoryId, source.project_id];
+
   const memoryRows = await pool.query(
     `SELECT m.id, m.content, m.created_at, ${jsonExtractValue(d, 'm.metadata', 'extracted_concepts')} AS concepts
      FROM memories m
      WHERE m.id != $1
+       ${projectClause}
        AND ${jsonExtractValue(d, 'm.metadata', 'extracted_concepts')} IS NOT NULL
      ORDER BY m.created_at DESC
      LIMIT 50`,
-    [memoryId]
+    projectParams,
   );
 
   const links: MemoryLink[] = [];
@@ -156,17 +172,10 @@ export async function buildLinksForMemory(
 
     if (shared.length === 0) continue;
 
-    const sourceRow = await pool.query(
-      `SELECT content, created_at FROM memories WHERE id = $1`,
-      [memoryId]
-    );
-    const sourceContent = (sourceRow.rows as SourceRow[])[0]?.content ?? "";
-    const sourceDate = toDate(d, (sourceRow.rows as SourceRow[])[0]?.created_at);
-
     const linkType = inferLinkType(
-      sourceContent,
+      source.content,
       candidate.content,
-      sourceDate,
+      toDate(d, source.created_at),
       toDate(d, candidate.created_at),
       concepts.filter(c => shared.includes(c.value))
     );
@@ -211,6 +220,17 @@ export async function getRelatedMemories(
 ): Promise<RelatedMemory[]> {
   const pool = db.getPool();
   const d = db.dialect;
+  const projectFilter = telemetry?.projectId
+    ? `AND m.project_id = $2
+       AND EXISTS (
+         SELECT 1 FROM memories source_memory
+         WHERE source_memory.id = $1 AND source_memory.project_id = $2
+       )`
+    : '';
+  const limitParam = telemetry?.projectId ? '$3' : '$2';
+  const params = telemetry?.projectId
+    ? [memoryId, telemetry.projectId, limit]
+    : [memoryId, limit];
 
   const linkRows = await pool.query(
     `SELECT ml.*, m.id AS mem_id, m.session_id, m.project_id, m.memory_type,
@@ -223,10 +243,11 @@ export async function getRelatedMemories(
        WHEN ml.source_id = $1 THEN ml.target_id
        ELSE ml.source_id
      END
-     WHERE ml.source_id = $1 OR ml.target_id = $1
+     WHERE (ml.source_id = $1 OR ml.target_id = $1)
+     ${projectFilter}
      ORDER BY ml.strength DESC
-     LIMIT $2`,
-    [memoryId, limit]
+     LIMIT ${limitParam}`,
+    params,
   );
 
   const related = (linkRows.rows as RelatedRow[]).map(row => ({

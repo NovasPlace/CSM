@@ -7,6 +7,7 @@ import type { Database } from './database.js';
 import type { MemoryExtractor } from './memory-extractor.js';
 import type { MemoryManager } from './memory-manager.js';
 import type { PrimingEngine } from './priming-engine.js';
+import type { TTLConfig } from './types.js';
 import { contextBudgetOp } from './codex-bridge-extra-budget-ops.js';
 import { contextFetchDecisionLogOp, contextFetchFileRegionOp, contextFetchLastErrorOp, contextFetchOp, contextPressureOp, contextReviewOp, createCheckpointOp, expandCheckpointRefOp, goalListOp, goalSetOp, goalUpdateOp, listCheckpointsOp, runtimeStatusOp, compactionAuditOp as csmCompactionAuditOp } from './codex-bridge-extra-state-ops.js';
 import { memoryBackfillOp, memoryCleanupOp, memoryCompactOp, memoryContextOp, memoryDeleteOp, memoryDistillOp, memoryDistilledViewOp, memoryLessonOp, memoryProjectListOp, memoryTranscriptOp } from './codex-bridge-extra-memory-ops.js';
@@ -23,6 +24,7 @@ export interface CodexBridgeExtraDeps {
   contextCompactor: ContextCompactor;
   contextRecall: ContextRecallDaemon;
   primingEngine: PrimingEngine;
+  ttlConfig: TTLConfig;
 }
 
 export type CodexBridgeExtraName =
@@ -52,13 +54,13 @@ export async function invokeCodexBridgeExtra(
   sessionId?: string,
 ): Promise<unknown> {
   if (name === 'memory_transcript') return memoryTranscriptOp(deps.memoryManager, sessionId, input);
-  if (name === 'memory_delete') return memoryDeleteOp(deps.memoryManager, input.id);
+  if (name === 'memory_delete') return memoryDeleteOp(deps.memoryManager, input.id, input.projectRoot);
   if (name === 'memory_context') return memoryContextOp(deps, sessionId, input);
   if (name === 'memory_lesson') return memoryLessonOp(deps.memoryManager, sessionId, input);
   if (name === 'memory_candidate_list') return { candidates: await deps.memoryExtractor.getPendingCandidates(sessionId, limit(input.limit, 50)) };
   if (name === 'memory_candidate_approve' || name === 'memory_candidate_reject') return reviewCandidateOp(deps.memoryExtractor, name, input, sessionId);
   if (name === 'memory_project_list') return memoryProjectListOp(deps.memoryManager);
-  if (name === 'memory_cleanup') return memoryCleanupOp(deps.memoryManager);
+  if (name === 'memory_cleanup') return memoryCleanupOp(deps.memoryManager, deps.ttlConfig, input);
   if (name === 'memory_distill') return memoryDistillOp(deps, sessionId, input);
   if (name === 'memory_distilled_view') return memoryDistilledViewOp(deps.database, sessionId, input);
   if (name === 'memory_compact') return memoryCompactOp(deps);

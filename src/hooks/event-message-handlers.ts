@@ -85,6 +85,7 @@ async function persistAssistant(
     metadata: { messageId: info.id, role: 'assistant', fullTranscript: true,
       partCount: message?.parts?.length ?? 0 },
     sessionId: String(info.sessionID ?? ''),
+    projectId: ctx.directory,
   });
   pluginCtx.workJournal.recordDecision({
     sessionId: String(info.sessionID ?? ''), projectId: ctx.directory,

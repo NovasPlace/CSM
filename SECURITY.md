@@ -55,6 +55,8 @@ Treat the memory database, generated operational documents, logs, exports, and b
 - Review `AGENTBOOK_STATE.md` and generated auto-docs before publishing a repository.
 - Keep local model, embedding, and API endpoints within the intended trust boundary.
 
+The current product boundary for capture, project isolation, preview-first retention, deletion, export, encryption, and operator responsibilities is documented in [Data Privacy and Lifecycle](docs/DATA_PRIVACY_AND_LIFECYCLE.md).
+
 ## Memory-specific threat model
 
 ### Prompt and memory poisoning

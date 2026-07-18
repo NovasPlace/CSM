@@ -2,7 +2,7 @@ import { getContextBriefOp } from './bridge-ops.js';
 import type { CodexBridgeExtraDeps } from './codex-bridge-extra-ops.js';
 import type { Database } from './database.js';
 import { ToolCallDistiller } from './tool-distiller.js';
-import type { MemoryType, ToolCallRecord } from './types.js';
+import type { MemoryType, TTLConfig, ToolCallRecord } from './types.js';
 import { asLimit, asRecord, asString, asStringArray, requireSession, requireString } from './codex-bridge-extra-utils.js';
 import { withBridgeProvenance } from './bridge-provenance.js';
 
@@ -22,8 +22,17 @@ function requireMemoryId(value: unknown): number {
   return n;
 }
 
-export async function memoryDeleteOp(memoryManager: CodexBridgeExtraDeps['memoryManager'], id: unknown) {
-  return { deleted: await memoryManager.deleteMemory(requireMemoryId(id)) };
+export async function memoryDeleteOp(
+  memoryManager: CodexBridgeExtraDeps['memoryManager'],
+  id: unknown,
+  projectRoot: unknown,
+) {
+  return {
+    deleted: await memoryManager.deleteMemory(
+      requireMemoryId(id),
+      requireString(projectRoot, 'projectRoot'),
+    ),
+  };
 }
 
 export async function memoryContextOp(deps: CodexBridgeExtraDeps, sessionId: string | undefined, input: Record<string, unknown>) {
@@ -68,8 +77,25 @@ export async function memoryProjectListOp(memoryManager: CodexBridgeExtraDeps['m
   return { projects: await memoryManager.getAllProjectScopes() };
 }
 
-export async function memoryCleanupOp(memoryManager: CodexBridgeExtraDeps['memoryManager']) {
-  return memoryManager.cleanupExpiredMemories();
+export async function memoryCleanupOp(
+  memoryManager: CodexBridgeExtraDeps['memoryManager'],
+  ttl: TTLConfig,
+  input: Record<string, unknown>,
+) {
+  return memoryManager.cleanupExpiredMemories({
+    projectId: requireString(input.projectRoot, 'projectRoot'),
+    ttl,
+    apply: input.apply === true,
+    maxDelete: cleanupLimit(input.maxDelete),
+  });
+}
+
+function cleanupLimit(value: unknown): number {
+  if (value === undefined) return 1_000;
+  if (!Number.isInteger(value) || (value as number) < 1 || (value as number) > 10_000) {
+    throw new Error('maxDelete must be an integer between 1 and 10000');
+  }
+  return value as number;
 }
 
 export async function memoryBackfillOp(memoryManager: CodexBridgeExtraDeps['memoryManager'], input: Record<string, unknown>) {
@@ -114,7 +140,7 @@ export async function reviewCandidateOp(memoryExtractor: CodexBridgeExtraDeps['m
   const approval = name === 'memory_candidate_approve'
     ? { candidateId, action: 'approve' as const, editedContent: asString(input.editedContent), editedType: asString(input.editedType) as MemoryType | undefined, editedImportance: typeof input.editedImportance === 'number' ? input.editedImportance : undefined, editedTags: asStringArray(input.editedTags), reviewedBy: 'user' as const, reviewedAt: new Date() }
     : { candidateId, action: 'reject' as const, reviewedBy: 'user' as const, reviewedAt: new Date() };
-  await memoryExtractor.reviewCandidate(approval, 'user');
+  await memoryExtractor.reviewCandidate(approval, 'user', sid);
   return { sessionId: sid, candidateId, action: approval.action };
 }
 

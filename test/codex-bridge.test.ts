@@ -99,8 +99,8 @@ describe('Phase 20 - Codex bridge adapter', () => {
   });
 
   it('shares the same save and search paths as the OpenCode tool wrappers', async () => {
-    const saveTool = memorySaveTool(memoryManager);
-    const searchTool = memorySearchTool(memoryManager, primingEngine);
+    const saveTool = memorySaveTool(memoryManager, 'phase20-project');
+    const searchTool = memorySearchTool(memoryManager, primingEngine, 'phase20-project');
 
     await saveTool.execute({
       content: 'OpenCode wrapper stored the bridge parity token.',

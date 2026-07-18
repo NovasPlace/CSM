@@ -46,11 +46,13 @@ export async function searchMemoriesOp(
   const projectId = input.projectId ?? context.projectId;
   const telemetry = context.sessionId ? { sessionId: context.sessionId, source: 'search' as const } : undefined;
   const searchMode = input.searchMode ?? (projectId ? 'project' : 'global');
+  let resolvedSearchMode = searchMode;
   let results = await deps.memoryManager.searchMemories(
     { ...input, projectId, searchMode },
     telemetry,
   );
   if (results.length === 0 && projectId && searchMode === 'project') {
+    resolvedSearchMode = 'legacy';
     results = await deps.memoryManager.searchMemories(
       { ...input, projectId, searchMode: 'legacy' },
       telemetry,
@@ -58,7 +60,10 @@ export async function searchMemoriesOp(
   }
   const ids = results.slice(0, 3).map((row) => row.memory.id);
   const cascaded = ids.length > 0
-    ? (await deps.primingEngine.cascadeFromMultiple(ids)).memories
+    ? (await deps.primingEngine.cascadeFromMultiple(ids, {
+      projectId,
+      searchMode: resolvedSearchMode,
+    })).memories
     : [];
   return { results, cascaded };
 }

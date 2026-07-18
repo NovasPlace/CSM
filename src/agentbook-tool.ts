@@ -28,13 +28,12 @@ function formatRule(rule: AgentBookRule): string {
   return `${rule.ruleId} [${status}] P${rule.priority} ${rule.scope}/${rule.overridePolicy}${trigger}\n  ${rule.instruction}`;
 }
 
-export function agentBookEventsTool(eventStore: AgentBookEventStore) {
+export function agentBookEventsTool(eventStore: AgentBookEventStore, projectId: string) {
   return tool({
-    description: 'Query the AgentBook append-only event ledger by project, session, event type, event ID, or cursor.',
+    description: 'Query the current project\'s AgentBook append-only event ledger by session, event type, event ID, or cursor.',
     args: {
       action: tool.schema.enum(['list', 'get', 'since', 'counts']).optional()
         .describe('Operation to perform (default: list)'),
-      projectId: tool.schema.string().optional().describe('Project ID filter; required for since and project counts'),
       sessionId: tool.schema.string().optional().describe('Session ID filter'),
       eventType: tool.schema.enum(EVENT_TYPES).optional().describe('Event type filter'),
       eventId: tool.schema.string().optional().describe('Event ID for get'),
@@ -47,17 +46,18 @@ export function agentBookEventsTool(eventStore: AgentBookEventStore) {
       if (action === 'get') {
         if (!args.eventId) throw new Error('eventId is required for AgentBook event get');
         const event = await eventStore.getEvent(args.eventId);
+        const scopedEvent = event?.projectId === projectId ? event : null;
         return {
-          title: event ? `AgentBook Event: ${event.eventId}` : 'AgentBook Event Not Found',
-          output: event ? formatEvent(event) : `No AgentBook event found for ${args.eventId}.`,
-          metadata: { event },
+          title: scopedEvent ? `AgentBook Event: ${scopedEvent.eventId}` : 'AgentBook Event Not Found',
+          output: scopedEvent ? formatEvent(scopedEvent) : `No AgentBook event found for ${args.eventId}.`,
+          metadata: { event: scopedEvent },
         };
       }
       if (action === 'since') {
-        if (!args.projectId || !args.sinceEventId) {
-          throw new Error('projectId and sinceEventId are required for AgentBook event since');
+        if (!args.sinceEventId) {
+          throw new Error('sinceEventId is required for AgentBook event since');
         }
-        const events = await eventStore.getEventsSince(args.projectId, args.sinceEventId);
+        const events = await eventStore.getEventsSince(projectId, args.sinceEventId);
         return {
           title: `AgentBook Events Since: ${events.length}`,
           output: events.length > 0 ? events.map(formatEvent).join('\n\n') : 'No later AgentBook events found.',
@@ -66,17 +66,17 @@ export function agentBookEventsTool(eventStore: AgentBookEventStore) {
       }
       if (action === 'counts') {
         const [eventCount, sessionCount] = await Promise.all([
-          eventStore.countEvents(args.projectId),
-          eventStore.countSessions(args.projectId),
+          eventStore.countEvents(projectId),
+          eventStore.countSessions(projectId),
         ]);
         return {
           title: 'AgentBook Counts',
           output: `Events: ${eventCount}\nSessions: ${sessionCount}`,
-          metadata: { projectId: args.projectId, eventCount, sessionCount },
+          metadata: { projectId, eventCount, sessionCount },
         };
       }
       const events = await eventStore.listEvents({
-        projectId: args.projectId,
+        projectId,
         sessionId: args.sessionId,
         eventType: args.eventType,
         limit: args.limit,
@@ -91,31 +91,30 @@ export function agentBookEventsTool(eventStore: AgentBookEventStore) {
   });
 }
 
-export function agentBookStateTool(deps: AgentBookToolDeps) {
+export function agentBookStateTool(deps: AgentBookToolDeps, projectId: string, workspacePath: string) {
   return tool({
-    description: 'Project and display AgentBook current state with its generated front-page markdown.',
+    description: 'Project and display the current project\'s AgentBook state with its generated front-page markdown.',
     args: {
-      projectId: tool.schema.string().describe('Project ID to project'),
       refreshSummary: tool.schema.boolean().optional()
         .describe('Generate a threshold summary before projecting state (default true)'),
       recentLimit: tool.schema.number().optional().describe('Recent events included in the front page (default 10)'),
     },
     async execute(args) {
-      if (args.refreshSummary ?? true) await deps.summaryGenerator.maybeGenerate(args.projectId);
-      const state = await deps.stateProjector.project(args.projectId);
+      if (args.refreshSummary ?? true) await deps.summaryGenerator.maybeGenerate(projectId);
+      const state = await deps.stateProjector.project(projectId);
       const [latestSummary, rules, recentEvents] = await Promise.all([
-        deps.summaryGenerator.getLatestSummary(args.projectId),
+        deps.summaryGenerator.getLatestSummary(projectId),
         deps.rulesStore.getActiveRules(),
-        deps.eventStore.getRecentEvents(args.projectId, args.recentLimit ?? 10),
+        deps.eventStore.getRecentEvents(projectId, args.recentLimit ?? 10),
       ]);
       const frontPage = generateFrontPage(state, latestSummary, rules, recentEvents);
       try {
-        writeFrontPageFile(frontPage.markdown, process.cwd());
+        writeFrontPageFile(frontPage.markdown, workspacePath);
       } catch (_writeError) {
         // File write is best-effort; the markdown is still returned as output
       }
       return {
-        title: `AgentBook State: ${args.projectId}`,
+        title: `AgentBook State: ${projectId}`,
         output: frontPage.markdown,
         metadata: { state, latestSummary, rules, recentEvents, frontPage },
       };
@@ -171,10 +170,10 @@ export function agentBookRuleTool(rulesStore: AgentBookRulesStore) {
   });
 }
 
-export function createAgentBookTools(deps: AgentBookToolDeps) {
+export function createAgentBookTools(deps: AgentBookToolDeps, projectId: string, workspacePath = projectId) {
   return {
-    csm_agentbook_events: agentBookEventsTool(deps.eventStore),
-    csm_agentbook_state: agentBookStateTool(deps),
+    csm_agentbook_events: agentBookEventsTool(deps.eventStore, projectId),
+    csm_agentbook_state: agentBookStateTool(deps, projectId, workspacePath),
     csm_agentbook_rule: agentBookRuleTool(deps.rulesStore),
   };
 }

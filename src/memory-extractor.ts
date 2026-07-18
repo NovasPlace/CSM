@@ -435,6 +435,7 @@ export class MemoryExtractor {
           autoApproved: candidate.status === 'auto-approved',
         },
         sessionId: candidate.sessionId,
+        projectId: candidate.projectId,
        });
      } catch (error) {
        getLogger().error('Failed to save candidate', error instanceof Error ? error : undefined);
@@ -514,23 +515,33 @@ export class MemoryExtractor {
   /**
    * Approve or reject a candidate
    */
-  async reviewCandidate(approval: MemoryApproval, reviewer: 'user' | 'system'): Promise<void> {
+  async reviewCandidate(
+    approval: MemoryApproval,
+    reviewer: 'user' | 'system',
+    sessionId?: string,
+  ): Promise<void> {
     const pool = this.database.getPool();
+    const candidate = await this.getCandidateById(approval.candidateId, sessionId);
+    if (!candidate) {
+      throw new Error('Memory candidate was not found in the active session.');
+    }
     
     // Update candidate status
     await pool.query(
-      'UPDATE memory_candidates SET status = $1, reviewed_at = $2, reviewed_by = $3 WHERE id = $4',
+      `UPDATE memory_candidates
+       SET status = $1, reviewed_at = $2, reviewed_by = $3
+       WHERE id = $4 AND ($5::text IS NULL OR session_id = $5)`,
       [
         approval.action === 'approve' ? 'approved' : 'rejected',
         new Date(),
         reviewer,
         approval.candidateId,
+        sessionId ?? null,
       ]
     );
 
     // If approved with edits, save as memory
-    const candidate = await this.getCandidateById(approval.candidateId);
-    if (approval.action === 'approve' && candidate) {
+    if (approval.action === 'approve') {
       await this.saveCandidateAsMemory({
         ...candidate,
         proposedType: approval.editedType ?? candidate.proposedType,
@@ -556,10 +567,13 @@ export class MemoryExtractor {
   /**
    * Get candidate by ID
    */
-  async getCandidateById(id: string): Promise<MemoryCandidate | null> {
+  async getCandidateById(id: string, sessionId?: string): Promise<MemoryCandidate | null> {
     const pool = this.database.getPool();
     
-    const result = await pool.query('SELECT * FROM memory_candidates WHERE id = $1', [id]);
+    const result = await pool.query(
+      'SELECT * FROM memory_candidates WHERE id = $1 AND ($2::text IS NULL OR session_id = $2)',
+      [id, sessionId ?? null],
+    );
     
     if (result.rows.length === 0) {
       return null;

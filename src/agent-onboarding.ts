@@ -98,7 +98,7 @@ interface TranscriptMemoryRow {
 
 function projectScopeKeys(ctx: OnboardingContext): string[] {
   const keys = new Set<string>();
-  for (const v of [ctx.projectId, ctx.workspacePath, path.basename(ctx.workspacePath)]) {
+  for (const v of [ctx.projectId, ctx.workspacePath]) {
     if (v && v !== 'unknown' && v !== 'default') keys.add(v);
   }
   // Windows path variants for DB project_id matching
@@ -594,9 +594,8 @@ async function provideHandoff(ctx: OnboardingContext): Promise<OnboardingSection
   // 1) Latest session for this workfolder
   let latestSession: SessionRow | null = null;
   try {
-    // Prefer exact workspace path keys; fall back to basename match.
     const primaryKey = scope[0] ?? ctx.projectId;
-    const basenameKey = path.basename(ctx.workspacePath || primaryKey);
+    const alternateKey = scope[1] ?? primaryKey;
     const freshCutoff = new Date(Date.now() - 60_000).toISOString();
     const sessionResult = await ctx.pool.query(
       `SELECT s.id, s.project_id, s.directory, s.title, s.summary, s.turn_count,
@@ -605,14 +604,13 @@ async function provideHandoff(ctx: OnboardingContext): Promise<OnboardingSection
        FROM sessions s
        LEFT JOIN agent_work_journal j ON j.session_id = s.id
        WHERE (s.project_id = $1 OR s.directory = $1
-             OR s.project_id = $2 OR s.directory = $2
-             OR s.project_id LIKE $3 OR s.directory LIKE $3)
-          AND s.id <> $4
+             OR s.project_id = $2 OR s.directory = $2)
+          AND s.id <> $3
        GROUP BY s.id, s.project_id, s.directory, s.title, s.summary, s.turn_count,
                 s.created_at, s.updated_at, s.ended_at
        ORDER BY
          CASE
-           WHEN COALESCE(s.created_at, s.updated_at) > $5
+           WHEN COALESCE(s.created_at, s.updated_at) > $4
             AND COALESCE(s.turn_count, 0) = 0
             AND COUNT(j.session_id) = 0
            THEN 1 ELSE 0
@@ -620,38 +618,10 @@ async function provideHandoff(ctx: OnboardingContext): Promise<OnboardingSection
          COUNT(j.session_id) DESC,
          COALESCE(s.updated_at, s.created_at) DESC
        LIMIT 1`,
-      [primaryKey, basenameKey, `%${basenameKey}%`, ctx.sessionId, freshCutoff],
+      [primaryKey, alternateKey, ctx.sessionId, freshCutoff],
     );
     if (sessionResult.rows.length > 0) {
       latestSession = sessionResult.rows[0] as SessionRow;
-    } else {
-      // Fallback: most recent session overall if project keys don't match
-      const fallback = await ctx.pool.query(
-        `SELECT s.id, s.project_id, s.directory, s.title, s.summary, s.turn_count,
-                s.created_at, s.updated_at, s.ended_at,
-                COUNT(j.session_id)::int AS journal_count
-         FROM sessions s
-         LEFT JOIN agent_work_journal j ON j.session_id = s.id
-         WHERE s.id <> $1
-         GROUP BY s.id, s.project_id, s.directory, s.title, s.summary, s.turn_count,
-                  s.created_at, s.updated_at, s.ended_at
-         ORDER BY
-           CASE
-             WHEN COALESCE(s.created_at, s.updated_at) > $2
-              AND COALESCE(s.turn_count, 0) = 0
-              AND COUNT(j.session_id) = 0
-             THEN 1 ELSE 0
-           END ASC,
-           COUNT(j.session_id) DESC,
-           COALESCE(s.updated_at, s.created_at) DESC
-         LIMIT 3`,
-        [ctx.sessionId, freshCutoff],
-      );
-      if (fallback.rows.length > 0) {
-        const rows = fallback.rows as SessionRow[];
-        latestSession = rows[0];
-        warnings.push('Session matched by recency fallback (project_id key mismatch)');
-      }
     }
   } catch (err) {
     warnings.push(`Session query failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -680,15 +650,14 @@ async function provideHandoff(ctx: OnboardingContext): Promise<OnboardingSection
   const decisions: string[] = [];
   try {
     const primaryKey = scope[0] ?? ctx.projectId;
-    const basenameKey = path.basename(ctx.workspacePath || primaryKey);
+    const alternateKey = scope[1] ?? primaryKey;
     const journalResult = await ctx.pool.query(
       `SELECT session_id, project_id, entry_type, tool_name, intent, result_summary, files_touched, error_summary, created_at
        FROM agent_work_journal
-       WHERE project_id = $1 OR project_id = $2 OR project_id LIKE $3
-          OR session_id = $4
+       WHERE project_id = $1 OR project_id = $2 OR session_id = $3
        ORDER BY created_at DESC
        LIMIT 20`,
-      [primaryKey, basenameKey, `%${basenameKey}%`, latestSession?.id ?? ''],
+      [primaryKey, alternateKey, latestSession?.id ?? ''],
     );
 
     if (journalResult.rows.length > 0) {
@@ -741,17 +710,17 @@ async function provideHandoff(ctx: OnboardingContext): Promise<OnboardingSection
   // 3) Open threads from recent conversation / episodic memories
   try {
     const primaryKey = scope[0] ?? ctx.projectId;
-    const basenameKey = path.basename(ctx.workspacePath || primaryKey);
+    const alternateKey = scope[1] ?? primaryKey;
     const memResult = await ctx.pool.query(
        `SELECT content, memory_type, created_at
         FROM memories
         WHERE archived_at IS NULL
           AND superseded_by IS NULL
-          AND (project_id = $1 OR project_id = $2 OR project_id LIKE $3 OR session_id = $4)
+          AND (project_id = $1 OR project_id = $2 OR session_id = $3)
          AND memory_type IN ('conversation', 'episodic', 'lesson')
        ORDER BY created_at DESC
        LIMIT 8`,
-      [primaryKey, basenameKey, `%${basenameKey}%`, latestSession?.id ?? ''],
+      [primaryKey, alternateKey, latestSession?.id ?? ''],
     );
     if (memResult.rows.length > 0) {
       lines.push('## Open threads / recent context');

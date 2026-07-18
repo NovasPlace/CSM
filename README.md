@@ -15,7 +15,7 @@ Persistent memory, operational state, re-entry, context governance, and durable 
   <a href="LICENSE"><img src="https://img.shields.io/github/license/NovasPlace/CSM" alt="License"></a>
 </p>
 
-[Quick start](#quick-start) · [Feature map](docs/FEATURES.md) · [Architecture](docs/PRODUCT_ARCHITECTURE.md) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start) · [Feature map](docs/FEATURES.md) · [Architecture](docs/PRODUCT_ARCHITECTURE.md) · [Privacy](docs/DATA_PRIVACY_AND_LIFECYCLE.md) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 

@@ -58,6 +58,25 @@ export interface TTLConfig {
   gracePeriodDays: number; // min age before TTL applies
 }
 
+export interface MemoryCleanupOptions {
+  projectId: string;
+  ttl: TTLConfig;
+  apply?: boolean;
+  maxDelete?: number;
+}
+
+export interface MemoryCleanupReport {
+  projectId: string;
+  dryRun: boolean;
+  policyEnabled: boolean;
+  scanned: number;
+  eligible: number;
+  deleted: number;
+  archived: number;
+  rejectedCandidatesDeleted: number;
+  capped: boolean;
+}
+
 export interface ProjectScope {
   projectId: string;
   name: string;

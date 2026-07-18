@@ -18,6 +18,16 @@ but malformed explicit input is rejected instead of being silently coerced or ig
   text fail with a line number. Values are never included in parse errors.
 - Existing process environment values take precedence over `.env` values.
 
+## Retention safety
+
+- TTL values define eligibility; cleanup is not an automatic startup task.
+- Cleanup requires a project, previews by default, and mutates data only with explicit `apply=true`.
+- The longest matching type, importance-band, or grace-period duration wins.
+- Applied runs are capped at 1,000 memories by default and 10,000 maximum.
+- Default importance retention is 30 days for low, 90 for medium, and 180 for high importance.
+- Database cleanup does not erase separate exports, generated documents, logs, or backups. See
+  [Data Privacy and Lifecycle](DATA_PRIVACY_AND_LIFECYCLE.md).
+
 ## Provider prerequisites
 
 - `CSM_DATABASE_PROVIDER` is `postgres` or `sqlite` only.

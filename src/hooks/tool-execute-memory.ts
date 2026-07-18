@@ -132,6 +132,7 @@ export async function logToolUsage(
         tokensAvoided: packagedToolMetadata?.tokensAvoided,
       },
       sessionId: sid ?? undefined,
+      projectId: ctx.directory,
     });
   }
 
@@ -148,6 +149,7 @@ export async function logToolUsage(
       tags: ['file-operation', tool],
       metadata: { operation: tool, filePath },
       sessionId: sid ?? undefined,
+      projectId: ctx.directory,
     });
   }
 
@@ -162,6 +164,7 @@ export async function logToolUsage(
        tags: ['command', 'procedural', 'context-budget'],
        metadata: metadata ?? { command: command.substring(0, 500) },
        sessionId: sid ?? undefined,
+       projectId: ctx.directory,
      });
    }
   }

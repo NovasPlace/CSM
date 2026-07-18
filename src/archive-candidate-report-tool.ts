@@ -2,17 +2,16 @@ import { tool } from '@opencode-ai/plugin/tool';
 import type { ArchiveBucket, ArchiveCandidateReport } from './archive-candidate-report.js';
 import { ArchiveCandidateReportBuilder } from './archive-candidate-report.js';
 
-export function archiveCandidateReportTool(builder: ArchiveCandidateReportBuilder) {
+export function archiveCandidateReportTool(builder: ArchiveCandidateReportBuilder, projectId: string) {
   return tool({
     description:
       'Produce a read-only archive-candidate report from safe governance buckets only. ' +
       'No archive, prune, delete, or recall behavior changes are performed.',
     args: {
-      projectId: tool.schema.string().optional().describe('Optional project scope filter'),
       maxPerReason: tool.schema.number().optional().describe('Max sample rows per reason code (default 20)'),
     },
     async execute(args) {
-      const report = await builder.build({ projectId: args.projectId, maxPerReason: args.maxPerReason ?? 20 });
+      const report = await builder.build({ projectId, maxPerReason: args.maxPerReason ?? 20 });
       return { title: 'Memory Archive Candidate Report', output: formatArchiveCandidateReport(report), metadata: report };
     },
   });

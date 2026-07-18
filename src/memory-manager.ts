@@ -12,7 +12,7 @@ import { DEFAULT_PRUNE_CONFIG } from './types.js';
 import { recordRecallBatch, type RecallTelemetrySource } from './recall-telemetry.js';
 import { applyTypeQuota } from './memory-type-quota.js';
 import { getLogger } from './logger.js';
-import { nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField } from './db/query-dialect.js';
+import { nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField, colInParamArray } from './db/query-dialect.js';
 import { HybridWeights } from './hybrid-search.js';
 import {
   Memory,
@@ -29,6 +29,8 @@ import {
   BackfillEmbeddingsOptions,
   BackfillEmbeddingsResult,
   ProjectScope,
+  MemoryCleanupOptions,
+  MemoryCleanupReport,
 } from './types.js';
 
 // Helper function to map database row to ProjectScope
@@ -41,6 +43,32 @@ function mapProjectScope(row: Record<string, unknown>): ProjectScope {
     lastActiveAt: new Date(row.last_active_at as string),
     memoryCount: row.memory_count as number,
   };
+}
+
+function isPastRetention(
+  row: { memory_type: MemoryType; importance: number; created_at: unknown },
+  ttl: MemoryCleanupOptions['ttl'],
+): boolean {
+  const createdAt = toDate('pg', row.created_at);
+  if (!Number.isFinite(createdAt.getTime())) return false;
+  const typeDays = ttl.byType[row.memory_type] ?? ttl.defaultDays;
+  const importance = Number(row.importance);
+  const importanceDays = ttl.byImportance.find((range, index) => (
+    importance >= range.min
+    && (importance < range.max || (index === ttl.byImportance.length - 1 && importance <= range.max))
+  ))?.days ?? ttl.defaultDays;
+  const retentionDays = Math.max(typeDays, importanceDays, ttl.gracePeriodDays);
+  return Date.now() - createdAt.getTime() >= retentionDays * 86_400_000;
+}
+
+function isMissingSqliteTable(
+  dialect: 'pg' | 'sqlite',
+  error: unknown,
+  table: string,
+): boolean {
+  return dialect === 'sqlite'
+    && error instanceof Error
+    && error.message.includes(`no such table: ${table}`);
 }
 
 export class MemoryManager {
@@ -172,6 +200,41 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
 
       const pool = this.database.getPool();
 
+      // Resolve and verify project ownership before deduplication or storage.
+      // A session ID must never be reused to write into a different project.
+      let projectId: string | null = options.projectId ?? null;
+      if (options.sessionId) {
+        const sessionResult = await pool.query(
+          'SELECT project_id FROM sessions WHERE id = $1',
+          [options.sessionId],
+        );
+        if (sessionResult.rows.length > 0) {
+          const row = sessionResult.rows[0] as { project_id: string | null };
+          const sessionProjectId = row.project_id ?? null;
+          if (projectId && sessionProjectId && projectId !== sessionProjectId) {
+            throw new Error(
+              `Session ${options.sessionId} belongs to project ${sessionProjectId}; refusing memory write for ${projectId}`,
+            );
+          }
+          if (projectId && !sessionProjectId) {
+            await pool.query(
+              'UPDATE sessions SET project_id = $2, directory = COALESCE(directory, $2) WHERE id = $1 AND project_id IS NULL',
+              [options.sessionId, projectId],
+            );
+          }
+          projectId ??= sessionProjectId;
+        } else {
+          const recoveredProjectId = projectId ?? process.cwd();
+          await pool.query(
+            `INSERT INTO sessions (id, directory, title, project_id)
+             VALUES ($1, $2, $3, $2)
+             ON CONFLICT (id) DO NOTHING`,
+            [options.sessionId, recoveredProjectId, 'recovered-session'],
+          );
+          projectId = recoveredProjectId;
+        }
+      }
+
       // Dedup guard for transcript memories: if this exact message was already
       // captured (e.g. by a second plugin instance or a dual event hook), return
       // the existing memory instead of inserting a duplicate.
@@ -215,27 +278,6 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         );
       }
       contentToProcess = quotaResult.content;
-      
-      // Get project_id from session if available, or use directly-provided projectId
-      let projectId: string | null = options.projectId ?? null;
-      if (!projectId && options.sessionId) {
-        const sessionResult = await pool.query(
-          'SELECT project_id FROM sessions WHERE id = $1',
-          [options.sessionId]
-        );
-        if (sessionResult.rows.length > 0) {
-          const row = sessionResult.rows[0] as { project_id: string | null };
-          projectId = row.project_id ?? null;
-        } else {
-          await pool.query(
-            `INSERT INTO sessions (id, directory, title, project_id)
-             VALUES ($1, $2, $3, $3)
-             ON CONFLICT (id) DO NOTHING`,
-            [options.sessionId, process.cwd(), 'recovered-session']
-          );
-          projectId = process.cwd();
-        }
-      }
       
       // Extract concepts from content
       const extraction = extractConcepts(contentToProcess);
@@ -426,12 +468,12 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   /**
    * Delete a memory
    */
-  async deleteMemory(id: number): Promise<boolean> {
+  async deleteMemory(id: number, projectId: string): Promise<boolean> {
     const pool = this.database.getPool();
     
     const result = await pool.query(
-      'DELETE FROM memories WHERE id = $1 RETURNING id',
-      [id]
+      'DELETE FROM memories WHERE id = $1 AND project_id = $2 RETURNING id',
+      [id, projectId]
     );
 
     if (result.rows.length > 0) {
@@ -802,34 +844,81 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   /**
    * Cleanup expired memories based on TTL
    */
-  async cleanupExpiredMemories(): Promise<{ deleted: number; archived: number }> {
+  async cleanupExpiredMemories(options: MemoryCleanupOptions): Promise<MemoryCleanupReport> {
     const pool = this.database.getPool();
-    const now = nowFn(this.database.dialect);
-    
-    // Delete memories older than 90 days
-    const deleteResult = await pool.query(
-      `DELETE FROM memories WHERE created_at < ${now} - interval '90 days'`
+    const projectId = options.projectId.trim();
+    if (!projectId) throw new Error('projectId is required for memory cleanup');
+    const maxDelete = options.maxDelete ?? 1_000;
+    if (!Number.isInteger(maxDelete) || maxDelete < 1 || maxDelete > 10_000) {
+      throw new Error('maxDelete must be an integer between 1 and 10000');
+    }
+
+    const result = await pool.query(
+      `SELECT id, memory_type, importance, created_at
+       FROM memories
+       WHERE project_id = $1
+       ORDER BY created_at ASC`,
+      [projectId],
     );
-    
-    // Archive memories older than 30 days but newer than 90 days
-    const archiveResult = await pool.query(
-      `UPDATE memories
-        SET metadata = jsonb_set(metadata, '{archived}', 'true')
-        WHERE created_at < ${now} - interval '30 days'
-        AND created_at >= ${now} - interval '90 days'
-        AND (${jsonExtractText(this.database.dialect, 'metadata', 'archived')}) IS DISTINCT FROM 'true'`
-    );
-    
-    // Clean up old candidates
-    await pool.query(
-      `DELETE FROM memory_candidates WHERE status = $1 AND created_at < ${now} - interval '7 days'`,
-      ['rejected']
-    );
-    
-    return {
-      deleted: deleteResult.rowCount || 0,
-      archived: archiveResult.rowCount || 0,
+    const rows = result.rows as Array<{
+      id: number;
+      memory_type: MemoryType;
+      importance: number;
+      created_at: unknown;
+    }>;
+    const eligibleIds = options.ttl.enabled
+      ? rows.filter((row) => isPastRetention(row, options.ttl)).map((row) => row.id)
+      : [];
+    const selectedIds = eligibleIds.slice(0, maxDelete);
+    const report: MemoryCleanupReport = {
+      projectId,
+      dryRun: options.apply !== true,
+      policyEnabled: options.ttl.enabled,
+      scanned: rows.length,
+      eligible: eligibleIds.length,
+      deleted: 0,
+      archived: 0,
+      rejectedCandidatesDeleted: 0,
+      capped: eligibleIds.length > selectedIds.length,
     };
+    if (report.dryRun || selectedIds.length === 0) return report;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const deleted = await client.query(
+        `DELETE FROM memories
+         WHERE project_id = $1
+           AND ${colInParamArray(this.database.dialect, 'id', 2)}`,
+        [projectId, jsonParam(this.database.dialect, selectedIds)],
+      );
+      const rejectedCutoff = new Date(Date.now() - 7 * 86_400_000);
+      let rejectedCandidatesDeleted = 0;
+      try {
+        const rejected = await client.query(
+          `DELETE FROM memory_candidates
+           WHERE project_id = $1 AND status = $2 AND created_at < $3`,
+          [projectId, 'rejected', this.database.dialect === 'sqlite' ? rejectedCutoff.toISOString() : rejectedCutoff],
+        );
+        rejectedCandidatesDeleted = rejected.rowCount ?? 0;
+      } catch (error) {
+        if (!isMissingSqliteTable(this.database.dialect, error, 'memory_candidates')) throw error;
+      }
+      await client.query('COMMIT');
+      report.deleted = deleted.rowCount ?? 0;
+      report.rejectedCandidatesDeleted = rejectedCandidatesDeleted;
+      await this.emitEvent('memory.retention_cleanup', {
+        projectId,
+        deleted: report.deleted,
+        rejectedCandidatesDeleted: report.rejectedCandidatesDeleted,
+      });
+      return report;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   // ==================== Event Operations ====================

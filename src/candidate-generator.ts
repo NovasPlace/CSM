@@ -117,12 +117,15 @@ export class CandidateGenerator {
     return { dryRun, candidates, inserted, skippedDuplicates, byType };
   }
 
-  async report(): Promise<{ byType: Record<string, number>; byStatus: Record<string, number>; total: number }> {
+  async report(projectId?: string): Promise<{ byType: Record<string, number>; byStatus: Record<string, number>; total: number }> {
     const result = await this.pool.query(
-      `SELECT candidate_type, status, COUNT(*) AS count
-       FROM memory_candidate_queue
+      `SELECT queue.candidate_type, queue.status, COUNT(*) AS count
+       FROM memory_candidate_queue queue
+       JOIN memories memory_scope ON memory_scope.id = queue.memory_id
+       WHERE ($1::text IS NULL OR memory_scope.project_id = $1)
        GROUP BY candidate_type, status
        ORDER BY candidate_type, status`,
+      [projectId ?? null],
     );
     const byType: Record<string, number> = {};
     const byStatus: Record<string, number> = {};
@@ -315,9 +318,11 @@ export class CandidateGenerator {
   ): Promise<CandidateRow[]> {
     const params: unknown[] = [];
     let projectClause = '';
+    let duplicateProjectClause = '';
     if (config.projectId) {
       params.push(config.projectId);
       projectClause = ` AND m.project_id = $${params.length}`;
+      duplicateProjectClause = ` AND project_id = $${params.length}`;
     }
     params.push(maxPerType);
 
@@ -326,6 +331,7 @@ export class CandidateGenerator {
         SELECT LOWER(TRIM(content)) AS norm, COUNT(*) AS cnt, MIN(id) AS canonical_id
         FROM memories
         WHERE superseded_by IS NULL AND archived_at IS NULL
+          ${duplicateProjectClause}
         GROUP BY LOWER(TRIM(content))
         HAVING COUNT(*) > 1
       )

@@ -18,7 +18,7 @@ import { initializeTraceVaultSchema } from '../trace-vault-store.js';
 import type { DatabasePool } from '../types.js';
 import { initializeWorkJournalSchema } from '../work-journal-schema.js';
 import { initializeCoreSchema } from './core-schema.js';
-import { artifactsFor, legacyArtifactsFor } from './migration-artifacts.js';
+import { artifactsFor, historicalArtifactSetsFor } from './migration-artifacts.js';
 import { migrationChecksum, type SchemaMigration } from './migration-ledger.js';
 import { initializeMemorySchema } from './memory-schema.js';
 import { migrateProjectIsolation } from './project-isolation-schema.js';
@@ -75,12 +75,12 @@ function migration(
   run: () => Promise<void>,
   implementation: readonly string[] = artifactsFor(id),
 ): SchemaMigration {
-  return withLegacyChecksum({
+  return withLegacyChecksums({
     id,
     contract: `csm-postgres-v1:${contract}`,
     implementation,
     run,
-  }, legacyArtifactsFor(id, implementation));
+  }, historicalArtifactSetsFor(id, [implementation]));
 }
 
 function vectorExtension(pool: DatabasePool): () => Promise<void> {
@@ -92,22 +92,25 @@ function migrationV2(
   contract: string,
   run: () => Promise<void>,
 ): SchemaMigration {
-  return withLegacyChecksum({
+  return withLegacyChecksums({
     id,
     contract: `csm-postgres-v2:${contract}`,
     implementation: artifactsFor(id),
     run,
-  }, legacyArtifactsFor(id));
+  }, historicalArtifactSetsFor(id));
 }
 
-function withLegacyChecksum(
+function withLegacyChecksums(
   definition: SchemaMigration,
-  legacyImplementation: readonly string[],
+  historicalImplementations: readonly (readonly string[])[],
 ): SchemaMigration {
-  const legacy = { ...definition, implementation: legacyImplementation };
-  const legacyChecksum = migrationChecksum(legacy);
-  if (legacyChecksum === migrationChecksum(definition)) return definition;
-  return { ...definition, acceptedLegacyChecksums: [legacyChecksum] };
+  const currentChecksum = migrationChecksum(definition);
+  const acceptedLegacyChecksums = [...new Set(historicalImplementations
+    .map((implementation) => migrationChecksum({ ...definition, implementation }))
+    .filter((checksum) => checksum !== currentChecksum))];
+  return acceptedLegacyChecksums.length === 0
+    ? definition
+    : { ...definition, acceptedLegacyChecksums };
 }
 
 function withAcceptedLegacy(

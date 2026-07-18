@@ -59,7 +59,7 @@ function extractorDefaults(): PluginConfig['extractor'] {
 
 function ttlDefaults(): PluginConfig['ttl'] {
   return {
-    enabled: true,
+    enabled: getEnvBoolean('CSM_TTL_ENABLED', true),
     defaultDays: getEnvInteger('CSM_TTL_DEFAULT_DAYS', 90),
     byType: {
       conversation: getEnvInteger('CSM_TTL_CONVERSATION', 60),
@@ -68,9 +68,9 @@ function ttlDefaults(): PluginConfig['ttl'] {
       episodic: getEnvInteger('CSM_TTL_EPISODIC', 7), procedural: getEnvInteger('CSM_TTL_PROCEDURAL', 30),
     },
     byImportance: [
-      { min: 0, max: 0.3, days: getEnvInteger('CSM_TTL_IMPORTANCE_0_3', 180) },
+      { min: 0, max: 0.3, days: getEnvInteger('CSM_TTL_IMPORTANCE_0_3', 30) },
       { min: 0.3, max: 0.6, days: getEnvInteger('CSM_TTL_IMPORTANCE_0_6', 90) },
-      { min: 0.6, max: 1, days: getEnvInteger('CSM_TTL_IMPORTANCE_0_10', 30) },
+      { min: 0.6, max: 1, days: getEnvInteger('CSM_TTL_IMPORTANCE_0_10', 180) },
     ],
     gracePeriodDays: getEnvInteger('CSM_TTL_GRACE_PERIOD', 7),
   };

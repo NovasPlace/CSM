@@ -6,6 +6,7 @@ import { MemoryManager } from './memory-manager.js';
 import { ContextRecallDaemon } from './context-recall.js';
 import { PrimingEngine } from './priming-engine.js';
 import { MemoryType, MemoryApproval } from './types.js';
+import type { TTLConfig } from './types.js';
 import { MemoryExtractor } from './memory-extractor.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
@@ -20,7 +21,7 @@ import type { ReEntryInfo } from './continuity-resilience-report.js';
 /**
  * memory_save - Save information to cross-session memory
  */
-export function memorySaveTool(memoryManager: MemoryManager) {
+export function memorySaveTool(memoryManager: MemoryManager, projectId: string) {
   return tool({
     description: 'Save information to cross-session memory. Use this to remember important decisions, context, or preferences across conversations.',
     args: {
@@ -45,6 +46,7 @@ export function memorySaveTool(memoryManager: MemoryManager) {
         tags: args.tags,
         linkedMemoryIds: args.linkedMemoryIds,
         sessionId: context.sessionID,
+        projectId,
       });
 
       return {
@@ -63,7 +65,11 @@ export function memorySaveTool(memoryManager: MemoryManager) {
 /**
  * memory_search - Search memories using semantic similarity
  */
-export function memorySearchTool(memoryManager: MemoryManager, primingEngine: PrimingEngine) {
+export function memorySearchTool(
+  memoryManager: MemoryManager,
+  primingEngine: PrimingEngine,
+  projectId: string,
+) {
   return tool({
     description: 'Search cross-session memories using semantic similarity when prior context would materially help answer the user. Do not use for simple greetings or small talk.',
     args: {
@@ -83,7 +89,10 @@ export function memorySearchTool(memoryManager: MemoryManager, primingEngine: Pr
         type: args.type as MemoryType | undefined,
         limit: args.limit ?? 10,
         minImportance: args.minImportance,
+        projectId,
+        searchMode: 'project',
       }, {
+        projectId,
         sessionId: context.sessionID,
       });
 
@@ -122,14 +131,14 @@ export function memorySearchTool(memoryManager: MemoryManager, primingEngine: Pr
 /**
  * memory_delete - Delete a memory
  */
-export function memoryDeleteTool(memoryManager: MemoryManager) {
+export function memoryDeleteTool(memoryManager: MemoryManager, projectId: string) {
   return tool({
     description: 'Delete a memory by ID.',
     args: {
       id: tool.schema.number().describe('Memory ID to delete'),
     },
     async execute(args, _context) {
-      const deleted = await memoryManager.deleteMemory(args.id);
+      const deleted = await memoryManager.deleteMemory(args.id, projectId);
 
       if (deleted) {
         return {
@@ -234,13 +243,12 @@ export function memoryContextTool(contextRecall: ContextRecallDaemon) {
 /**
  * csm_reentry_preview - Preview re-entry block without injecting it
  */
-export function reentryPreviewTool(adapter: ReEntryPreviewAdapter) {
+export function reentryPreviewTool(adapter: ReEntryPreviewAdapter, projectId: string) {
   return {
     description: 'Get the current re-entry block for a session/project without injecting it into the system prompt. Shows layers, trimming diagnostics, and token estimate. Does not modify any state.',
     args: {},
-    async execute(_args: Record<string, unknown>, context: { sessionID?: string; directory?: string }) {
+    async execute(_args: Record<string, unknown>, context: { sessionID?: string }) {
       const sessionId = context.sessionID || 'unknown';
-      const projectId = context.directory || 'default';
 
       const report = await adapter.buildPreviewReport({ sessionId, projectId });
 
@@ -272,7 +280,7 @@ export function reentryPreviewTool(adapter: ReEntryPreviewAdapter) {
 /**
  * memory_lesson - Save a lesson learned
  */
-export function memoryLessonTool(memoryManager: MemoryManager) {
+export function memoryLessonTool(memoryManager: MemoryManager, projectId: string) {
   return tool({
     description: 'Save a lesson learned from a mistake. Lessons are stored with high importance and "frustration" emotion for better recall. Optionally specify triggerPatterns to make the lesson fire contextually when matching tools/files are used.',
     args: {
@@ -308,6 +316,7 @@ export function memoryLessonTool(memoryManager: MemoryManager) {
         tags,
         metadata,
         sessionId: context.sessionID,
+        projectId,
       });
 
       const triggerNote = Object.keys(triggerMeta).length > 0
@@ -330,12 +339,11 @@ export function memoryLessonTool(memoryManager: MemoryManager) {
 /**
  * memory_list - List memories with filters
  */
-export function memoryListTool(memoryManager: MemoryManager) {
+export function memoryListTool(memoryManager: MemoryManager, projectId: string) {
   return tool({
     description: 'List memories with optional filtering by session, type, tags, entities, and date range when the user asks to inspect memory. Do not use for simple greetings or small talk.',
     args: {
       sessionId: tool.schema.string().optional().describe('Filter by session ID'),
-      projectId: tool.schema.string().optional().describe('Filter by project ID'),
       type: tool.schema.enum(['conversation', 'workspace', 'repo', 'preference', 'lesson', 'episodic', 'procedural']).optional().describe('Filter by memory type'),
       tags: tool.schema.array(tool.schema.string()).optional().describe('Filter by tags (AND)'),
       entityType: tool.schema.enum(['file', 'function', 'error', 'decision', 'tool', 'concept', 'dependency']).optional().describe('Filter by extracted entity type'),
@@ -353,7 +361,8 @@ export function memoryListTool(memoryManager: MemoryManager) {
         contextCompactor: undefined as never,
       }, {
         sessionId: args.sessionId,
-        projectId: args.projectId,
+        projectId,
+        searchMode: 'project',
         type: args.type as MemoryType | undefined,
         tags: args.tags,
         entityType: args.entityType,
@@ -363,6 +372,7 @@ export function memoryListTool(memoryManager: MemoryManager) {
         sortBy: args.sortBy,
         limit: Math.min(args.limit ?? 20, 100),
       }, {
+        projectId,
         sessionId: context.sessionID,
       });
 
@@ -395,7 +405,7 @@ export function memoryListTool(memoryManager: MemoryManager) {
 /**
  * memory_transcript - Get full conversation transcript
  */
-export function memoryTranscriptTool(memoryManager: MemoryManager) {
+export function memoryTranscriptTool(memoryManager: MemoryManager, projectId: string) {
   return tool({
     description: 'Get full conversation transcript from a session. Requires fullTranscripts config to be enabled.',
     args: {
@@ -417,6 +427,9 @@ export function memoryTranscriptTool(memoryManager: MemoryManager) {
       // Get conversation memories for this session
       const memories = await memoryManager.listMemories({
         type: 'conversation',
+        projectId,
+        searchMode: 'project',
+        sessionId,
         limit: args.limit ?? 100,
         sortBy: 'recent',
       });
@@ -520,7 +533,7 @@ export function memoryCandidateApproveTool(memoryExtractor: MemoryExtractor) {
         reviewedAt: new Date(),
       };
 
-      await memoryExtractor.reviewCandidate(approval, 'user');
+      await memoryExtractor.reviewCandidate(approval, 'user', _context.sessionID);
 
       return {
         title: 'Candidate Approved',
@@ -548,7 +561,7 @@ export function memoryCandidateRejectTool(memoryExtractor: MemoryExtractor) {
         reviewedAt: new Date(),
       };
 
-      await memoryExtractor.reviewCandidate(approval, 'user');
+      await memoryExtractor.reviewCandidate(approval, 'user', _context.sessionID);
 
       return {
         title: 'Candidate Rejected',
@@ -589,17 +602,27 @@ export function memoryProjectListTool(memoryManager: MemoryManager) {
 /**
  * memory_cleanup - Run cleanup of expired memories and candidates
  */
-export function memoryCleanupTool(memoryManager: MemoryManager) {
+export function memoryCleanupTool(memoryManager: MemoryManager, ttl: TTLConfig, projectId: string) {
   return tool({
     description: 'Run cleanup of expired memories and candidates based on TTL config.',
-    args: {},
-    async execute(_args, _context) {
-      const result = await memoryManager.cleanupExpiredMemories();
+    args: {
+      apply: tool.schema.boolean().optional().describe('Apply hard deletion (default false preview)'),
+      maxDelete: tool.schema.number().optional().describe('Maximum memories to delete (default 1000)'),
+    },
+    async execute(args, _context) {
+      const result = await memoryManager.cleanupExpiredMemories({
+        projectId,
+        ttl,
+        apply: args.apply === true,
+        maxDelete: args.maxDelete ?? 1_000,
+      });
 
       return {
-        title: 'Cleanup Complete',
-        output: `Cleanup complete: ${result.deleted} memories deleted, ${result.archived} memories archived.`,
-        metadata: { deleted: result.deleted, archived: result.archived },
+        title: result.dryRun ? 'Cleanup Preview' : 'Cleanup Complete',
+        output: result.dryRun
+          ? `Cleanup preview: ${result.eligible} of ${result.scanned} project memories are eligible; no data changed.`
+          : `Cleanup complete: ${result.deleted} project memories deleted.`,
+        metadata: result,
       };
     },
   });
@@ -614,6 +637,7 @@ export function memoryDistillTool(
   distiller: ToolCallDistiller,
   database: Database,
   extractor: MemoryExtractor,
+  projectId: string,
   redactor?: Redactor,
 ) {
   return tool({
@@ -660,7 +684,7 @@ export function memoryDistillTool(
       if (shouldExtract && context.sessionID && summary.groups.length > 0) {
         const candidates = await extractor.extractFromDistilledSummaries(
           context.sessionID,
-          context.sessionID,
+          projectId,
           summary,
         );
         extractedCount = candidates.length;
@@ -877,23 +901,11 @@ export function compactionAuditTool(database: Database) {
  * csm_recall_quality_report - Read-only audit of recall quality
  * Phase 6B: Report-only, no scoring. PG-specific (SQLite degrades to N/A).
  */
-export function recallQualityReportTool(database: Database) {
+export function recallQualityReportTool(database: Database, projectId: string) {
   return tool({
     description:
       'Produce a read-only audit of recall quality metrics over a time window. Report-only (Phase 6B). PG-specific SQL (SQLite degrades to N/A).',
     args: {
-      scope: tool.schema.enum(['project', 'session', 'file']).optional().describe(
-        'Filter scope: project (default), session, or file',
-      ),
-      projectId: tool.schema.string().optional().describe(
-        'Project ID to filter (required when scope=project and you want a specific project)',
-      ),
-      sessionId: tool.schema.string().optional().describe(
-        'Session ID to filter (required when scope=session)',
-      ),
-      filePath: tool.schema.string().optional().describe(
-        'File path to filter (required when scope=file)',
-      ),
       since: tool.schema.string().optional().describe(
         'ISO date string for window start (default: 24h ago)',
       ),
@@ -903,10 +915,8 @@ export function recallQualityReportTool(database: Database) {
     },
     async execute(args) {
       const params = {
-        scope: args.scope,
-        projectId: args.projectId,
-        sessionId: args.sessionId,
-        filePath: args.filePath,
+        scope: 'project' as const,
+        projectId,
         since: args.since,
         limit: args.limit,
       };
@@ -928,7 +938,8 @@ export function recallQualityReportTool(database: Database) {
         title: 'Recall Quality Report',
         output: report,
         metadata: {
-          scope: params.scope || 'project',
+          scope: params.scope,
+          projectId,
           since: params.since || '24h',
           limit: params.limit || 1000,
         },
@@ -941,7 +952,7 @@ export function recallQualityReportTool(database: Database) {
  * csm_memory_related - Surface memories linked to a given memory via the graph.
  * Records graph-source recall telemetry (Phase 6C Hook 4).
  */
-export function memoryRelatedTool(database: Database) {
+export function memoryRelatedTool(database: Database, projectId: string) {
   return tool({
     description: 'List memories linked to a given memory ID via the memory graph (memory_links). Read-only; records graph recall telemetry.',
     args: {
@@ -954,7 +965,7 @@ export function memoryRelatedTool(database: Database) {
         database,
         args.memoryId,
         args.limit ?? 10,
-        { sessionId: context.sessionID, projectId: (context as { projectId?: string })?.projectId },
+        { sessionId: context.sessionID, projectId },
       );
       const memories = related.map((r) => r.memory);
 

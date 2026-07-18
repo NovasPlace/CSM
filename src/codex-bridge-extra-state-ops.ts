@@ -5,8 +5,9 @@ import { getRecentCompilation } from './context-compilation-log.js';
 import { fetchDecisions, fetchFileReads, fetchItem, fetchLastError, searchItems } from './context-cache-store.js';
 import type { CodexBridgeExtraDeps } from './codex-bridge-extra-ops.js';
 import { auditCompactionTelemetry, formatAuditReport } from './compaction-telemetry-audit.js';
-import { getActiveGoal, listGoals, setActiveGoal, updateGoal } from './goal-schema.js';
+import { getActiveGoal, listGoals, setActiveGoal } from './goal-schema.js';
 import type { Goal } from './goal-schema.js';
+import { updateGoalForSession } from './goal-ownership.js';
 import { asLimit, asMessages, asNumber, asRecord, asString, requireSession, requireString } from './codex-bridge-extra-utils.js';
 import { CSM_TOOL_NAMES } from './tool-names.js';
 
@@ -44,7 +45,7 @@ export async function goalUpdateOp(deps: CodexBridgeExtraDeps, sessionId: string
   const sid = requireSession(sessionId);
   const goalId = asString(input.goalId) ?? (await getActiveGoal(deps.database.getPool(), sid))?.id;
   if (!goalId) return { found: false };
-  return updateGoal(deps.database.getPool(), goalId, { description: asString(input.description) ?? undefined, status: asString(input.status) as Goal['status'], context: asRecord(input.context) });
+  return updateGoalForSession(deps.database.getPool(), goalId, sid, { description: asString(input.description) ?? undefined, status: asString(input.status) as Goal['status'], context: asRecord(input.context) });
 }
 
 export async function goalListOp(deps: CodexBridgeExtraDeps, sessionId: string | undefined, input: Record<string, unknown>) {

@@ -246,6 +246,7 @@ async function storeLoopLesson(
     tags: ['auto-lesson', 'loop-detected', tool, `tool:${tool}`],
     metadata: { tool, callCount, mayday, triggers: { tools: [tool] } },
     sessionId: sid ?? undefined,
+    projectId: ctx.directory,
   });
   ctx.loopDetector.clearHistory();
 }

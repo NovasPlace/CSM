@@ -205,7 +205,7 @@ describe('CandidateGenerator', () => {
   });
 
   it('report aggregates counts by type and status', async () => {
-    const { pool } = makePool((sql) => {
+    const { pool, calls } = makePool((sql) => {
       if (sql.includes('GROUP BY candidate_type, status')) {
         return {
           rows: [
@@ -218,13 +218,25 @@ describe('CandidateGenerator', () => {
       return { rows: [], rowCount: 0 };
     });
     const gen = makeGenerator(pool);
-    const r = await gen.report();
+    const r = await gen.report('project-a');
 
     assert.equal(r.total, 4);
     assert.equal(r.byType.prune, 3);
     assert.equal(r.byType.merge, 1);
     assert.equal(r.byStatus.pending, 3);
     assert.equal(r.byStatus.dismissed, 1);
+    assert.deepEqual(calls[0]?.params, ['project-a']);
+    assert.match(calls[0]?.sql ?? '', /JOIN memories memory_scope/);
+  });
+
+  it('scopes both sides of merge candidate grouping to one project', async () => {
+    const { pool, calls } = makePool(() => ({ rows: [], rowCount: 0 }));
+    const gen = makeGenerator(pool);
+    await gen.generate({ dryRun: true, types: ['merge'], projectId: 'project-a' });
+
+    const sql = calls[0]?.sql ?? '';
+    assert.equal((sql.match(/project_id = \$1/g) ?? []).length, 2);
+    assert.deepEqual(calls[0]?.params, ['project-a', 100]);
   });
 
   it('respects maxPerType limit', async () => {
