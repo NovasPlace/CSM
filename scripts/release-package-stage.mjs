@@ -6,10 +6,12 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildReleasePackageJson } from './release-package-manifest.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dryRun = process.argv.includes('--dry-run');
@@ -52,7 +54,12 @@ try {
   mkdirSync(staging, { recursive: true });
   const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const declared = Array.isArray(packageJson.files) ? packageJson.files : [];
-  for (const entry of ['package.json', 'README.md', 'LICENSE', ...declared]) copyEntry(entry);
+  for (const entry of ['README.md', 'LICENSE', ...declared]) copyEntry(entry);
+  writeFileSync(
+    join(staging, 'package.json'),
+    `${JSON.stringify(buildReleasePackageJson(packageJson), null, 2)}\n`,
+    'utf8',
+  );
 
   const packArgs = npmPackArgs();
   const windows = process.platform === 'win32';

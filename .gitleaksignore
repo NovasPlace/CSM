@@ -1,0 +1,24 @@
+# Exact historical fingerprints reviewed as synthetic redaction fixtures.
+# Never add a path-wide allowlist; each new finding requires individual review.
+dc39bf67d7fb234cf69878c72a6552282ecc41af:src/benchmark.ts:generic-api-key:158
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor.test.ts:slack-bot-token:26
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor.test.ts:jwt:38
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor.test.ts:jwt:38
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor.test.ts:jwt:59
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor.test.ts:jwt:59
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor.test.ts:generic-api-key:256
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor.test.ts:generic-api-key:256
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor-integration.test.ts:generic-api-key:26
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor-integration.test.ts:generic-api-key:26
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor-integration.test.ts:generic-api-key:84
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor-integration.test.ts:generic-api-key:84
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor-integration.test.ts:generic-api-key:148
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor-integration.test.ts:generic-api-key:148
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor-integration.test.ts:generic-api-key:232
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor-integration.test.ts:generic-api-key:232
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor-integration.test.ts:generic-api-key:271
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor-integration.test.ts:generic-api-key:271
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor-integration.test.ts:generic-api-key:282
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor-integration.test.ts:generic-api-key:282
+31d1b0e3da15eb948b67dfc0ce50fc8625bfd4f4:test/redactor-integration.test.ts:generic-api-key:308
+8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor-integration.test.ts:generic-api-key:308

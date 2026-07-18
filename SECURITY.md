@@ -122,6 +122,8 @@ Changes to dependencies, install scripts, CI actions, plugin loading, or package
 
 Prefer pinned or bounded versions, inspect transitive behavior, and avoid introducing install-time network or shell execution without a documented need.
 
+The executable supply-chain baseline is documented in `docs/SUPPLY_CHAIN_SECURITY.md`. It includes a production vulnerability audit, an explicit production-license policy, a validated CycloneDX SBOM, exact-fingerprint secret scanning, immutable GitHub Action references, dependency review, and an approval-gated npm staging workflow. These controls reduce release risk but are not a substitute for independent security review or repository-level GitHub and npm protection settings.
+
 ## Out of scope
 
 The following are generally not vulnerabilities by themselves:

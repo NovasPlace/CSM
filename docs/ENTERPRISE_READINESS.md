@@ -58,12 +58,12 @@ These results establish a reliable engineering baseline. They do not establish p
 - Complete threat modeling and an independent security review.
 - Define authentication, authorization, tenant isolation, retention, deletion, and audit policies.
 - Document encryption requirements for transport, storage, backups, and secrets.
-- Add dependency vulnerability scanning, secret scanning, license review, and an SBOM.
+- Keep dependency vulnerability scanning, exact-fingerprint secret scanning, production-license review, and CycloneDX SBOM generation green; commission an independent security review before certification claims.
 
 ### Quality and Release Operations
 
 - Generate code coverage in CI and enforce justified thresholds. CI currently does not generate coverage.
-- Complete release versioning automation, signed artifacts, SBOM generation, and provenance verification. The package boundary, compatibility policy, support matrix, and rollback criteria are documented and tested.
+- Complete release versioning automation and verify the first protected npm staged-publish run. The package boundary, compatibility policy, support matrix, rollback criteria, SBOM, immutable CI action references, signed GitHub attestations, and npm trusted-publishing workflow are documented and executable.
 - Resolve or formally ratify legacy file-size debt in touched runtime modules.
 - Run an independent final review of persistence and migration behavior before a certification claim.
 

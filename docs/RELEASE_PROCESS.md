@@ -26,7 +26,7 @@ npm run package:dry-run
 
 On POSIX shells, set the same value with `export CSM_RELEASE_DATABASE_URL=...`.
 
-`verify:release` creates a uniquely named disposable PostgreSQL database, runs the complete build, typecheck, supported test suite, and locked source lint gate against it, then removes it. It supplies the server URL to the PostgreSQL backup/restore drill through a separate environment boundary before running the package-boundary test and compiled SQLite setup smoke test. Never set the release URL to a database account that cannot create and drop isolated databases.
+`verify:release` creates a uniquely named disposable PostgreSQL database, runs the complete build, typecheck, supported test suite, and locked source lint gate against it, then removes it. It supplies the server URL to the PostgreSQL backup/restore drill through a separate environment boundary before running the package-boundary test, compiled SQLite setup smoke test, production vulnerability and license checks, and CycloneDX SBOM generation. Never set the release URL to a database account that cannot create and drop isolated databases.
 
 Review the dry-run manifest before publishing. Confirm the version, release notes, supported schema window, and database backup guidance match the candidate artifact. Build the tarball only through `npm run package:create`; do not publish by running `npm publish` from the repository root.
 
@@ -40,9 +40,17 @@ Review the dry-run manifest before publishing. Confirm the version, release note
 
 ## Publishing
 
-Publish the staged tarball from protected CI after the release gate succeeds. npm provenance is enabled in `publishConfig`; do not publish a locally modified artifact or bypass the manifest review.
+Releases are manually dispatched through `.github/workflows/release.yml` from an existing `v<package-version>` tag. The selected workflow ref and the typed release tag must both match `package.json`; the operator must also type the exact `name@version`, and the `npm-production` GitHub environment must approve the job. The job reruns the commercial gate and full-history secret scan, builds one tarball, creates a SHA-256 manifest, signs GitHub build and SBOM attestations, and uploads the candidate.
 
-Signed release archives, an SBOM, vulnerability scanning, and an independent security review remain open commercial-readiness gates. Do not describe the project as certified until those controls have executable evidence.
+For a package that already exists on npm, select `stage`. npm trusted publishing must authorize repository `NovasPlace/CSM`, workflow `release.yml`, environment `npm-production`, and the `npm stage publish` action. The workflow submits the exact tarball to npm staging, where a maintainer must inspect and approve it with 2FA before it becomes public.
+
+npm cannot stage a brand-new package. For the one-time bootstrap release, select `candidate-only`, download the attested workflow artifact, verify `SHA256SUMS` and the GitHub attestations, and publish that exact tarball interactively with an owner account and 2FA. Because local npm publishing cannot create trusted-publisher provenance, explicitly override the package default only for this bootstrap command with `--provenance=false`. Immediately configure the trusted publisher, restrict it to stage-only, disallow token publishing, and use staged publishing thereafter. Never store the owner's npm credentials in GitHub Actions.
+
+Configure the `npm-production` GitHub environment with required reviewers and restrict deployment to release tags before either mode is used.
+
+Do not publish from the repository root or a locally modified tarball. Details and verification commands are in `SUPPLY_CHAIN_SECURITY.md`.
+
+An independent security review, evidence from the one-time bootstrap publish, and the first protected staged-publish run remain open commercial-readiness gates. Do not describe the project as certified until those controls have evidence.
 
 ## Rollback
 

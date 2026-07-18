@@ -28,6 +28,7 @@ try {
   delete packageEnv.DATABASE_URL;
   delete packageEnv.CSM_BACKUP_DRILL_DATABASE_URL;
   runNpmScript('verify:package', packageEnv);
+  runNpmScript('verify:supply-chain', packageEnv);
 } catch (error) {
   operationError = error;
 }

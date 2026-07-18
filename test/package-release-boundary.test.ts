@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { buildReleasePackageJson } from '../scripts/release-package-manifest.mjs';
 
 interface PackFile {
   path: string;
@@ -42,6 +43,15 @@ describe('commercial package boundary', () => {
     assert.equal(packageJson.bin['csm-init'], 'dist/cli/init-db.js');
   });
 
+  it('publishes a buyer manifest without unavailable maintainer commands', () => {
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
+    const release = buildReleasePackageJson(packageJson);
+    assert.deepEqual(release.scripts, { 'db:setup': 'node dist/cli/init-db.js' });
+    assert.equal('devDependencies' in release, false);
+    assert.equal(release.main, 'dist/index.js');
+    assert.equal(release.types, 'dist/index.d.ts');
+  });
+
   it('ships required runtime/customer files and excludes workspace state', () => {
     const packed = packageManifest();
     const paths = new Set(packed.files.map((file) => file.path.replaceAll('\\', '/')));
@@ -49,7 +59,7 @@ describe('commercial package boundary', () => {
       'package.json', 'README.md', 'LICENSE', 'SECURITY.md',
       'dist/index.js', 'dist/index.d.ts', 'dist/cli/init-db.js',
       '.codex-plugin/plugin.json', '.codex-plugin/runtime/launch-mcp.mjs', '.mcp.json',
-      'docs/RELEASE_PROCESS.md',
+      'docs/RELEASE_PROCESS.md', 'docs/SUPPLY_CHAIN_SECURITY.md',
     ];
     for (const path of required) assert.ok(paths.has(path), `missing packaged file: ${path}`);
 

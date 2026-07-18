@@ -1,0 +1,155 @@
+name: Stage npm Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing tag matching package.json, for example v1.0.0
+        required: true
+        type: string
+      confirm_package:
+        description: Exact package and version, for example opencode-cross-session-memory@1.0.0
+        required: true
+        type: string
+      submission_mode:
+        description: Build an attested candidate only, or stage an existing npm package for 2FA approval
+        required: true
+        default: candidate-only
+        type: choice
+        options:
+          - candidate-only
+          - stage
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+concurrency:
+  group: npm-production
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    name: Verify, Attest, and Stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-production
+    env:
+      CSM_RELEASE_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+      CSM_PG_BIN: /usr/lib/postgresql/16/bin
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: test
+      PGDATABASE: postgres
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.2-pg16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 0
+
+      - name: Setup Node.js and npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '22.22.2'
+          registry-url: https://registry.npmjs.org
+
+      - name: Install trusted-publishing npm CLI
+        run: npm install --global npm@11.15.0
+
+      - name: Verify release identity
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CONFIRM_PACKAGE: ${{ inputs.confirm_package }}
+        run: |
+          set -euo pipefail
+          expected_tag="v$(node -p "require('./package.json').version")"
+          expected_package="$(node -p "require('./package.json').name + '@' + require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "$expected_tag"
+          test "$RELEASE_TAG" = "$expected_tag"
+          test "$CONFIRM_PACKAGE" = "$expected_package"
+          git describe --tags --exact-match HEAD | grep --fixed-strings --line-regexp "$expected_tag"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install PostgreSQL 16 client tools
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Run isolated commercial release gate
+        run: npm run verify:release
+
+      - name: Scan full history for secrets
+        run: bash scripts/verify-secrets.sh
+
+      - name: Build release tarball
+        run: npm run package:create
+
+      - name: Identify and hash release tarball
+        run: |
+          set -euo pipefail
+          mapfile -t tarballs < <(find .release -maxdepth 1 -type f -name '*.tgz' -print)
+          test "${#tarballs[@]}" -eq 1
+          printf 'PACKAGE_TARBALL=%s\n' "${tarballs[0]}" >> "$GITHUB_ENV"
+          sha256sum "${tarballs[0]}" > .release/SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ env.PACKAGE_TARBALL }}
+
+      - name: Attest CycloneDX SBOM
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ env.PACKAGE_TARBALL }}
+          sbom-path: .release/sbom.cdx.json
+
+      - name: Upload reviewed candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: npm-release-candidate
+          path: |
+            ${{ env.PACKAGE_TARBALL }}
+            .release/SHA256SUMS
+            .release/sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Confirm package exists before staged publishing
+        if: inputs.submission_mode == 'stage'
+        run: npm view "$(node -p "require('./package.json').name")" version
+
+      - name: Submit package for npm 2FA approval
+        if: inputs.submission_mode == 'stage'
+        run: npm stage publish "$PACKAGE_TARBALL" --access public
+
+      - name: Record candidate-only bootstrap guidance
+        if: inputs.submission_mode == 'candidate-only'
+        run: |
+          echo "Candidate built and attested without registry submission."
+          echo "Use the documented one-time bootstrap procedure if the package does not yet exist on npm."

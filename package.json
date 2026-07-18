@@ -49,7 +49,8 @@
     "docs/CONFIGURATION_RELIABILITY.md",
     "docs/SCHEMA_SUPPORT_MATRIX.md",
     "docs/STARTUP_ROLLBACK.md",
-    "docs/RELEASE_PROCESS.md"
+    "docs/RELEASE_PROCESS.md",
+    "docs/SUPPLY_CHAIN_SECURITY.md"
   ],
   "exports": {
     ".": {
@@ -109,9 +110,13 @@
     "drill:backup-restore": "npm run build && npx tsx scripts/backup-restore-drill.ts",
     "verify:enterprise": "npm run verify && npm run lint:src && npm run drill:backup-restore",
     "verify:package": "npm run build && npx tsx --test test/package-release-boundary.test.ts",
+    "verify:supply-chain": "npm run security:audit && npm run security:licenses && npm run security:sbom && npx tsx --test test/supply-chain-release.test.ts",
     "verify:release": "node scripts/verify-release.mjs",
     "package:dry-run": "npm run build && node scripts/release-package-stage.mjs --dry-run",
     "package:create": "npm run build && node scripts/release-package-stage.mjs --output .release",
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "security:licenses": "node scripts/verify-production-licenses.mjs",
+    "security:sbom": "node scripts/generate-sbom.mjs",
     "benchmark:long-session": "npx tsx src/benchmark.ts",
     "lint": "npm run lint:src",
     "lint:src": "eslint src --max-warnings=7",
