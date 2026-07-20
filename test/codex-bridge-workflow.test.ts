@@ -31,6 +31,8 @@ describe('Codex bridge workflow tools', () => {
   let bridge: CodexMemoryBridge;
 
   before(async () => {
+    adminPool.on('error', () => {});
+    projectPool.on('error', () => {});
     await adminPool.query(`CREATE DATABASE ${quote(dbName)}`);
     bridge = await CodexMemoryBridge.connect(config);
   });
