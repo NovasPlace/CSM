@@ -140,6 +140,10 @@ export class Redactor {
     }
 
     try {
+      const trimmed = text.trim();
+      if (this.config.categories.path !== 'off' && looksLikeStandalonePath(trimmed)) {
+        return this.redactPath(text);
+      }
       return this.redactUnsafe(text);
     } catch {
       // Fail-closed: redact everything we safely can
@@ -416,6 +420,16 @@ function pathStyle(value: string): 'windows' | 'posix' {
 function isAbsolutePath(value: string): boolean {
   if (!value || /[\r\n"']/.test(value)) return false;
   return pathStyle(value) === 'windows' ? win32.isAbsolute(value) : posix.isAbsolute(value);
+}
+
+function looksLikeStandalonePath(value: string): boolean {
+  if (!isAbsolutePath(value) || /\s--?[A-Za-z0-9]/u.test(value)) return false;
+  const absolutePathStarts = value.match(
+    /(?:^|\s)(?:[A-Za-z]:[\\/]|\\\\|\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www|private|Volumes|Library|Applications)(?:\/|$))/gu,
+  );
+  if ((absolutePathStarts?.length ?? 0) > 1) return false;
+  if (/^[A-Za-z]:[\\/]/u.test(value) || value.startsWith('\\\\')) return true;
+  return /^\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www|private|Volumes|Library|Applications)(?:\/.+)+$/u.test(value);
 }
 
 /**
