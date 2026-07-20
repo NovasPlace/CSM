@@ -121,7 +121,8 @@ export async function entityMatchBoost(
   searchMode?: MemorySearchMode,
 ): Promise<BoostedId[]> {
   try {
-    const escaped = `%${query.replace(/[%_]/g, '\\$&')}%`;
+    const escapedQuery = query.replace(/\\/g, '\\\\').replace(/[%_]/g, '\\$&');
+    const escaped = `%${escapedQuery}%`;
     const params: unknown[] = [escaped];
     const filters = buildWhereClause(db.dialect, params, projectId, type, tags, minImportance, searchMode);
     params.push(limit);
