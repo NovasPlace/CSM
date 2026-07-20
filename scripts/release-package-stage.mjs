@@ -46,10 +46,6 @@ function npmPackArgs() {
   return args;
 }
 
-function quoteWindowsArg(value) {
-  return /[\s"]/u.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
-}
-
 try {
   mkdirSync(staging, { recursive: true });
   const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
@@ -62,12 +58,7 @@ try {
   );
 
   const packArgs = npmPackArgs();
-  const windows = process.platform === 'win32';
-  const command = windows ? (process.env.ComSpec ?? 'cmd.exe') : 'npm';
-  const args = windows
-    ? ['/d', '/s', '/c', `npm.cmd ${packArgs.map(quoteWindowsArg).join(' ')}`]
-    : packArgs;
-  const result = spawnSync(command, args, {
+  const result = spawnSync('npm', packArgs, {
     cwd: staging,
     encoding: 'utf8',
     timeout: 120_000,
