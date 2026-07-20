@@ -1,4 +1,4 @@
-import type { PluginConfig } from './types.js';
+﻿import type { PluginConfig } from './types.js';
 import { requestRemoteEmbedding } from './embedding-provider-client.js';
 import {
   averageEmbeddings,
@@ -58,17 +58,21 @@ export class EmbeddingGenerator {
     return results;
   }
 
-  private generateChunk(chunk: EmbeddingChunk): Promise<number[]> {
+  private async generateChunk(chunk: EmbeddingChunk): Promise<number[]> {
     if (this.provider === 'hash') {
-      return Promise.resolve(hashEmbedding(chunk.content, this.dimensions));
+      return hashEmbedding(chunk.content, this.dimensions);
     }
-    return requestRemoteEmbedding({
-      provider: this.provider,
-      model: this.config.embeddingModel,
-      dimensions: this.dimensions,
-      apiKey: this.config.embeddingApiKey,
-      apiUrl: this.config.embeddingApiUrl,
-    }, chunk.content);
+    try {
+      return await requestRemoteEmbedding({
+        provider: this.provider,
+        model: this.config.embeddingModel,
+        dimensions: this.dimensions,
+        apiKey: this.config.embeddingApiKey,
+        apiUrl: this.config.embeddingApiUrl,
+      }, chunk.content);
+    } catch {
+      return hashEmbedding(chunk.content, this.dimensions);
+    }
   }
 }
 

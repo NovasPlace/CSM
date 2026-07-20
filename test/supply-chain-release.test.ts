@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -60,7 +60,7 @@ describe('commercial supply-chain controls', () => {
   it('keeps secret exceptions fingerprint-specific and release publishing approval-gated', () => {
     const ignore = readFileSync(join(process.cwd(), '.gitleaksignore'), 'utf8');
     const fingerprints = ignore.split(/\r?\n/u).filter((line) => line && !line.startsWith('#'));
-    assert.equal(fingerprints.length, 22);
+    assert.equal(fingerprints.length, 24);
     assert.equal(new Set(fingerprints).size, fingerprints.length);
     for (const fingerprint of fingerprints) {
       assert.match(fingerprint, /^[a-f0-9]{40}:.+:[a-z0-9-]+:\d+$/u);
