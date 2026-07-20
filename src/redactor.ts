@@ -106,7 +106,7 @@ const URL_QUERY_SECRET_PATTERN = /([?&](?:api[_-]?key|token|secret|password|acce
 // Absolute filesystem paths (Windows + POSIX)
 const QUOTED_WIN_PATH_PATTERN = /(["'])(?:[A-Za-z]:[\\/]|\\\\[^\\/:*?"'<>|\r\n]+[\\/][^\\/:*?"'<>|\r\n]+[\\/])[^"'<>|\r\n]+\1/g;
 const WIN_PATH_PATTERN = /(?:[A-Za-z]:[\\/](?:[^\s\\/:*?"<>|]+(?: (?![A-Za-z]:)[^\s\\/:*?"<>|]+)*[\\/])*[^\s\\/:*?"<>|]+(?: (?![A-Za-z]:)[^\s\\/:*?"<>|]+)*|\\\\[^\s\\/:*?"<>|]+[\\/][^\s\\/:*?"<>|]+(?:[\\/][^\s\\/:*?"<>|]+)*)/g;
-const QUOTED_POSIX_PATH_PATTERN = /(["'])\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www|private|Volumes|Library|Applications)(?:\/[^"'\r\n]+)+\1/g;
+const QUOTED_POSIX_PATH_PATTERN = /(["'])\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www|private|Volumes|Library|Applications)(?:\/[^\/"'\r\n]+)+\1/g;
 const POSIX_PATH_PATTERN = /\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www|private|Volumes|Library|Applications)(?:\/[^\s:*?"<>|]+(?: [^\s:*?"<>|]+)*)+/g;
 
 // ── Redactor class ────────────────────────────────────────────────────
