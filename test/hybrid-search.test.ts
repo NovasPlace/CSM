@@ -60,8 +60,8 @@ async function cleanupDatabase(
     databaseUrl: databaseUrl(databaseName),
     databaseProvider: 'postgres',
     sqlitePath: '.data/csm-memory.db',
-    embeddingModel: 'nomic-embed-text',
-    embeddingApiUrl: process.env.OLLAMA_URL ?? 'http://localhost:11434',
+    embeddingModel: 'test-hash',
+    embeddingDimensions: 768,
   } as PluginConfig;
   let db: Database | undefined;
   let embeddings: EmbeddingGenerator;
