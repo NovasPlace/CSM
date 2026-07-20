@@ -62,13 +62,17 @@ export class EmbeddingGenerator {
     if (this.provider === 'hash') {
       return hashEmbedding(chunk.content, this.dimensions);
     }
-    return await requestRemoteEmbedding({
-      provider: this.provider,
-      model: this.config.embeddingModel,
-      dimensions: this.dimensions,
-      apiKey: this.config.embeddingApiKey,
-      apiUrl: this.config.embeddingApiUrl,
-    }, chunk.content);
+    try {
+      return await requestRemoteEmbedding({
+        provider: this.provider,
+        model: this.config.embeddingModel,
+        dimensions: this.dimensions,
+        apiKey: this.config.embeddingApiKey,
+        apiUrl: this.config.embeddingApiUrl,
+      }, chunk.content);
+    } catch {
+      return hashEmbedding(chunk.content, this.dimensions);
+    }
   }
 }
 

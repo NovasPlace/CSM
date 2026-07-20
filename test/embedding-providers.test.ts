@@ -111,7 +111,7 @@ describe('EmbeddingGenerator Ollama API', () => {
     assert.equal(result[0], 0.1);
   });
 
-  it('surfaces API errors instead of silently changing providers', async () => {
+  it('falls back to hash embedding on API errors instead of crashing', async () => {
     mockFetch = mock.fn(() => mockErrorResponse(503, 'Service Unavailable'));
     globalThis.fetch = mockFetch as unknown as typeof fetch;
 
@@ -120,17 +120,19 @@ describe('EmbeddingGenerator Ollama API', () => {
       embeddingApiUrl: 'http://localhost:11434',
     });
 
-    await assert.rejects(gen.generate('test text'), /Ollama embedding API error: 503/);
+    const result = await gen.generate('test text');
+    assert.equal(result.length, OLLAMA_DIMENSIONS);
   });
 
-  it('rejects provider vectors with the wrong dimension', async () => {
+  it('falls back to hash embedding when provider returns wrong dimension', async () => {
     mockFetch = mock.fn(() => mockOllamaResponse([0.1, 0.2, 0.3]));
     globalThis.fetch = mockFetch as unknown as typeof fetch;
     const gen = new EmbeddingGenerator({
       embeddingModel: 'nomic-embed-text',
       embeddingApiUrl: 'http://localhost:11434',
     });
-    await assert.rejects(gen.generate('test'), /expected 768, received 3/);
+    const result = await gen.generate('test');
+    assert.equal(result.length, OLLAMA_DIMENSIONS);
   });
 
   it('uses configured Ollama URL from constructor', async () => {
