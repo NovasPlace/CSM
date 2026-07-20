@@ -1,4 +1,4 @@
-// Memory Manager - CRUD operations with dual-write pattern
+﻿// Memory Manager - CRUD operations with dual-write pattern
 // Inspired by Agent Atlas memory_bridge.py
 
 import { Database } from './database.js';
@@ -263,7 +263,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         }
       }
 
-      // Phase 18 — Redact content BEFORE any processing (concepts, embeddings, storage)
+      // Phase 18 â€” Redact content BEFORE any processing (concepts, embeddings, storage)
       let contentToProcess = options.content;
       if (this.redactor) {
         const redactionResult = this.redactor.redact(options.content);
@@ -281,7 +281,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         if (transcriptMsgId != null) metadataToPersist.messageId = transcriptMsgId;
       }
 
-      // Phase 5 — Apply per-type content quota (compress success/episodic, preserve errors/lessons)
+      // Phase 5 â€” Apply per-type content quota (compress success/episodic, preserve errors/lessons)
       const quotaResult = applyTypeQuota(contentToProcess, options.type, options.emotion);
       if (quotaResult.compressed) {
         // The summary is what gets embedded and stored; the original never reaches the DB.
@@ -535,7 +535,15 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     }
 
     // Only protected text may leave the process for a configured embedding provider.
-    const queryEmbedding = await this.embeddings.generate(safeQuery);
+    let queryEmbedding: number[];
+    try {
+      queryEmbedding = await this.embeddings.generate(safeQuery);
+    } catch (embedErr) {
+      getLogger().warn('Embedding query generation failed; falling back to text-only search', { reason: embedErr instanceof Error ? embedErr.message : String(embedErr) });
+      const memories = await this.textSearchFallback(options);
+      await this.recordRecalls(memories, options.query, options.projectId, telemetry, 'text_fallback');
+      return memories;
+    }
 
     try {
       const results = await hybridSearch(
