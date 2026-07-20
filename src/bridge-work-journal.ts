@@ -2,6 +2,10 @@ import { buildLastSteps } from './work-journal-last-steps.js';
 import { cacheBridgeTurnSignal } from './context-cache-signals.js';
 import { collectAllFiles, inferNextStep, type ResumeEntry, type WorkJournalEntryType } from './work-journal-types.js';
 import type { DatabasePool } from './types.js';
+import { Redactor } from './redactor.js';
+import { dialectFromPool } from './db/query-dialect.js';
+
+const SECURE_DEFAULT_REDACTOR = new Redactor();
 
 export interface BridgeWorkJournalSummary {
   sourceSessionId: string;
@@ -36,7 +40,9 @@ export async function loadWorkJournalSummary(
 export async function writeBridgeTurnJournal(
   pool: DatabasePool,
   input: { sessionId: string; projectId: string; role: 'user' | 'assistant' | 'system'; content: string; resultSummary: string },
+  redactor?: Redactor,
 ): Promise<void> {
+  const activeRedactor = redactor ?? SECURE_DEFAULT_REDACTOR;
   await Promise.all([
     pool.query(
     `INSERT INTO agent_work_journal
@@ -47,12 +53,12 @@ export async function writeBridgeTurnJournal(
       input.projectId,
       'decision',
       'bridge_sync_turn',
-      summarizeIntent(input.role, input.content),
-      input.resultSummary,
-      [],
+      activeRedactor.redact(summarizeIntent(input.role, input.content)).text,
+      activeRedactor.redact(input.resultSummary).text,
+      dialectFromPool(pool) === 'sqlite' ? '[]' : [],
     ],
     ),
-    cacheBridgeTurnSignal(pool, input),
+    cacheBridgeTurnSignal(pool, input, activeRedactor),
   ]);
 }
 

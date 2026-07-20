@@ -2,6 +2,7 @@ import type { Database } from './database.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { getLogger } from './logger.js';
 import { nowFn } from './db/query-dialect.js';
+import { Redactor } from './redactor.js';
 
 export interface EmbeddingBackfillConfig {
   batchSize?: number;
@@ -25,7 +26,11 @@ export class EmbeddingBackfill {
   private readonly pool: ReturnType<Database['getPool']>;
   private readonly embeddings: EmbeddingGenerator;
 
-  constructor(database: Database, embeddings: EmbeddingGenerator) {
+  constructor(
+    database: Database,
+    embeddings: EmbeddingGenerator,
+    private readonly redactor: Redactor = new Redactor(),
+  ) {
     this.database = database;
     this.pool = database.getPool();
     this.embeddings = embeddings;
@@ -83,8 +88,9 @@ export class EmbeddingBackfill {
   ): Promise<void> {
     for (const row of rows) {
       try {
-        const embedding = await this.embeddings.generate(row.content);
-        await this.storeEmbedding(row.id, row.content, embedding);
+        const safeContent = this.redactor.redact(row.content).text;
+        const embedding = await this.embeddings.generate(safeContent);
+        await this.storeEmbedding(row.id, safeContent, embedding);
         progress.succeeded++;
       } catch (error) {
         getLogger().error(`Backfill failed for memory ${row.id}`, error as Error);

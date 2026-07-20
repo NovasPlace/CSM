@@ -11,9 +11,11 @@ import {
   fetchItem, searchItems, fetchFileReads,
   fetchLastError, fetchDecisions,
 } from './context-cache-store.js';
+import type { Redactor } from './redactor.js';
 
 export interface ContextCacheToolDeps {
   pool: DatabasePool;
+  redactor?: Redactor;
 }
 
 function truncate(s: string, max: number): string {
@@ -95,7 +97,7 @@ export function contextFetchFileRegionTool(deps: ContextCacheToolDeps) {
       endLine: tool.schema.number().optional().describe('Last line to include (1-indexed, optional)'),
     },
     async execute({ filePath, startLine, endLine }, context) {
-      const reads = await fetchFileReads(deps.pool, context.sessionID, filePath);
+      const reads = await fetchFileReads(deps.pool, context.sessionID, filePath, deps.redactor);
       if (reads.length === 0) {
         return {
           title: `context_fetch_file_region: ${filePath} (not cached)`,

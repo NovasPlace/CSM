@@ -9,6 +9,7 @@ import type {
   AgentBookSummary,
 } from './agentbook-types.js';
 import { AGENTBOOK_STATE_FILENAME } from './agentbook-types.js';
+import { Redactor } from './redactor.js';
 
 function bullets(values: string[], empty: string): string[] {
   return values.length > 0 ? values.map((value) => `- ${value}`) : [`- ${empty}`];
@@ -54,6 +55,7 @@ export function generateFrontPage(
   latestSummary: AgentBookSummary | null,
   rules: AgentBookRule[],
   recentEvents: AgentBookEvent[],
+  redactor: Redactor = new Redactor(),
 ): AgentBookFrontPage {
   const problems = knownProblems(state, latestSummary);
   const actions = nextActions(state, latestSummary);
@@ -88,7 +90,7 @@ export function generateFrontPage(
     ...bullets(actions, 'Define the next concrete action.'),
     '',
   ];
-  const markdown = lines.join('\n');
+  const markdown = redactor.redact(lines.join('\n')).text;
   return {
     markdown,
     hash: createHash('sha256').update(markdown).digest('hex'),
@@ -99,8 +101,17 @@ export function generateFrontPage(
   };
 }
 
-export function writeFrontPageFile(markdown: string, projectRoot: string): string {
+export function writeFrontPageFile(
+  markdown: string,
+  projectRoot: string,
+  redactor: Redactor = new Redactor(),
+): string {
   const outputPath = resolve(projectRoot, AGENTBOOK_STATE_FILENAME);
-  writeFileSync(outputPath, markdown.endsWith('\n') ? markdown : `${markdown}\n`, 'utf8');
+  const safeMarkdown = redactor.redact(markdown).text;
+  writeFileSync(
+    outputPath,
+    safeMarkdown.endsWith('\n') ? safeMarkdown : `${safeMarkdown}\n`,
+    'utf8',
+  );
   return outputPath;
 }

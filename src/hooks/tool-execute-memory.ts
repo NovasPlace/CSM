@@ -4,6 +4,7 @@ import { packageCommandEvidence, packageToolEvidence } from './tool-execute-budg
 import { ToolExecuteRuntimeDedup } from '../tool-execute-runtime-dedup.js';
 import { getLogger } from '../logger.js';
 import { projectKey } from './doc-project-key.js';
+import { Redactor, redactJsonValue } from '../redactor.js';
 
 // Per-workfolder flush timers — keyed by projectKey(ctx.directory)
 const flushTimersByKey = new Map<string, ReturnType<typeof setTimeout>>();
@@ -62,23 +63,29 @@ export async function autoDistill(ctx: PluginContext, sid: string): Promise<void
   if (summary.groups.length === 0) return;
 
   const pool = ctx.database.getPool();
+  const redactor = ctx.redactor ?? new Redactor();
+  const safeSummary = {
+    ...summary,
+    groups: redactJsonValue(redactor, summary.groups),
+    compressed: redactor.redact(summary.compressed).text,
+  };
   await pool.query(
     `INSERT INTO distilled_summaries (id, session_id, groups, compressed, total_calls_summarized)
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (session_id, md5(compressed)) DO NOTHING`,
-    [summary.id, sid, JSON.stringify(summary.groups), summary.compressed, summary.totalCallsSummarized],
+    [safeSummary.id, sid, JSON.stringify(safeSummary.groups), safeSummary.compressed, safeSummary.totalCallsSummarized],
   );
 
   if (ctx.config.distiller.autoSaveAsMemory) {
-    await ctx.memoryExtractor.extractFromDistilledSummaries(sid, sid, summary);
+    await ctx.memoryExtractor.extractFromDistilledSummaries(sid, sid, safeSummary);
   }
 
   ctx.experiencePackets.recordDistillGroupPacket({
     sessionId: sid,
     projectId: ctx.directory,
-    groupCount: summary.groups.length,
-    totalCallsSummarized: summary.totalCallsSummarized,
-    compressedPreview: summary.compressed,
+    groupCount: safeSummary.groups.length,
+    totalCallsSummarized: safeSummary.totalCallsSummarized,
+    compressedPreview: safeSummary.compressed,
   }).catch((error: unknown) => {
     getLogger().error('Experience packet background write failed', toError(error), {
       projectId: ctx.directory,

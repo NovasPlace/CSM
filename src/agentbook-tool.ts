@@ -6,6 +6,7 @@ import type { AgentBookStateProjector } from './agentbook-state-projector.js';
 import type { AgentBookSummaryGenerator } from './agentbook-summary-generator.js';
 import { AGENTBOOK_EVENT_TYPES } from './agentbook-types.js';
 import type { AgentBookEvent, AgentBookEventType, AgentBookRule } from './agentbook-types.js';
+import type { Redactor } from './redactor.js';
 
 const EVENT_TYPES = [...AGENTBOOK_EVENT_TYPES] as [AgentBookEventType, ...AgentBookEventType[]];
 
@@ -14,6 +15,7 @@ export interface AgentBookToolDeps {
   rulesStore: AgentBookRulesStore;
   stateProjector: AgentBookStateProjector;
   summaryGenerator: AgentBookSummaryGenerator;
+  redactor?: Redactor;
 }
 
 function formatEvent(event: AgentBookEvent): string {
@@ -107,9 +109,11 @@ export function agentBookStateTool(deps: AgentBookToolDeps, projectId: string, w
         deps.rulesStore.getActiveRules(),
         deps.eventStore.getRecentEvents(projectId, args.recentLimit ?? 10),
       ]);
-      const frontPage = generateFrontPage(state, latestSummary, rules, recentEvents);
+      const frontPage = generateFrontPage(
+        state, latestSummary, rules, recentEvents, deps.redactor,
+      );
       try {
-        writeFrontPageFile(frontPage.markdown, workspacePath);
+        writeFrontPageFile(frontPage.markdown, workspacePath, deps.redactor);
       } catch (_writeError) {
         // File write is best-effort; the markdown is still returned as output
       }

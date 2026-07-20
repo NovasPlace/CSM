@@ -1,9 +1,11 @@
 import { storeItem } from './context-cache-store.js';
 import type { DatabasePool } from './types.js';
+import type { Redactor } from './redactor.js';
 
 export async function cacheBridgeTurnSignal(
   pool: DatabasePool,
   input: { sessionId: string; projectId: string; role: 'user' | 'assistant' | 'system'; content: string },
+  redactor?: Redactor,
 ): Promise<void> {
   const kind = input.role === 'user' ? 'turn' : 'decision';
   const trimmed = input.content.replace(/\s+/g, ' ').trim();
@@ -17,7 +19,7 @@ export async function cacheBridgeTurnSignal(
     summary: summarize(`[${input.role}] ${trimmed}`, 160),
     content: trimmed,
     metadata: { projectId: input.projectId, role: input.role, source: 'bridge_sync_turn' },
-  });
+  }, redactor);
 }
 
 export async function cacheToolErrorSignal(
@@ -30,6 +32,7 @@ export async function cacheToolErrorSignal(
     error?: string;
     exitCode?: number;
   },
+  redactor?: Redactor,
 ): Promise<void> {
   if (!isToolError(input)) return;
   const createdAt = Date.now();
@@ -48,7 +51,7 @@ export async function cacheToolErrorSignal(
       filePath: readFilePath(input.args),
       source: 'tool_execute_after',
     },
-  });
+  }, redactor);
 }
 
 export async function cacheBridgeWorkflowSignal(
@@ -66,6 +69,7 @@ export async function cacheBridgeWorkflowSignal(
     checkpointId?: string;
     lastErrorId?: string;
   },
+  redactor?: Redactor,
 ): Promise<void> {
   if (!input.content.trim()) return;
   const createdAt = Date.now();
@@ -86,7 +90,7 @@ export async function cacheBridgeWorkflowSignal(
       checkpointId: input.checkpointId,
       lastErrorId: input.lastErrorId,
     },
-  });
+  }, redactor);
 }
 
 function isToolError(input: { error?: string; exitCode?: number; output: string }): boolean {

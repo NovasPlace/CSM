@@ -12,11 +12,11 @@
                        "preserve_recent_tokens":  6000
                    },
     "plugin":  [
-                   [
-                       "file:///C:/Users/Donovan/Desktop/cross-session-memory/dist/index.js",
-                       {
+                [
+                    "file:///C:/Users/Donovan/Documents/Work/cross-session-memory/dist/index.js",
+                    {
 
-                       }
-                   ]
-               ]
+                    }
+                ]
+            ]
 }

@@ -12,6 +12,7 @@ import type {
   AgentBookEventInput,
   AgentBookEventType,
 } from './agentbook-types.js';
+import { Redactor, redactJsonValue } from './redactor.js';
 
 interface EventRow {
   event_id: string;
@@ -106,7 +107,10 @@ function normalizeOffset(value: number | undefined): number {
 }
 
 export class AgentBookEventStore {
-  constructor(private readonly pool: DatabasePool) {}
+  constructor(
+    private readonly pool: DatabasePool,
+    private readonly redactor: Redactor = new Redactor(),
+  ) {}
 
   async append(input: AgentBookEventInput): Promise<AgentBookEvent> {
     if (!input.projectId.trim()) throw new Error('AgentBook event projectId is required');
@@ -114,19 +118,29 @@ export class AgentBookEventStore {
 
     const dialect = dialectFromPool(this.pool);
     const eventId = generateEventId();
+    const safe = redactJsonValue(this.redactor, {
+      actor: input.actor ?? 'agent',
+      summary: input.summary,
+      evidenceRefs: input.evidenceRefs ?? [],
+      files: input.files ?? [],
+      command: input.command ?? null,
+      result: input.result ?? null,
+      environment: input.environment ?? {},
+      metadata: input.metadata ?? {},
+    });
     const values: unknown[] = [
       eventId,
       input.projectId,
       input.sessionId ?? null,
       input.eventType,
-      input.actor ?? 'agent',
-      input.summary,
-      jsonDocument(input.evidenceRefs ?? []),
-      jsonDocument(input.files ?? []),
-      input.command ?? null,
-      input.result ?? null,
-      jsonDocument(input.environment ?? {}),
-      jsonDocument(input.metadata ?? {}),
+      safe.actor,
+      safe.summary,
+      jsonDocument(safe.evidenceRefs),
+      jsonDocument(safe.files),
+      safe.command,
+      safe.result,
+      jsonDocument(safe.environment),
+      jsonDocument(safe.metadata),
       input.status ?? 'active',
     ];
     const placeholders = values.map((_, index) => placeholder(dialect, index + 1)).join(', ');
@@ -179,7 +193,7 @@ export class AgentBookEventStore {
        LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
       params,
     );
-    return result.rows.map((row) => rowToEvent(dialect, row));
+    return result.rows.map((row) => this.sanitizeEvent(dialect, row));
   }
 
   async getEvent(eventId: string): Promise<AgentBookEvent | null> {
@@ -188,7 +202,7 @@ export class AgentBookEventStore {
       `SELECT * FROM agentbook_events WHERE event_id = ${placeholder(dialect, 1)}`,
       [eventId],
     );
-    return result.rows.length > 0 ? rowToEvent(dialect, result.rows[0]) : null;
+    return result.rows.length > 0 ? this.sanitizeEvent(dialect, result.rows[0]) : null;
   }
 
   async countEvents(projectId?: string): Promise<number> {
@@ -223,7 +237,7 @@ export class AgentBookEventStore {
        ORDER BY event.occurred_at ASC, event.event_id ASC`,
       [projectId, sinceEventId, projectId],
     );
-    return result.rows.map((row) => rowToEvent(dialect, row));
+    return result.rows.map((row) => this.sanitizeEvent(dialect, row));
   }
 
   private async countDistinct(expression: string, projectId?: string, sessionsOnly = false): Promise<number> {
@@ -242,5 +256,20 @@ export class AgentBookEventStore {
     );
     const row = result.rows[0] as { count_value?: unknown } | undefined;
     return Number(row?.count_value ?? 0);
+  }
+
+  private sanitizeEvent(dialect: QueryDialect, row: unknown): AgentBookEvent {
+    const event = rowToEvent(dialect, row);
+    const safe = redactJsonValue(this.redactor, {
+      actor: event.actor,
+      summary: event.summary,
+      evidenceRefs: event.evidenceRefs,
+      files: event.files,
+      command: event.command,
+      result: event.result,
+      environment: event.environment,
+      metadata: event.metadata,
+    });
+    return { ...event, ...safe };
   }
 }

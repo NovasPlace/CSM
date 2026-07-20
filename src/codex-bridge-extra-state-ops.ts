@@ -20,7 +20,12 @@ export async function contextSearchOp(deps: CodexBridgeExtraDeps, sessionId: str
 }
 
 export async function contextFetchFileRegionOp(deps: CodexBridgeExtraDeps, sessionId: string | undefined, input: Record<string, unknown>) {
-  const reads = await fetchFileReads(deps.database.getPool(), requireSession(sessionId), requireString(input.filePath, 'filePath'));
+  const reads = await fetchFileReads(
+    deps.database.getPool(),
+    requireSession(sessionId),
+    requireString(input.filePath, 'filePath'),
+    deps.memoryManager.redactor,
+  );
   const latest = reads[0];
   if (!latest) return { found: false, filePath: input.filePath };
   const lines = latest.content.split('\n');

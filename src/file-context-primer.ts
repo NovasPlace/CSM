@@ -46,7 +46,7 @@ export class FileContextPrimer {
 
     const [fileDecisions, fileLessons, fileDebts, fileMilestones] = await Promise.all([
       this.fetchDecisions(filePath, projectId),
-      this.fetchLessons(filePath),
+      this.fetchLessons(filePath, projectId),
       this.fetchDebts(filePath, projectId),
       this.fetchMilestones(filePath, projectId),
     ]);
@@ -93,7 +93,10 @@ export class FileContextPrimer {
     }
   }
 
-  private async fetchLessons(filePath: string): Promise<Array<{ content: string }>> {
+  private async fetchLessons(
+    filePath: string,
+    projectId?: string,
+  ): Promise<Array<{ content: string }>> {
     try {
       const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
       const opts: MemoryListOptions = {
@@ -101,6 +104,7 @@ export class FileContextPrimer {
         limit: 5,
         sortBy: 'important',
       };
+      if (projectId) opts.projectId = projectId;
       const memories = await this.memories.listMemories(opts);
       return memories
         .filter(m => m.content.includes(fileName) || m.content.includes(filePath))

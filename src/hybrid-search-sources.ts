@@ -46,6 +46,10 @@ function appendProjectScope(
     clauses.push(`(project_id = $${params.length} OR project_id IS NULL)`);
     return;
   }
+  if (!projectId) {
+    clauses.push('1=0');
+    return;
+  }
   appendFilter(clauses, params, 'project_id', projectId);
 }
 

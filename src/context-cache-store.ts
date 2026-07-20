@@ -5,8 +5,10 @@
  * decisions) in the DB so they can be replaced in the prompt with compact
  * manifest entries and retrieved on demand via context_fetch / context_search.
  */
+import { createHash } from 'node:crypto';
+import { posix, win32 } from 'node:path';
 import { DatabasePool } from './types.js';
-import { Redactor } from './redactor.js';
+import { Redactor, redactJsonValue } from './redactor.js';
 import { ilikeExpr, dialectFromPool, jsonExtractText, colInParamArray, jsonParam } from './db/query-dialect.js';
 
 export type CacheKind = 'turn' | 'tool_output' | 'file_read' | 'error' | 'decision';
@@ -28,12 +30,35 @@ export interface CacheItem extends CacheItemInput {
   fetchCount: number;
 }
 
+const SECURE_DEFAULT_REDACTOR = new Redactor();
+const FILE_PATH_LOOKUP_KEY = '_csmFilePathLookupV1';
+
+function filePathLookup(sessionId: string, filePath: string): string {
+  const windowsSyntax = /^[A-Za-z]:[\\/]/.test(filePath)
+    || /^\\\\/.test(filePath)
+    || (!filePath.startsWith('/') && filePath.includes('\\'));
+  const pathApi = windowsSyntax ? win32 : posix;
+  const canonical = pathApi.normalize(filePath);
+  const comparable = pathApi === win32 ? canonical.toLowerCase() : canonical;
+  return createHash('sha256').update(sessionId).update('\0').update(comparable).digest('hex');
+}
+
 export async function storeItem(
   pool: DatabasePool, item: CacheItemInput, redactor?: Redactor,
 ): Promise<void> {
   // Phase 18 — Redact before persistence
-  const summary = redactor ? redactor.redact(item.summary).text : item.summary;
-  const content = redactor ? redactor.redact(item.content).text : item.content;
+  const activeRedactor = redactor ?? SECURE_DEFAULT_REDACTOR;
+  const rawMetadata = { ...(item.metadata ?? {}) };
+  const sourceFilePath = typeof rawMetadata.filePath === 'string' ? rawMetadata.filePath : undefined;
+  const summary = sourceFilePath && item.summary.trim() === sourceFilePath
+    ? activeRedactor.redactPath(item.summary).text
+    : activeRedactor.redact(item.summary).text;
+  const content = activeRedactor.redact(item.content).text;
+  if (sourceFilePath) {
+    rawMetadata[FILE_PATH_LOOKUP_KEY] = filePathLookup(item.sessionId, sourceFilePath);
+    rawMetadata.filePath = activeRedactor.redactPath(sourceFilePath).text;
+  }
+  const metadata = redactJsonValue(activeRedactor, rawMetadata);
   await pool.query(
     `INSERT INTO context_cache
        (session_id, display_id, kind, created_at, message_index, summary, content, metadata, tokens)
@@ -42,7 +67,7 @@ export async function storeItem(
     [
       item.sessionId, item.displayId, item.kind, item.createdAt,
       item.messageIndex ?? null, summary, content,
-      JSON.stringify(item.metadata ?? {}), item.tokens ?? null,
+      JSON.stringify(metadata), item.tokens ?? null,
     ],
   );
 }
@@ -78,15 +103,18 @@ export async function searchItems(
 }
 
 export async function fetchFileReads(
-  pool: DatabasePool, sessionId: string, filePath: string,
+  pool: DatabasePool, sessionId: string, filePath: string, _redactor?: Redactor,
 ): Promise<CacheItem[]> {
   const d = dialectFromPool(pool);
+  const pathExpression = jsonExtractText(d, 'metadata', 'filePath');
+  const lookupExpression = jsonExtractText(d, 'metadata', FILE_PATH_LOOKUP_KEY);
+  const params: unknown[] = [sessionId, filePath, filePathLookup(sessionId, filePath)];
   const res = await pool.query(
     `SELECT * FROM context_cache
      WHERE session_id = $1 AND kind = 'file_read'
-       AND ${jsonExtractText(d, 'metadata', 'filePath')} = $2
+       AND (${pathExpression} = $2 OR ${lookupExpression} = $3)
      ORDER BY created_at DESC LIMIT 5`,
-    [sessionId, filePath],
+    params,
   );
   return res.rows.map((r) => rowToItem(r as Record<string, unknown>));
 }
@@ -177,6 +205,10 @@ export async function pruneOldItems(
 }
 
 function rowToItem(row: Record<string, unknown>): CacheItem {
+  const storedMetadata = typeof row.metadata === 'string'
+    ? JSON.parse(row.metadata) as Record<string, unknown>
+    : { ...((row.metadata as Record<string, unknown> | undefined) ?? {}) };
+  delete storedMetadata[FILE_PATH_LOOKUP_KEY];
   return {
     id: row.id as number,
     sessionId: row.session_id as string,
@@ -186,7 +218,7 @@ function rowToItem(row: Record<string, unknown>): CacheItem {
     messageIndex: row.message_index as number | undefined,
     summary: row.summary as string,
     content: row.content as string,
-    metadata: row.metadata as Record<string, unknown>,
+    metadata: storedMetadata,
     tokens: row.tokens as number | undefined,
     fetchCount: row.fetch_count as number,
   };

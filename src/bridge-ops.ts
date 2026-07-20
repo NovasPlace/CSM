@@ -3,10 +3,12 @@ import type { ContextCompactor } from './context-compactor.js';
 import type { ContextRecallDaemon } from './context-recall.js';
 import type { MemoryManager } from './memory-manager.js';
 import type { PrimingEngine } from './priming-engine.js';
+import type { Redactor } from './redactor.js';
 import { rankMemoriesByProvenance } from './bridge-provenance.js';
 import type { BackfillEmbeddingsResult, ContextBrief, Memory, MemorySaveOptions, MemorySearchOptions, PruneReport } from './types.js';
 export interface BridgeDeps {
   database?: Database;
+  redactor?: Redactor;
   memoryManager: MemoryManager;
   contextRecall: ContextRecallDaemon;
   primingEngine: PrimingEngine;
@@ -45,7 +47,7 @@ export async function searchMemoriesOp(
 ): Promise<{ results: Awaited<ReturnType<MemoryManager['searchMemories']>>; cascaded: Memory[] }> {
   const projectId = input.projectId ?? context.projectId;
   const telemetry = context.sessionId ? { sessionId: context.sessionId, source: 'search' as const } : undefined;
-  const searchMode = input.searchMode ?? (projectId ? 'project' : 'global');
+  const searchMode = input.searchMode ?? 'project';
   let resolvedSearchMode = searchMode;
   let results = await deps.memoryManager.searchMemories(
     { ...input, projectId, searchMode },
@@ -75,7 +77,7 @@ export async function listMemoriesOp(
 ): Promise<Memory[]> {
   const projectId = input.projectId ?? context.projectId;
   const telemetry = context.sessionId ? { sessionId: context.sessionId, source: 'list' as const } : undefined;
-  const searchMode = input.searchMode ?? (projectId ? 'project' : 'global');
+  const searchMode = input.searchMode ?? 'project';
   let memories = await deps.memoryManager.listMemories(
     { ...input, projectId, searchMode },
     telemetry,
@@ -102,6 +104,7 @@ export async function recallLessonsOp(
   const fallback = await deps.memoryManager.listMemories({
     type: 'lesson',
     projectId: context.projectId,
+    searchMode: 'project',
     sortBy: 'important',
     limit,
   });

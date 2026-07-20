@@ -28,20 +28,32 @@ export async function hybridSearch(
   query: string,
   embedding: number[],
   limit: number,
-  options: Omit<MemorySearchOptions, 'query'> & { weights?: HybridWeights } = {},
+  options: Omit<MemorySearchOptions, 'query'> & {
+    weights?: HybridWeights;
+    lexicalQueries?: string[];
+  } = {},
 ): Promise<Array<{ id: number; score: number }>> {
   const searchLimit = limit * 3;
+  const lexicalQueries = Array.from(new Set(
+    options.lexicalQueries?.length ? options.lexicalQueries : [query],
+  ));
   const filters = [
     options.projectId, options.type, options.tags, options.minImportance, options.searchMode,
   ] as const;
-  const [vectorResults, textResults, entityResults] = await Promise.all([
+  const [vectorResults, textRankings, entityRankings] = await Promise.all([
     vectorSearch(db, embedding, searchLimit, ...filters),
-    searchText(db, query, searchLimit, filters),
-    entityMatchBoost(db, query, searchLimit, ...filters),
+    Promise.all(lexicalQueries.map((candidate) => searchText(db, candidate, searchLimit, filters))),
+    Promise.all(lexicalQueries.map((candidate) =>
+      entityMatchBoost(db, candidate, searchLimit, ...filters))),
   ]);
   const vectorScores = reciprocalRankFusion(vectorResults);
-  const textScores = reciprocalRankFusion(textResults);
-  const entityScores = new Map(entityResults.map(result => [result.id, result.boost]));
+  const textScores = reciprocalRankFusion(...textRankings);
+  const entityScores = new Map<number, number>();
+  for (const ranking of entityRankings) {
+    for (const result of ranking) {
+      entityScores.set(result.id, Math.max(entityScores.get(result.id) ?? 0, result.boost));
+    }
+  }
   const candidateIds = new Set([...vectorScores.keys(), ...textScores.keys(), ...entityScores.keys()]);
   const recencyScores = await computeRecencyScores(db, [...candidateIds]);
   const scores = applyWeights(

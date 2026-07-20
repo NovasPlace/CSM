@@ -1,0 +1,1097 @@
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -450,6 +450,9 @@
+   exitCode?: number;
+   timestamp: number;
+   sessionId: string;
++  messageId?: string;
++  partId?: string;
++  toolCallId?: string;
+   filePath?: string;           // Extracted from args if it's a file operation
+ }
+ 
+--- a/src/context-compactor.ts
++++ b/src/context-compactor.ts
+@@ -1,3 +1,4 @@
++import { createHash } from 'node:crypto';
+ import type { CompactorConfig, ToolCallRecord, CompactionResult, CumulativeCompactionStats, CompactionQualityMetrics } from './types.js';
+ import { extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeQualityScore } from './compaction-quality.js';
+ import { isCompactedToolText } from './compaction-utils.js';
+@@ -270,7 +271,7 @@
+     let signalCount = 0;
+     for (const tc of compactable) {
+       if (tc.error) signalCount++;
+-      if (tc.filePath) signalCount++;
++      if (toolFilePath(tc)) signalCount++;
+       if (tc.exitCode !== undefined && tc.exitCode !== 0) signalCount++;
+     }
+ 
+@@ -367,6 +368,18 @@
+     return this.formatCompactRef(tc).length < source.length;
+   }
+ 
++  getExpandableRefId(tc: ToolCallRecord): string {
++    if (tc.toolCallId) return sanitizeRefToken(tc.toolCallId);
++    if (tc.partId) return sanitizeRefToken(tc.partId);
++    const digest = toolRecordDigest(tc);
++    // A message can contain multiple tool parts. A bare message ID therefore is
++    // not a unique recovery key; retain it for traceability and suffix a digest.
++    if (tc.messageId) {
++      return `${sanitizeRefToken(tc.messageId).slice(0, 140)}_${digest.slice(0, 12)}`;
++    }
++    return `tool_${digest.slice(0, 20)}`;
++  }
++
+   private measureToolPressure(
+     keepRaw: ToolCallRecord[],
+     compactable: ToolCallRecord[],
+@@ -404,31 +417,25 @@
+   }
+ 
+   private formatCompactRef(tc: ToolCallRecord): string {
+-    const _refId = `tool_${tc.sessionId}_${tc.timestamp}`;
+-    const output = tc.output ? tc.output.slice(0, this.config.maxOutputChars ?? 120) : '';
+-    const error = tc.error ? `ERROR: ${tc.error.slice(0, 100)}` : '';
+-
+-    const signals: string[] = [];
+-    if (tc.error) signals.push('error');
+-    if (tc.filePath) signals.push('file:' + tc.filePath);
+-    if (tc.exitCode !== undefined && tc.exitCode !== 0) signals.push('exit:' + tc.exitCode);
+-    if (tc.tool === 'write' || tc.tool === 'edit' || tc.tool === 'patch') signals.push('mutation');
+-
+-    const sigStr = signals.length > 0 ? ' signals=' + signals.join(',') : '';
+-    const args = tc.args ? JSON.stringify(tc.args).slice(0, 80) : '';
+-    return `TOOL_REF ${tc.tool}(${args})${sigStr} ${output} ${error}`.trim();
++    return this.createExpandableRef(tc);
+   }
+ 
+   createExpandableRef(tc: ToolCallRecord): string {
+-    const refId = `tool_${tc.sessionId}_${tc.timestamp}`;
++    const refId = this.getExpandableRefId(tc);
+     const signals: string[] = [];
+     if (tc.error) signals.push('error');
+-    if (tc.filePath) signals.push('file:' + tc.filePath);
++    const filePath = toolFilePath(tc);
++    if (filePath) signals.push('file');
++    if (tc.exitCode !== undefined && tc.exitCode !== 0) signals.push(`exit:${tc.exitCode}`);
+     if (tc.tool === 'write' || tc.tool === 'edit' || tc.tool === 'patch') signals.push('mutation');
+ 
+-    const summary = (tc.output ?? '').slice(0, 80).replace(/"/g, "'");
+-    const sigStr = signals.length > 0 ? ' signals=' + signals.join(',') : '';
+-    return `[TOOL_REF id=${refId} tool=${tc.tool} type=${tc.tool} file=${tc.filePath ?? 'unknown'}${sigStr} summary="${summary}"]`;
++    const source = tc.error ?? tc.output ?? '';
++    const summarySource = tc.error ? `ERROR: ${tc.error}` : source;
++    const summary = sanitizeMarkerValue(summarySource, this.config.maxOutputChars ?? 120);
++    const file = sanitizeMarkerValue(filePath ?? 'unknown', 160);
++    const tool = sanitizeRefToken(tc.tool || 'unknown');
++    const sigStr = signals.length > 0 ? ` signals=${signals.join(',')}` : '';
++    return `TOOL_REF id=${refId} fetch=context_fetch tool=${tool} file="${file}"${sigStr} summary="${summary}"`;
+   }
+ 
+   getLastResult(): CompactionResult | null {
+@@ -448,6 +455,37 @@
+   }
+ }
+ 
++
++function toolRecordDigest(tc: ToolCallRecord): string {
++  return createHash('sha256')
++    .update(`${tc.sessionId}\0${tc.tool}\0${tc.timestamp}\0${tc.error ?? tc.output ?? ''}`)
++    .digest('hex');
++}
++
++function toolFilePath(tc: ToolCallRecord): string | undefined {
++  if (tc.filePath) return tc.filePath;
++  const args = tc.args ?? {};
++  for (const key of ['filePath', 'path', 'file', 'filename']) {
++    const value = args[key];
++    if (typeof value === 'string' && value.trim().length > 0) return value;
++  }
++  return undefined;
++}
++
++function sanitizeRefToken(value: string): string {
++  const normalized = value.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 180);
++  return normalized || 'unknown';
++}
++
++function sanitizeMarkerValue(value: string, maxChars: number): string {
++  return value
++    .replace(/[\r\n\t]+/g, ' ')
++    .replace(/["\\]/g, "'")
++    .replace(/\s+/g, ' ')
++    .trim()
++    .slice(0, Math.max(0, maxChars));
++}
++
+ export function createContextCompactor(config?: Partial<CompactorConfig>): ContextCompactor {
+   const defaultConfig: CompactorConfig = {
+     enabled: true,
+--- a/src/hooks/messages-transform.ts
++++ b/src/hooks/messages-transform.ts
+@@ -5,6 +5,8 @@
+ import { getLogger } from '../logger.js';
+ import { isAlreadyCompacted } from '../compaction-utils.js';
+ import type { GovernorMessage, GovernorPart } from '../context-governor.js';
++import { storeItem, type CacheKind } from '../context-cache-store.js';
++import { estimateTokens } from '../token-bucket-analyzer.js';
+ 
+ interface TransformToolState {
+   status: string;
+@@ -15,6 +17,10 @@
+ }
+ 
+ interface TransformPart extends GovernorPart {
++  id?: string;
++  messageID?: string;
++  callID?: string;
++  toolCallId?: string;
+   type: string;
+   text?: string;
+   tool?: string;
+@@ -72,6 +78,9 @@
+             error,
+             timestamp: timestamp as number,
+             sessionId,
++            messageId: part.messageID ?? msg.info?.id,
++            partId: part.id,
++            toolCallId: part.callID ?? part.toolCallId,
+             filePath,
+           });
+         }
+@@ -86,6 +95,7 @@
+       const createdAt = new Date().toISOString();
+ 
+       try {
++        await persistExpandableRecords(ctx, pool, records);
+         const compactOutput = ctx.contextCompactor.compact(records, undefined, messages);
+         const result = compactOutput.result;
+         const status: 'compressed' | 'skipped_under_budget' =
+@@ -147,7 +157,7 @@
+ 
+ function auditGovernor(ctx: PluginContext, messages: TransformMessage[]): void {
+   if (!ctx.contextGovernor || ctx.config.contextGovernor?.enabled === false) return;
+-  const result = ctx.contextGovernor.govern(messages);
++  const result = ctx.contextGovernor.govern(cloneForGovernorAudit(messages));
+   ctx.lastCompileResult = result.compileResult ?? null;
+   getLogger().info('Context governor audit', {
+     eventType: 'context_governor',
+@@ -158,3 +168,68 @@
+     outcome: result.decision.action,
+   });
+ }
++
++async function persistExpandableRecords(
++  ctx: PluginContext,
++  pool: ReturnType<PluginContext['database']['getPool']>,
++  records: ToolCallRecord[],
++): Promise<void> {
++  if (ctx.config?.contextCache?.enabled === false) {
++    throw new Error('tool compaction requires context cache for recoverable TOOL_REF output');
++  }
++  const candidates = records.filter((record) => {
++    const source = record.error ?? record.output ?? '';
++    return source.trim().length > 0
++      && ctx.contextCompactor.createExpandableRef(record).length < source.length;
++  });
++  await Promise.all(candidates.map(async (record) => {
++    const source = record.error ?? record.output ?? '';
++    const refId = ctx.contextCompactor.getExpandableRefId(record);
++    await storeItem(pool, {
++      sessionId: record.sessionId,
++      displayId: refId,
++      kind: cacheKind(record),
++      createdAt: record.timestamp,
++      summary: summarizeRecord(record, source),
++      content: source,
++      metadata: {
++        source: 'tool_compaction',
++        tool: record.tool,
++        filePath: record.filePath,
++        messageId: record.messageId,
++        partId: record.partId,
++        toolCallId: record.toolCallId,
++      },
++      tokens: estimateTokens(source),
++    }, ctx.redactor);
++  }));
++}
++
++function cacheKind(record: ToolCallRecord): CacheKind {
++  if (record.error) return 'error';
++  if (record.tool === 'read' && record.filePath) return 'file_read';
++  return 'tool_output';
++}
++
++function summarizeRecord(record: ToolCallRecord, source: string): string {
++  const subject = record.filePath ?? String(record.args.command ?? record.tool);
++  const summary = source.replace(/\s+/g, ' ').trim().slice(0, 100);
++  return `${record.tool} ${subject}: ${summary}`.slice(0, 180);
++}
++
++function cloneForGovernorAudit(messages: TransformMessage[]): TransformMessage[] {
++  return messages.map((message) => ({
++    ...message,
++    info: message.info ? { ...message.info } : undefined,
++    parts: message.parts?.map((part) => ({
++      ...part,
++      state: part.state
++        ? {
++          ...part.state,
++          input: part.state.input ? { ...part.state.input } : undefined,
++          time: part.state.time ? { ...part.state.time } : undefined,
++        }
++        : undefined,
++    })),
++  }));
++}
+--- a/src/context-compiler.ts
++++ b/src/context-compiler.ts
+@@ -22,6 +22,7 @@
+     status?: string;
+     type?: string;
+     output?: string;
++    error?: string;
+     exitCode?: number | string;
+     input?: {
+       command?: string;
+@@ -245,7 +246,7 @@
+   return result;
+ }
+ 
+-const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]', 'TOOL_REF', '[TOOL_REF'];
++const ALREADY_COMPACTED = ['[COMPACTED_TOOL]', '[COMPRESSED]', '[TOOL:', '[CRITICAL_TOOL:', '[OK]', 'TOOL_REF', '[TOOL_REF', '[TOOL_DISTILLED:', '[TOOL_DEDUP_REF:', '[DEDUP_REF]', '[CACHED:'];
+ const STEP_TYPES = ['step-start', 'step-finish', 'compaction', 'reasoning', 'snapshot', 'patch'];
+ 
+ const CRITICAL_PATTERNS: RegExp[] = [
+@@ -270,7 +271,7 @@
+   if (part.type !== 'tool') return 0;
+   if (part.state?.status === 'error' || part.state?.type === 'error') return 2;
+   const tool = String(part.tool ?? '');
+-  const output = String(part.state?.output ?? '');
++  const output = String(part.state?.error ?? part.state?.output ?? '');
+   for (const pat of CRITICAL_PATTERNS) {
+     if (pat.test(output)) return 2;
+   }
+@@ -288,9 +289,13 @@
+   return 0;
+ }
+ 
++function partContent(part: SdkPart): string {
++  return String(part.text ?? part.state?.error ?? part.state?.output ?? '');
++}
++
+ function isAlreadyCompressed(part: SdkPart): boolean {
+-  const text = part.text ?? part.state?.output ?? '';
+-  return ALREADY_COMPACTED.some(m => String(text).startsWith(m));
++  const text = partContent(part).trimStart();
++  return ALREADY_COMPACTED.some(marker => text.startsWith(marker));
+ }
+ 
+ /** Compute pressure-aware recent window size */
+@@ -308,9 +313,10 @@
+ /** Returns pinned category string or 'compressible' */
+ function classifyPart(
+   part: SdkPart, msgIndex: number, totalMsgs: number, role: string,
+-  adaptiveWindow: number, pressureRatio: number,
++  adaptiveWindow: number, pressureRatio: number, activeTurnStart: number,
+ ): string {
+-  if (isAlreadyCompressed(part)) return 'compressible';
++  if (msgIndex >= activeTurnStart) return 'active_turn';
++  if (isAlreadyCompressed(part)) return 'already_compacted';
+   if (role === 'user') return 'user_message';
+   const criticality = scoreCriticality(part);
+   const isRecent = msgIndex >= totalMsgs - adaptiveWindow;
+@@ -350,7 +356,7 @@
+   let total = 0;
+   for (const msg of messages) {
+     for (const part of msg.parts ?? []) {
+-      total += estimateTokens(String(part.text ?? part.state?.output ?? ''));
++      total += estimateTokens(partContent(part));
+     }
+   }
+   return total;
+@@ -409,10 +415,9 @@
+      const errLines = output.split('\n').slice(0, 15).join('\n');
+     const summary = `[CRITICAL_TOOL:${tool}] ${input.filePath ?? input.command ?? ''}\n${errLines}`;
+     const summaryTokens = estimateTokens(summary);
+-    if (summaryTokens < before) {
+-      part.state.output = summary;
+-    }
+-    const after = estimateTokens(String(part.state.output ?? ''));
++    if (summaryTokens >= before) return null;
++    part.state.output = summary;
++    const after = summaryTokens;
+     const meta = toolRiskAndSignals(tool, input, before);
+     return {
+       kind: `tool_${tool}`, source: input.filePath ?? input.command ?? input.pattern ?? '',
+@@ -421,9 +426,9 @@
+     };
+   }
+   const summary = buildToolSummary(tool, input, lineCount);
+-  part.state.output = summary;
+-  const after = estimateTokens(String(part.state.output ?? ''));
++  const after = estimateTokens(summary);
+   if (after >= before) return null;
++  part.state.output = summary;
+   const meta = toolRiskAndSignals(tool, input, before);
+   return {
+     kind: `tool_${tool}`, source: input.filePath ?? input.command ?? input.pattern ?? '',
+@@ -438,8 +443,10 @@
+   const before = estimateTokens(text);
+   if (before < 150) return null;
+   const keep = text.slice(0, 500);
+-  part.text = `${keep}\n[COMPRESSED_CONTEXT: ${before} tok → ~${Math.ceil(keep.length / 4)} tok]`;
+-  const after = estimateTokens(part.text);
++  const compressed = `${keep}\n[COMPRESSED_CONTEXT: ${before} tok → ~${Math.ceil(keep.length / 4)} tok]`;
++  const after = estimateTokens(compressed);
++  if (after >= before) return null;
++  part.text = compressed;
+   return {
+     kind: 'assistant_text', source: '', reason: 'stale_turn',
+     beforeTokens: before, afterTokens: after, compressionRatio: after / before,
+@@ -448,7 +455,7 @@
+ }
+ 
+ function classifyAndCollect(
+-  messages: SdkMessage[], adaptiveWindow: number, pressureRatio: number,
++  messages: SdkMessage[], adaptiveWindow: number, pressureRatio: number, activeTurnStart: number,
+ ): { candidates: { part: SdkPart; tokens: number }[]; pinnedCategories: Record<string, number> } {
+   const candidates: { part: SdkPart; tokens: number }[] = [];
+   const pinnedCategories: Record<string, number> = {};
+@@ -456,9 +463,9 @@
+   for (let i = 0; i < totalMsgs; i++) {
+     const role = messages[i].info?.role ?? 'unknown';
+     for (const part of messages[i].parts ?? []) {
+-      const cls = classifyPart(part, i, totalMsgs, role, adaptiveWindow, pressureRatio);
++      const cls = classifyPart(part, i, totalMsgs, role, adaptiveWindow, pressureRatio, activeTurnStart);
+       if (cls === 'compressible' || cls === 'compressible_critical') {
+-        candidates.push({ part, tokens: estimateTokens(String(part.text ?? part.state?.output ?? '')) });
++        candidates.push({ part, tokens: estimateTokens(partContent(part)) });
+       } else {
+         pinnedCategories[cls] = (pinnedCategories[cls] ?? 0) + 1;
+       }
+@@ -486,6 +493,13 @@
+   return { saved, details };
+ }
+ 
++function findActiveTurnStart(messages: SdkMessage[]): number {
++  for (let index = messages.length - 1; index >= 0; index--) {
++    if (messages[index].info?.role === 'user') return index;
++  }
++  return 0;
++}
++
+ /** Compile messages to fit within a token budget. */
+ export function compileContext(
+   messages: SdkMessage[], config: ContextCompilerConfig,
+@@ -502,10 +516,11 @@
+   }
+   let adaptiveWindow = adaptiveRecentWindow(config.recentTurnWindow, beforeTokens, budget);
+   let pressureRatio = beforeTokens / Math.max(budget, 1);
++  const activeTurnStart = findActiveTurnStart(messages);
+   let allDetails: CompressedPartDetail[] = [];
+   let totalSaved = 0;
+   for (let pass = 0; pass < 3; pass++) {
+-    const { candidates, pinnedCategories: _pinnedCategories } = classifyAndCollect(messages, adaptiveWindow, pressureRatio);
++    const { candidates, pinnedCategories: _pinnedCategories } = classifyAndCollect(messages, adaptiveWindow, pressureRatio, activeTurnStart);
+     const overBudget = beforeTokens - totalSaved - budget;
+     if (overBudget <= 0) break;
+     const { saved, details } = compressToFit(candidates, overBudget);
+@@ -517,7 +532,7 @@
+     }
+   }
+   const afterTokens = beforeTokens - totalSaved;
+-  const { pinnedCategories: finalPinned } = classifyAndCollect(messages, adaptiveWindow, pressureRatio);
++  const { pinnedCategories: finalPinned } = classifyAndCollect(messages, adaptiveWindow, pressureRatio, activeTurnStart);
+   return {
+     beforeTokens, afterTokens, budget,
+     partsCompressed: allDetails.length, partsPinned: Object.values(finalPinned).reduce((a, b) => a + b, 0),
+--- a/src/context-governor.ts
++++ b/src/context-governor.ts
+@@ -99,39 +99,55 @@
+   return `${prefix} ${snippets.join(' | ')}`.trim();
+ }
+ 
+-function replaceWithCheckpointRefs(messages: GovernorMessage[], keepTail: number): void {
+-  const cut = Math.max(0, messages.length - keepTail);
++function findActiveTurnStart(messages: GovernorMessage[]): number {
++  for (let index = messages.length - 1; index >= 0; index--) {
++    if (messages[index].info?.role === 'user') return index;
++  }
++  return 0;
++}
++
++function replaceWithCheckpointRefs(
++  messages: GovernorMessage[], keepTail: number, activeTurnStart: number,
++): boolean {
++  const cut = Math.min(Math.max(0, messages.length - keepTail), activeTurnStart);
+   const archived = messages.slice(0, cut);
+   const recent = messages.slice(cut);
+-  if (archived.length === 0) return;
++  if (archived.length === 0) return false;
+   const refs = buildCheckpointRefSummary(archived);
+   messages.splice(0, messages.length, {
+     info: { role: 'assistant' },
+     parts: [textPart(refs)],
+   }, ...recent);
++  return true;
+ }
+ 
+-function replaceWithDistilledState(messages: GovernorMessage[], keepTail: number): void {
+-  const distilled = `[DISTILLED_STATE]\n${buildCheckpointDistilledState(messages)}`;
+-  const recent = messages.slice(-keepTail);
++function replaceWithDistilledState(
++  messages: GovernorMessage[], keepTail: number, activeTurnStart: number,
++): boolean {
++  const archiveEnd = Math.min(Math.max(0, messages.length - keepTail), activeTurnStart);
++  if (archiveEnd === 0) return false;
++  const archived = messages.slice(0, archiveEnd);
++  const distilled = `[DISTILLED_STATE]\n${buildCheckpointDistilledState(archived)}`;
++  const recent = messages.slice(archiveEnd);
+   messages.splice(0, messages.length, {
+     info: { role: 'assistant' },
+     parts: [textPart(distilled)],
+   }, ...recent);
++  return true;
+ }
+ 
+-function applyAction(messages: GovernorMessage[], action: GovernorActionName): boolean {
++function applyAction(
++  messages: GovernorMessage[], action: GovernorActionName, activeTurnStart: number,
++): boolean {
+   if (action === 'light_memory_brief') {
+     addMemoryBrief(messages);
+     return false;
+   }
+   if (action === 'checkpoint_refs_only') {
+-    replaceWithCheckpointRefs(messages, 6);
+-    return true;
++    return replaceWithCheckpointRefs(messages, 6, activeTurnStart);
+   }
+   if (action === 'distilled_project_state' || action === 'emergency_context_rebuild') {
+-    replaceWithDistilledState(messages, action === 'distilled_project_state' ? 4 : 2);
+-    return true;
++    return replaceWithDistilledState(messages, action === 'distilled_project_state' ? 4 : 2, activeTurnStart);
+   }
+   return false;
+ }
+@@ -173,8 +189,13 @@
+       projectedNextTurnTokens: before.projectedNextTurnTokens,
+       overBudget: before.totalTokens > profile.maxBudget,
+     };
+-    const rebuildApplied = applyAction(messages, action);
+-    optimizeGovernorContext(messages, profile.recentTurnWindow);
++    const activeTurnStart = findActiveTurnStart(messages);
++    const rebuildApplied = applyAction(messages, action, activeTurnStart);
++    // Rebuild actions can replace a large prefix and shift the latest user turn.
++    // Recalculate the boundary before any optimizer mutation so the active turn
++    // remains protected in the rebuilt message array.
++    const rebuiltActiveTurnStart = findActiveTurnStart(messages);
++    optimizeGovernorContext(messages, profile.recentTurnWindow, rebuiltActiveTurnStart);
+     const compileResult = compileContext(
+       messages,
+       buildCompilerConfig(
+--- a/src/context-governor-optimizer.ts
++++ b/src/context-governor-optimizer.ts
+@@ -76,7 +76,9 @@
+     || /^\[(MEMORY_BRIEF|CHECKPOINT_REF|DISTILLED_STATE|TOOL_DISTILLED|DEDUP_REF|TOOL_DEDUP_REF|TOOL_REF)/.test(text);
+ }
+ 
+-export function optimizeGovernorContext(messages: MessageLike[], recentWindow: number): void {
++export function optimizeGovernorContext(
++  messages: MessageLike[], recentWindow: number, protectedFromIndex = messages.length,
++): void {
+   const seen = new Map<string, number>();
+   const seenTools = new Map<string, number>();
+   const keepFrom = Math.max(0, messages.length - recentWindow);
+@@ -92,6 +94,7 @@
+     }
+   }
+   for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
++    if (msgIndex >= protectedFromIndex) continue;
+     const role = messages[msgIndex].info?.role ?? 'assistant';
+     for (const part of messages[msgIndex].parts ?? []) {
+       if (shouldSkipPart(part) || role === 'user') continue;
+--- a/src/checkpoint-capture.ts
++++ b/src/checkpoint-capture.ts
+@@ -38,21 +38,23 @@
+   if (p.type === 'tool' && (p.state?.status === 'completed' || p.state?.status === 'error')) {
+     const content = toolPartContent(p);
+     if (content.trim().length === 0) return null;
++    const stored = truncateUtf8(content, maxBytes);
+     return {
+       checkpointId: '',
+       messageId: mid,
+       partId: p.id,
+       toolCallId: p.callID ?? p.toolCallId,
+       kind: 'tool_output',
+-      content: content.slice(0, maxBytes),
+-      tokenCount: estimateTokens(content),
++      content: stored,
++      tokenCount: estimateTokens(stored),
+     };
+   }
+   if (p.type === 'text' && role === 'assistant' && (p.text ?? '').length > 800) {
+     const content = p.text ?? '';
++    const stored = truncateUtf8(content, maxBytes);
+     return {
+       checkpointId: '', messageId: mid, kind: 'assistant_text',
+-      content: content.slice(0, maxBytes), tokenCount: estimateTokens(content),
++      content: stored, tokenCount: estimateTokens(stored),
+     };
+   }
+   return null;
+@@ -65,3 +67,16 @@
+     : p.state?.output ?? p.output ?? '';
+   return typeof value === 'string' ? value : JSON.stringify(value ?? '');
+ }
++
++function truncateUtf8(value: string, maxBytes: number): string {
++  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
++  let used = 0;
++  const chars: string[] = [];
++  for (const char of value) {
++    const bytes = Buffer.byteLength(char, 'utf8');
++    if (used + bytes > maxBytes) break;
++    chars.push(char);
++    used += bytes;
++  }
++  return chars.join('');
++}
+--- a/src/checkpoint-store.ts
++++ b/src/checkpoint-store.ts
+@@ -13,8 +13,8 @@
+   session_id: string;
+   project_id: string | null;
+   created_at: Date;
+-  source_message_start: number | null;
+-  source_message_end: number | null;
++  source_message_start: string | null;
++  source_message_end: string | null;
+   summary_markdown: string;
+   summary_tokens: number;
+   input_tokens_estimate: number;
+@@ -48,8 +48,8 @@
+     sessionId: row.session_id,
+     projectId: row.project_id ?? undefined,
+     createdAt: row.created_at,
+-    sourceMessageStart: row.source_message_start as unknown as string | undefined,
+-    sourceMessageEnd: row.source_message_end as unknown as string | undefined,
++    sourceMessageStart: row.source_message_start ?? undefined,
++    sourceMessageEnd: row.source_message_end ?? undefined,
+     summaryMarkdown: row.summary_markdown,
+     summaryTokens: row.summary_tokens,
+     inputTokensEstimate: row.input_tokens_estimate,
+@@ -112,6 +112,10 @@
+     const client = await this.pool.connect();
+     try {
+       await client.query('BEGIN');
++      await client.query(
++        `SELECT pg_advisory_xact_lock(hashtext('csm_checkpoint'), hashtext($1))`,
++        [input.sessionId],
++      );
+       // Deactivate all prior active checkpoints in this session
+       const prev = await client.query(
+         `UPDATE checkpoints SET is_active = false
+@@ -162,7 +166,10 @@
+   /** Returns the single active checkpoint for a session, or null. */
+   async getActiveCheckpoint(sessionId: string): Promise<CheckpointRecord | null> {
+     const res = await this.pool.query(
+-      `SELECT * FROM checkpoints WHERE session_id = $1 AND is_active = true LIMIT 1`,
++      `SELECT * FROM checkpoints
++       WHERE session_id = $1 AND is_active = true
++       ORDER BY created_at DESC, checkpoint_id DESC
++       LIMIT 1`,
+       [sessionId],
+     );
+     return res.rows.length > 0 ? rowToCheckpoint(res.rows[0] as CheckpointRow) : null;
+@@ -187,7 +194,7 @@
+   }
+ 
+   /**
+-   * Recovery: find a raw capture by message_id or tool_call_id within the
++   * Recovery: find a raw capture by message_id, part_id, or tool_call_id within the
+    * active checkpoint of a session. Returns ExpandedRef with found=false if absent.
+    */
+   async expandRef(
+@@ -200,7 +207,8 @@
+     }
+     const res = await this.pool.query(
+       `SELECT * FROM checkpoint_raw_captures
+-       WHERE checkpoint_id = $1 AND (message_id = $2 OR tool_call_id = $2)
++       WHERE checkpoint_id = $1
++         AND (message_id = $2 OR part_id = $2 OR tool_call_id = $2)
+        LIMIT 1`,
+       [active.checkpointId, identifier],
+     );
+--- a/src/checkpoint-schema.ts
++++ b/src/checkpoint-schema.ts
+@@ -72,6 +72,26 @@
+      ON checkpoints(session_id, created_at DESC)
+      WHERE is_active = true`
+   );
++  await pool.query(`
++    WITH ranked AS (
++      SELECT checkpoint_id,
++             ROW_NUMBER() OVER (
++               PARTITION BY session_id
++               ORDER BY created_at DESC, checkpoint_id DESC
++             ) AS active_rank
++      FROM checkpoints
++      WHERE is_active = true
++    )
++    UPDATE checkpoints AS c
++    SET is_active = false
++    FROM ranked AS r
++    WHERE c.checkpoint_id = r.checkpoint_id AND r.active_rank > 1
++  `);
++  await pool.query(
++    `CREATE UNIQUE INDEX IF NOT EXISTS uq_checkpoints_one_active
++     ON checkpoints(session_id)
++     WHERE is_active = true`
++  );
+   await pool.query(
+     `CREATE INDEX IF NOT EXISTS idx_checkpoints_created ON checkpoints(created_at DESC)`
+   );
+@@ -87,6 +107,10 @@
+      ON checkpoint_raw_captures(message_id)`
+   );
+   await pool.query(
++    `CREATE INDEX IF NOT EXISTS idx_raw_captures_part
++     ON checkpoint_raw_captures(part_id)`
++  );
++  await pool.query(
+     `CREATE INDEX IF NOT EXISTS idx_raw_captures_tool_call
+      ON checkpoint_raw_captures(tool_call_id)`
+   );
+--- a/test/messages-transform-compaction-safety.test.ts
++++ b/test/messages-transform-compaction-safety.test.ts
+@@ -129,4 +129,60 @@
+ 
+     strictEqual(messages[0].parts[0].state.output, 'must stay readable');
+   });
++
++  it('stores the original output before emitting a fetchable TOOL_REF', async () => {
++    const queries: Array<{ sql: string; params?: unknown[] }> = [];
++    const ctx = runtimeContext();
++    ctx.config = { contextCache: { enabled: true }, contextGovernor: { enabled: false } } as PluginContext['config'];
++    ctx.database = {
++      getPool: () => ({
++        query: async (sql: string, params?: unknown[]) => {
++          queries.push({ sql, params });
++          return { rows: [], rowCount: 1 };
++        },
++      }),
++    } as PluginContext['database'];
++    const original = `recoverable file contents ${'r'.repeat(500)}`;
++    const timestamp = Date.now() - 120_000;
++    const messages = [
++      { info: { role: 'assistant', id: 'message-old', sessionID: SESSION_ID }, parts: [{
++        id: 'part-old', callID: 'call-old', messageID: 'message-old', type: 'tool', tool: 'read', sessionID: SESSION_ID,
++        state: { status: 'completed', input: { filePath: 'src/recoverable.ts' }, output: original, time: { start: timestamp, end: timestamp + 1 } },
++      }] },
++      { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'next task' }] },
++    ];
++
++    await createMessagesTransformHook(ctx)({}, { messages });
++
++    const marker = messages[0].parts[0].state.output;
++    ok(marker.startsWith('TOOL_REF id=call-old'));
++    ok(marker.includes('fetch=context_fetch'));
++    const cacheInsert = queries.find((query) => query.sql.includes('INSERT INTO context_cache'));
++    ok(cacheInsert);
++    strictEqual(cacheInsert?.params?.[1], 'call-old');
++    strictEqual(cacheInsert?.params?.[6], original);
++  });
++
++  it('fails closed and leaves output raw when the recovery store write fails', async () => {
++    const ctx = runtimeContext();
++    ctx.config = { contextCache: { enabled: true }, contextGovernor: { enabled: false } } as PluginContext['config'];
++    ctx.database = {
++      getPool: () => ({
++        query: async (sql: string) => {
++          if (sql.includes('INSERT INTO context_cache')) throw new Error('cache unavailable');
++          return { rows: [], rowCount: 0 };
++        },
++      }),
++    } as PluginContext['database'];
++    const original = `must remain visible ${'v'.repeat(500)}`;
++    const messages = [
++      { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [toolPart('read', original, Date.now() - 120_000)] },
++      { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'next task' }] },
++    ];
++
++    await createMessagesTransformHook(ctx)({}, { messages });
++
++    strictEqual(messages[0].parts[0].state.output, original);
++  });
++
+ });
+--- a/test/governor-runtime-audit.test.ts
++++ b/test/governor-runtime-audit.test.ts
+@@ -45,3 +45,25 @@
+     assert.match(audit, /observed_at:\d{4}-\d{2}-\d{2}T/);
+   });
+ });
++
++it('audits a cloned message graph and cannot rewrite the active turn', async () => {
++  const ctx = runtimeContext();
++  const activeOutput = `current tool result ${'z'.repeat(5_000)}`;
++  const messages = [
++    { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'old context '.repeat(1_000) }] },
++    { info: { role: 'user', sessionID: 'governor-audit' }, parts: [{ type: 'text', text: 'current task' }] },
++    {
++      info: { role: 'assistant', sessionID: 'governor-audit' },
++      parts: [{
++        type: 'tool', tool: 'read',
++        state: { status: 'completed', input: { filePath: 'src/current.ts' }, output: activeOutput, time: { start: 1 } },
++      }],
++    },
++  ];
++
++  await createMessagesTransformHook(ctx)({}, { messages });
++
++  assert.equal(messages[2].parts[0].state.output, activeOutput);
++  assert.equal(messages[0].parts[0].text, 'old context '.repeat(1_000));
++  assert.ok(ctx.lastCompileResult);
++});
+--- a/test/compaction.test.ts
++++ b/test/compaction.test.ts
+@@ -258,4 +258,25 @@
+     strictEqual(compactor.getLastQuality()?.safe, false);
+     ok((compactor.getLastQuality()?.qualityScore ?? 1) < 0.6);
+   });
++
++  it('generates distinct recovery IDs for multiple tool parts sharing one message ID', () => {
++    const compactor = new ContextCompactor({ ...CFG, workingMemoryWindow: 0 });
++    const timestamp = Date.now() - 1_000;
++    const first: ToolCallRecord = {
++      tool: 'read', messageId: 'assistant-message', timestamp, sessionId: 's',
++      args: { filePath: 'first.ts' }, output: 'a'.repeat(500),
++    };
++    const second: ToolCallRecord = {
++      tool: 'read', messageId: 'assistant-message', timestamp, sessionId: 's',
++      args: { filePath: 'second.ts' }, output: 'b'.repeat(500),
++    };
++
++    const firstId = compactor.getExpandableRefId(first);
++    const secondId = compactor.getExpandableRefId(second);
++
++    ok(firstId.startsWith('assistant-message_'));
++    ok(secondId.startsWith('assistant-message_'));
++    ok(firstId !== secondId);
++  });
++
+ });
+\ No newline at end of file
+--- a/test/checkpoint-opencode-shape.test.ts
++++ b/test/checkpoint-opencode-shape.test.ts
+@@ -91,4 +91,24 @@
+     strictEqual(result.compactedRefs[0].toolCallId, 'call-ref');
+     strictEqual(result.compactedRefs[0].partId, 'part-ref');
+   });
++
++  it('enforces maxRawCaptureBytes as UTF-8 bytes and counts stored content only', () => {
++    const messages: SessionMessage[] = [{
++      info: { id: 'message-unicode', role: 'assistant' },
++      parts: [{
++        id: 'part-unicode', type: 'tool', callID: 'call-unicode', tool: 'read',
++        state: { status: 'completed', output: 'ééé', time: { start: 1, end: 2 } },
++      }],
++    }];
++
++    const result = buildCheckpoint({
++      sessionId: 'session-1', projectId: null, messages,
++      config: { ...CONFIG, maxRawCaptureBytes: 5 },
++    }).checkpoint;
++
++    strictEqual(Buffer.byteLength(result.rawCaptures[0].content, 'utf8'), 4);
++    strictEqual(result.rawCaptures[0].content, 'éé');
++    strictEqual(result.rawCaptures[0].tokenCount, 1);
++  });
++
+ });
+--- a/test/context-governor.test.ts
++++ b/test/context-governor.test.ts
+@@ -57,7 +57,11 @@
+ 
+ function actionFor(count: number, size: number, config = DEFAULT_GOVERNOR_CONFIG) {
+   const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, config);
+-  const messages = [msg('user', [text('continue')]), ...longToolMessages(count, size)];
++  const messages = [
++    ...longToolMessages(count, size),
++    msg('user', [text('continue')]),
++    msg('assistant', [text('current turn stays raw')]),
++  ];
+   return { messages, result: governor.govern(messages, 'balanced') };
+ }
+ 
+@@ -85,7 +89,11 @@
+ 
+   it('replaces older history with checkpoint refs at the checkpoint threshold', () => {
+     const governor = new AdaptiveContextGovernor(COMPILER_CONFIG, ACTION_LADDER_CONFIG);
+-    const messages = [msg('user', [text('resume')]), ...longToolMessages(30, 5000)];
++    const messages = [
++      ...longToolMessages(30, 5000),
++      msg('user', [text('resume')]),
++      msg('assistant', [text('current turn stays raw')]),
++    ];
+     const result = governor.govern(messages, 'balanced');
+     const firstText = String(messages[0].parts?.[0]?.text ?? '');
+     assert.equal(result.decision.action, 'checkpoint_refs_only');
+@@ -109,6 +117,8 @@
+       msg('assistant', [text('Failed test: benchmark continuity mismatch')]),
+       ...longToolMessages(120, 5000),
+       msg('assistant', [text('Next step: preserve checkpoint refs during rebuild')]),
++      msg('user', [text('continue from the checkpoint')]),
++      msg('assistant', [text('current turn stays raw')]),
+     ];
+     const result = governor.govern(messages, 'balanced');
+     const distilled = String(messages[0].parts?.[0]?.text ?? '');
+--- a/test/context-compiler-active-turn-safety.test.ts
++++ b/test/context-compiler-active-turn-safety.test.ts
+@@ -0,0 +1,66 @@
++import { describe, it } from 'node:test';
++import { ok, strictEqual } from 'node:assert/strict';
++import { compileContext } from '../dist/context-compiler.js';
++
++const config = {
++  enabled: true,
++  modes: { cheap: 20, normal: 20, deep: 20 },
++  defaultMode: 'normal' as const,
++  recentTurnWindow: 1,
++  statusInjection: false,
++  statusPlacement: 'end' as const,
++  statusVerbosity: 'compact' as const,
++  logEnabled: false,
++  logSummaryRetentionDays: null,
++  logDetailsRetentionDays: 1,
++  storeRawCompressedContent: false,
++};
++
++describe('context compiler active-turn safety', () => {
++  it('compresses old output without touching anything after the latest user message', () => {
++    const oldOutput = 'old output\n'.repeat(1_000);
++    const activeOutput = 'active output\n'.repeat(1_000);
++    const messages = [
++      { info: { role: 'assistant' }, parts: [{ type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'old.ts' }, output: oldOutput } }] },
++      { info: { role: 'user' }, parts: [{ type: 'text', text: 'current request' }] },
++      { info: { role: 'assistant' }, parts: [{ type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'current.ts' }, output: activeOutput } }] },
++    ];
++
++    const result = compileContext(messages, config);
++
++    ok(result.partsCompressed >= 1);
++    ok(messages[0].parts[0].state.output.startsWith('[TOOL:read]'));
++    strictEqual(messages[2].parts[0].state.output, activeOutput);
++  });
++
++  it('treats TOOL_REF and governor markers as terminal instead of compressing them again', () => {
++    const ref = 'TOOL_REF id=call-1 fetch=context_fetch tool=read file="old.ts" summary="stored"';
++    const distilled = '[TOOL_DISTILLED:read] tok=500 path=old.ts keep=stored';
++    const messages = [
++      { info: { role: 'assistant' }, parts: [
++        { type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'old.ts' }, output: ref } },
++        { type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'old.ts' }, output: distilled } },
++      ] },
++      { info: { role: 'user' }, parts: [{ type: 'text', text: 'continue' }] },
++    ];
++
++    const result = compileContext(messages, config);
++
++    strictEqual(result.partsCompressed, 0);
++    strictEqual(messages[0].parts[0].state.output, ref);
++    strictEqual(messages[0].parts[1].state.output, distilled);
++  });
++
++  it('does not replace a short output with a larger compiler summary', () => {
++    const output = '1234567890'.repeat(4);
++    const messages = [
++      { info: { role: 'assistant' }, parts: [{ type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'very/'.repeat(50) + 'long.ts' }, output } }] },
++      { info: { role: 'user' }, parts: [{ type: 'text', text: 'continue' }] },
++    ];
++
++    const result = compileContext(messages, config);
++
++    strictEqual(result.partsCompressed, 0);
++    strictEqual(messages[0].parts[0].state.output, output);
++  });
++});
+--- a/test/context-governor-active-turn-safety.test.ts
++++ b/test/context-governor-active-turn-safety.test.ts
+@@ -0,0 +1,92 @@
++import { describe, it } from 'node:test';
++import assert from 'node:assert/strict';
++import { AdaptiveContextGovernor } from '../dist/context-governor.js';
++import type { ContextCompilerConfig } from '../dist/types.js';
++import { DEFAULT_GOVERNOR_CONFIG } from '../dist/context-governor-profiles.js';
++
++const compilerConfig: ContextCompilerConfig = {
++  enabled: true,
++  modes: { cheap: 2_000, normal: 2_000, deep: 2_000 },
++  defaultMode: 'normal',
++  recentTurnWindow: 1,
++  statusInjection: false,
++  statusPlacement: 'end',
++  statusVerbosity: 'compact',
++  logEnabled: false,
++  logSummaryRetentionDays: null,
++  logDetailsRetentionDays: 30,
++  storeRawCompressedContent: false,
++};
++
++const forcedEmergencyConfig = {
++  ...DEFAULT_GOVERNOR_CONFIG,
++  profiles: {
++    ...DEFAULT_GOVERNOR_CONFIG.profiles,
++    balanced: {
++      ...DEFAULT_GOVERNOR_CONFIG.profiles.balanced,
++      targetBudget: 2_000,
++      maxBudget: 2_000,
++      recentTurnWindow: 1,
++      projectedGrowth: 0,
++    },
++  },
++  thresholds: {
++    lightBrief: 1,
++    compactToolCalls: 2,
++    checkpointRefsOnly: 3,
++    distilledStateOnly: 4,
++    emergencyRebuild: 5,
++  },
++} satisfies typeof DEFAULT_GOVERNOR_CONFIG;
++
++function text(role: string, value: string) {
++  return { info: { role }, parts: [{ type: 'text', text: value }] };
++}
++
++function tool(value: string) {
++  return {
++    info: { role: 'assistant' },
++    parts: [{
++      type: 'tool',
++      tool: 'bash',
++      state: { status: 'completed', output: value, input: { command: 'git status' } },
++    }],
++  };
++}
++
++describe('context governor active-turn safety', () => {
++  it('recomputes the user boundary after emergency prefix replacement', () => {
++    const governor = new AdaptiveContextGovernor(compilerConfig, forcedEmergencyConfig);
++    const oldMessages = Array.from({ length: 30 }, (_, index) =>
++      tool(`old tool ${index} ${'x'.repeat(600)}`));
++    const currentOutput = `CURRENT_TOOL_OUTPUT ${'z'.repeat(2_000)}`;
++    const messages = [
++      ...oldMessages,
++      text('user', 'inspect the current git output'),
++      tool(currentOutput),
++    ];
++
++    const result = governor.govern(messages, 'balanced');
++
++    assert.equal(result.decision.action, 'emergency_context_rebuild');
++    const currentTool = messages
++      .flatMap((message) => message.parts ?? [])
++      .find((part) => part.type === 'tool' && String(part.state?.output ?? '').includes('CURRENT_TOOL_OUTPUT'));
++    assert.ok(currentTool, 'current-turn tool part must survive the rebuild');
++    assert.equal(currentTool.state?.output, currentOutput);
++  });
++
++  it('fails safe without a user boundary and reports that no rebuild occurred', () => {
++    const governor = new AdaptiveContextGovernor(compilerConfig, forcedEmergencyConfig);
++    const messages = Array.from({ length: 20 }, (_, index) =>
++      tool(`unbounded tool ${index} ${'q'.repeat(600)}`));
++    const before = JSON.stringify(messages);
++
++    const result = governor.govern(messages, 'balanced');
++
++    assert.equal(result.decision.action, 'emergency_context_rebuild');
++    assert.equal(result.rebuildApplied, false);
++    assert.equal(JSON.stringify(messages), before);
++  });
++
++});
+--- a/test/checkpoint-store-safety.test.ts
++++ b/test/checkpoint-store-safety.test.ts
+@@ -0,0 +1,79 @@
++import { describe, it } from 'node:test';
++import { ok, strictEqual } from 'node:assert/strict';
++import { CheckpointStore } from '../dist/checkpoint-store.js';
++import { initializeCheckpointSchema } from '../dist/checkpoint-schema.js';
++
++function checkpointRow() {
++  return {
++    checkpoint_id: '00000000-0000-0000-0000-000000000001',
++    session_id: 'session-1', project_id: null, created_at: new Date('2026-01-01T00:00:00Z'),
++    source_message_start: 'msg-1', source_message_end: 'msg-2',
++    summary_markdown: 'summary', summary_tokens: 1, input_tokens_estimate: 2,
++    source_refs: [], compacted_refs: [], files_mentioned: [], tests_mentioned: [],
++    risks: [], next_steps: [], supersedes_checkpoint_id: null, schema_version: 1, is_active: true,
++  };
++}
++
++describe('checkpoint store safety', () => {
++  it('serializes checkpoint replacement per session before deactivating the prior active row', async () => {
++    const calls: string[] = [];
++    const client = {
++      query: async (sql: string) => {
++        calls.push(sql);
++        if (sql.includes('UPDATE checkpoints SET is_active')) return { rows: [] };
++        if (sql.includes('INSERT INTO checkpoints')) return { rows: [checkpointRow()] };
++        return { rows: [] };
++      },
++      release: () => {},
++    };
++    const pool = { connect: async () => client } as any;
++    const store = new CheckpointStore(pool);
++
++    await store.createCheckpoint({
++      sessionId: 'session-1', summaryMarkdown: 'summary', summaryTokens: 1,
++      inputTokensEstimate: 2, sourceRefs: [], compactedRefs: [], filesMentioned: [],
++      testsMentioned: [], risks: [], nextSteps: [], rawCaptures: [],
++    });
++
++    strictEqual(calls[0], 'BEGIN');
++    ok(calls[1].includes('pg_advisory_xact_lock'));
++    ok(calls[2].includes('UPDATE checkpoints SET is_active'));
++    strictEqual(calls.at(-1), 'COMMIT');
++  });
++
++  it('accepts a part ID as an expansion identifier', async () => {
++    const queries: string[] = [];
++    const pool = {
++      query: async (sql: string) => {
++        queries.push(sql);
++        if (sql.includes('FROM checkpoints')) return { rows: [checkpointRow()] };
++        if (sql.includes('FROM checkpoint_raw_captures')) return { rows: [{
++          raw_id: 'raw-1', checkpoint_id: checkpointRow().checkpoint_id,
++          message_id: 'msg-1', part_id: 'part-1', tool_call_id: 'call-1',
++          kind: 'tool_output', content: 'full output', token_count: 3,
++          captured_at: new Date('2026-01-01T00:00:01Z'),
++        }] };
++        return { rows: [] };
++      },
++    } as any;
++    const store = new CheckpointStore(pool);
++
++    const result = await store.expandRef('session-1', 'part-1');
++
++    strictEqual(result.found, true);
++    strictEqual(result.rawCapture?.content, 'full output');
++    ok(queries.some((sql) => sql.includes('part_id = $2')));
++  });
++
++  it('repairs duplicate active rows before installing the unique active-checkpoint index', async () => {
++    const queries: string[] = [];
++    const pool = { query: async (sql: string) => { queries.push(sql); return { rows: [] }; } } as any;
++
++    await initializeCheckpointSchema(pool);
++
++    const repairIndex = queries.findIndex((sql) => sql.includes('ROW_NUMBER() OVER'));
++    const uniqueIndex = queries.findIndex((sql) => sql.includes('uq_checkpoints_one_active'));
++    ok(repairIndex >= 0);
++    ok(uniqueIndex > repairIndex);
++  });
++});

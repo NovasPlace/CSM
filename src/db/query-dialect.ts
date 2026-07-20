@@ -51,6 +51,20 @@ export function jsonArrayContains(d: QueryDialect, col: string, paramIndex: numb
   return `${col} && $${paramIndex}`;
 }
 
+/** Require every value in the parameter array to occur in the JSON/SQL array column. */
+export function jsonArrayContainsAll(d: QueryDialect, col: string, paramIndex: number): string {
+  if (d === 'sqlite') {
+    return `NOT EXISTS (
+      SELECT 1 FROM json_each($${paramIndex}) AS required
+      WHERE NOT EXISTS (
+        SELECT 1 FROM json_each(${col}) AS actual
+        WHERE actual.value = required.value
+      )
+    )`;
+  }
+  return `${col} @> $${paramIndex}`;
+}
+
 export function jsonContainsPath(d: QueryDialect, col: string, path: string, paramIndex: number): string {
   if (d === 'sqlite') {
     return `EXISTS (SELECT 1 FROM json_each(json_extract(${col}, '$.${path}')) WHERE json_each.value IN (SELECT value FROM json_each($${paramIndex})))`;

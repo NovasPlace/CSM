@@ -3,6 +3,7 @@ import type { DatabasePool } from './types.js';
 import { getLogger } from './logger.js';
 import { dialectFromPool, nowFn, type QueryDialect } from './db/query-dialect.js';
 import type { AgentBookRule, AgentBookRuleInput } from './agentbook-types.js';
+import { Redactor } from './redactor.js';
 
 interface RuleRow {
   rule_id: string;
@@ -66,18 +67,23 @@ function validateRuleInput(input: AgentBookRuleInput): void {
 }
 
 export class AgentBookRulesStore {
-  constructor(private readonly pool: DatabasePool) {}
+  constructor(
+    private readonly pool: DatabasePool,
+    private readonly redactor: Redactor = new Redactor(),
+  ) {}
 
   async addRule(input: AgentBookRuleInput): Promise<AgentBookRule> {
     validateRuleInput(input);
     const dialect = dialectFromPool(this.pool);
     const ruleId = `rule_${randomUUID()}`;
+    const safeTrigger = input.trigger == null ? null : this.redactor.redact(input.trigger).text;
+    const safeInstruction = this.redactor.redact(input.instruction).text;
     const values: unknown[] = [
       ruleId,
       input.scope ?? 'project',
       input.priority ?? 0,
-      input.trigger ?? null,
-      input.instruction,
+      safeTrigger,
+      safeInstruction,
       input.overridePolicy ?? 'augment',
       databaseBoolean(dialect, input.active ?? true),
     ];
@@ -108,10 +114,12 @@ export class AgentBookRulesStore {
       if (!Number.isInteger(patch.priority)) throw new Error('AgentBook rule priority must be an integer');
       set('priority', patch.priority);
     }
-    if ('trigger' in patch) set('"trigger"', patch.trigger ?? null);
+    if ('trigger' in patch) {
+      set('"trigger"', patch.trigger == null ? null : this.redactor.redact(patch.trigger).text);
+    }
     if (patch.instruction !== undefined) {
       if (!patch.instruction.trim()) throw new Error('AgentBook rule instruction is required');
-      set('instruction', patch.instruction);
+      set('instruction', this.redactor.redact(patch.instruction).text);
     }
     if (patch.overridePolicy !== undefined) set('override_policy', patch.overridePolicy);
     if (patch.active !== undefined) set('active', databaseBoolean(dialect, patch.active));
@@ -157,7 +165,7 @@ export class AgentBookRulesStore {
        ORDER BY priority DESC, updated_at DESC, rule_id ASC`,
       values,
     );
-    return result.rows.map(rowToRule);
+    return result.rows.map((row) => this.sanitizeRule(row));
   }
 
   async getRule(ruleId: string): Promise<AgentBookRule | null> {
@@ -166,10 +174,19 @@ export class AgentBookRulesStore {
       `SELECT * FROM agentbook_rules WHERE rule_id = ${placeholder(dialect, 1)}`,
       [ruleId],
     );
-    return result.rows.length > 0 ? rowToRule(result.rows[0]) : null;
+    return result.rows.length > 0 ? this.sanitizeRule(result.rows[0]) : null;
   }
 
   async getActiveRules(): Promise<AgentBookRule[]> {
     return this.listRules({ active: true });
+  }
+
+  private sanitizeRule(row: unknown): AgentBookRule {
+    const rule = rowToRule(row);
+    return {
+      ...rule,
+      trigger: rule.trigger == null ? null : this.redactor.redact(rule.trigger).text,
+      instruction: this.redactor.redact(rule.instruction).text,
+    };
   }
 }

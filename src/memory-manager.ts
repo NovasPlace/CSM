@@ -7,12 +7,12 @@ import { extractConcepts } from './concept-extractor.js';
 import { buildLinksForMemory } from './memory-graph.js';
 import { hybridSearch } from './hybrid-search.js';
 import { pruneMemories } from './prune-scorer.js';
-import { Redactor } from './redactor.js';
+import { Redactor, redactJsonValue } from './redactor.js';
 import { DEFAULT_PRUNE_CONFIG } from './types.js';
 import { recordRecallBatch, type RecallTelemetrySource } from './recall-telemetry.js';
 import { applyTypeQuota } from './memory-type-quota.js';
 import { getLogger } from './logger.js';
-import { nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField, colInParamArray } from './db/query-dialect.js';
+import { nowFn, ilikeExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField, colInParamArray } from './db/query-dialect.js';
 import { HybridWeights } from './hybrid-search.js';
 import {
   Memory,
@@ -37,8 +37,8 @@ import {
 function mapProjectScope(row: Record<string, unknown>): ProjectScope {
   return {
     projectId: row.project_id as string,
-    name: row.project_id as string,
-    directory: row.project_id as string,
+    name: row.name as string,
+    directory: row.directory as string,
     createdAt: new Date(row.created_at as string),
     lastActiveAt: new Date(row.last_active_at as string),
     memoryCount: row.memory_count as number,
@@ -76,7 +76,7 @@ export class MemoryManager {
   private embeddings: EmbeddingGenerator;
   redactor?: Redactor;
 
-  constructor(database: Database, embeddings: EmbeddingGenerator, redactor?: Redactor) {
+  constructor(database: Database, embeddings: EmbeddingGenerator, redactor: Redactor = new Redactor()) {
     this.database = database;
     this.embeddings = embeddings;
     this.redactor = redactor;
@@ -127,6 +127,9 @@ export class MemoryManager {
    */
   async archiveSession(sessionId: string, summary?: string): Promise<void> {
     const pool = this.database.getPool();
+    const safeSummary = summary === undefined || !this.redactor
+      ? summary
+      : this.redactor.redact(summary).text;
     
     await pool.query(
       `UPDATE sessions 
@@ -134,7 +137,7 @@ export class MemoryManager {
            ended_at = ${nowFn(this.database.dialect)},
            summary = COALESCE($1, summary)
        WHERE id = $2`,
-      [summary, sessionId]
+      [safeSummary, sessionId]
     );
 
     await this.emitEvent('session.archived', { sessionId });
@@ -267,6 +270,17 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         contentToProcess = redactionResult.text;
       }
 
+      // Metadata and tags can carry the same caller-controlled values as content.
+      // Redact them structurally while preserving the transcript message ID used
+      // by the deduplication join.
+      let metadataToPersist = options.metadata ?? {};
+      let tagsToPersist = options.tags ?? [];
+      if (this.redactor) {
+        metadataToPersist = redactJsonValue(this.redactor, metadataToPersist);
+        tagsToPersist = redactJsonValue(this.redactor, tagsToPersist);
+        if (transcriptMsgId != null) metadataToPersist.messageId = transcriptMsgId;
+      }
+
       // Phase 5 — Apply per-type content quota (compress success/episodic, preserve errors/lessons)
       const quotaResult = applyTypeQuota(contentToProcess, options.type, options.emotion);
       if (quotaResult.compressed) {
@@ -282,8 +296,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       // Extract concepts from content
       const extraction = extractConcepts(contentToProcess);
       const extracted = extraction.concepts;
-      const mergedMetadata = { ...(options.metadata ?? {}), extracted_concepts: extracted };
-      const mergedTags = Array.from(new Set([...(options.tags ?? []), ...extracted.map(c => c.value)]));
+      const mergedMetadata = { ...metadataToPersist, extracted_concepts: extracted };
+      const mergedTags = Array.from(new Set([...tagsToPersist, ...extracted.map(c => c.value)]));
   
       // Generate embedding first
       let embedding: number[] | null = null;
@@ -427,10 +441,15 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       ? JSON.parse(row.metadata || '{}')
       : (row.metadata ?? {});
     const merged = { ...existing, ...patch };
+    const messageId = merged.messageId;
+    const safeMerged = this.redactor
+      ? redactJsonValue(this.redactor, merged)
+      : merged;
+    if (messageId != null) safeMerged.messageId = messageId;
 
     await pool.query(
       `UPDATE memories SET metadata = $1 WHERE id = $2`,
-      [JSON.stringify(merged), id],
+      [JSON.stringify(safeMerged), id],
     );
   }
 
@@ -453,8 +472,11 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
 
     for (const row of rows) {
       try {
-        const embedding = await this.embeddings.generate(row.content);
-        await this.storeEmbedding(row.id, row.content, embedding);
+        const safeContent = this.redactor
+          ? this.redactor.redact(row.content).text
+          : row.content;
+        const embedding = await this.embeddings.generate(safeContent);
+        await this.storeEmbedding(row.id, safeContent, embedding);
         counts.updated++;
       } catch (error) {
         getLogger().error('Embedding backfill failed', error instanceof Error ? error : undefined);
@@ -492,6 +514,17 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     telemetry?: { sessionId?: string; source?: RecallTelemetrySource },
   ): Promise<{ memory: Memory; score: number }[]> {
     const pool = this.database.getPool();
+    const safeQuery = this.redactor
+      ? this.redactor.redact(options.query).text
+      : options.query;
+    const compatibleTags = this.compatibleSearchTags(options.tags);
+    const lexicalQueries = Array.from(new Set([safeQuery, options.query]));
+    const requestedScope = options.searchMode ?? 'project';
+    if (requestedScope === 'project' && !options.projectId) {
+      const memories: { memory: Memory; score: number }[] = [];
+      await this.recordRecalls(memories, safeQuery, undefined, telemetry, 'empty_result');
+      return memories;
+    }
 
     // SQLite: skip vector search entirely, go to text fallback
     if (this.database.dialect === 'sqlite') {
@@ -501,15 +534,24 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       return memories;
     }
 
-    const queryEmbedding = await this.embeddings.generate(options.query);
+    // Only protected text may leave the process for a configured embedding provider.
+    const queryEmbedding = await this.embeddings.generate(safeQuery);
 
     try {
       const results = await hybridSearch(
         this.database,
-        options.query,
+        safeQuery,
         queryEmbedding,
         options.limit ?? 10,
-        { projectId: options.projectId, type: options.type, tags: options.tags, minImportance: options.minImportance, searchMode: options.searchMode, weights: options.weights },
+        {
+          projectId: options.projectId,
+          type: options.type,
+          tags: compatibleTags,
+          minImportance: options.minImportance,
+          searchMode: options.searchMode,
+          weights: options.weights,
+          lexicalQueries,
+        },
       );
 
       const memories: { memory: Memory; score: number }[] = [];
@@ -543,14 +585,22 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     let paramIndex = 2;
 
     const searchMode = options.searchMode ?? 'project';
-    if (searchMode === 'project' && options.projectId) {
-      sql += ` AND m.project_id = $${paramIndex}`;
-      params.push(options.projectId);
-      paramIndex++;
+    if (searchMode === 'project') {
+      if (options.projectId) {
+        sql += ` AND m.project_id = $${paramIndex}`;
+        params.push(options.projectId);
+        paramIndex++;
+      } else {
+        sql += ' AND 1=0';
+      }
     } else if (searchMode === 'legacy') {
-      sql += ` AND (m.project_id = $${paramIndex} OR m.project_id IS NULL)`;
-      params.push(options.projectId);
-      paramIndex++;
+      if (options.projectId) {
+        sql += ` AND (m.project_id = $${paramIndex} OR m.project_id IS NULL)`;
+        params.push(options.projectId);
+        paramIndex++;
+      } else {
+        sql += ' AND m.project_id IS NULL';
+      }
     }
     if (options.type) {
       sql += ` AND m.memory_type = $${paramIndex}`;
@@ -562,9 +612,9 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       params.push(options.minImportance);
       paramIndex++;
     }
-    if (options.tags && options.tags.length > 0) {
+    if (compatibleTags && compatibleTags.length > 0) {
       sql += ` AND m.tags && $${paramIndex}`;
-      params.push(options.tags);
+      params.push(compatibleTags);
       paramIndex++;
     }
 
@@ -577,11 +627,24 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       for (const row of result.rows) {
         const memory = this.mapMemory(row as Record<string, unknown>);
         const score = (row as Record<string, unknown>).similarity as number;
-        await this.touchMemory(memory.id);
         memories.push({ memory, score });
       }
-      await this.recordRecalls(memories, options.query, options.projectId, telemetry, 'vector_only');
-      return memories;
+      let combined = memories;
+      if (lexicalQueries.length > 1 || compatibleTags?.length !== options.tags?.length) {
+        const lexicalMatches = await this.textSearchFallback(options, false);
+        const seen = new Set<number>();
+        combined = [...lexicalMatches, ...memories].filter(({ memory }) => {
+          if (seen.has(memory.id)) return false;
+          seen.add(memory.id);
+          return true;
+        });
+      }
+      const limited = combined.slice(0, options.limit ?? 10);
+      for (const { memory } of limited) {
+        await this.touchMemory(memory.id);
+      }
+      await this.recordRecalls(limited, safeQuery, options.projectId, telemetry, 'vector_only');
+      return limited;
     } catch (_err) {
       getLogger().warn('Vector search failed, falling back to text search');
       const memories = await this.textSearchFallback(options);
@@ -603,15 +666,23 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     const params: unknown[] = [];
     let paramIndex = 1;
 
-    if (options.projectId) {
-      query += ` AND project_id = $${paramIndex}`;
-      params.push(options.projectId);
-      paramIndex++;
-    } else if (options.searchMode === 'project') {
-      // Default to current project if available
-      // This would need context awareness - for now skip
-    } else if (options.searchMode === 'legacy') {
-      query += ` AND project_id IS NULL`;
+    const searchMode = options.searchMode ?? 'project';
+    if (searchMode === 'project') {
+      if (options.projectId) {
+        query += ` AND project_id = $${paramIndex}`;
+        params.push(options.projectId);
+        paramIndex++;
+      } else {
+        query += ' AND 1=0';
+      }
+    } else if (searchMode === 'legacy') {
+      if (options.projectId) {
+        query += ` AND (project_id = $${paramIndex} OR project_id IS NULL)`;
+        params.push(options.projectId);
+        paramIndex++;
+      } else {
+        query += ' AND project_id IS NULL';
+      }
     }
 
     if (options.type) {
@@ -621,9 +692,14 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     }
 
     if (options.tags && options.tags.length > 0) {
-      query += ` AND ${jsonArrayContains(this.database.dialect, 'tags', paramIndex)}`;
+      const safeTags = this.redactor
+        ? redactJsonValue(this.redactor, options.tags)
+        : options.tags;
+      const tagPredicate = options.tagsMatch === 'all' ? jsonArrayContainsAll : jsonArrayContains;
+      query += ` AND (${tagPredicate(this.database.dialect, 'tags', paramIndex)} OR ${tagPredicate(this.database.dialect, 'tags', paramIndex + 1)})`;
       params.push(jsonParam(this.database.dialect, options.tags));
-      paramIndex++;
+      params.push(jsonParam(this.database.dialect, safeTags));
+      paramIndex += 2;
     }
 
     if (options.sessionId) {
@@ -649,18 +725,23 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     }
 
     if (options.entityType && options.entityValue) {
+      const safeEntityValue = this.redactor
+        ? this.redactor.redact(options.entityValue).text
+        : options.entityValue;
       if (this.database.dialect === 'sqlite') {
         query += ` AND EXISTS (
           SELECT 1 FROM json_each(json_extract(metadata, '$.extracted_concepts')) AS concept
           WHERE json_extract(concept.value, '$.type') = $${paramIndex}
-            AND json_extract(concept.value, '$.value') = $${paramIndex + 1}
+            AND (json_extract(concept.value, '$.value') = $${paramIndex + 1}
+              OR json_extract(concept.value, '$.value') = $${paramIndex + 2})
         )`;
-        params.push(options.entityType, options.entityValue);
-        paramIndex += 2;
+        params.push(options.entityType, options.entityValue, safeEntityValue);
+        paramIndex += 3;
       } else {
-        query += ` AND ${jsonContainsPath('pg', 'metadata', 'extracted_concepts', paramIndex)}`;
+        query += ` AND (${jsonContainsPath('pg', 'metadata', 'extracted_concepts', paramIndex)} OR ${jsonContainsPath('pg', 'metadata', 'extracted_concepts', paramIndex + 1)})`;
         params.push(JSON.stringify([{ type: options.entityType, value: options.entityValue }]));
-        paramIndex++;
+        params.push(JSON.stringify([{ type: options.entityType, value: safeEntityValue }]));
+        paramIndex += 2;
       }
     }
 
@@ -695,23 +776,42 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     return memories;
   }
 
+  private compatibleSearchTags(tags?: string[]): string[] | undefined {
+    if (!tags?.length) return tags;
+    const protectedTags = this.redactor
+      ? redactJsonValue(this.redactor, tags)
+      : tags;
+    return Array.from(new Set([...tags, ...protectedTags]));
+  }
+
   private async textSearchFallback(
     options: MemorySearchOptions,
+    touch: boolean = true,
   ): Promise<{ memory: Memory; score: number }[]> {
     const pool = this.database.getPool();
+    const safeQuery = this.redactor
+      ? this.redactor.redact(options.query).text
+      : options.query;
+    const queryVariants = Array.from(new Set([options.query, safeQuery]));
+    const queryConditions = queryVariants.map((_, index) =>
+      ilikeExpr(this.database.dialect, 'content', index + 1));
     let sql = `
       SELECT *
       FROM memories
-      WHERE ${ilikeExpr(this.database.dialect, 'content', 1)}
+      WHERE (${queryConditions.join(' OR ')})
     `;
-    const params: unknown[] = [`${options.query}%`];
-    let paramIndex = 2;
+    const params: unknown[] = queryVariants.map((query) => `%${query}%`);
+    let paramIndex = params.length + 1;
     const searchMode = options.searchMode ?? 'project';
 
-    if (searchMode === 'project' && options.projectId) {
-      sql += ` AND project_id = $${paramIndex}`;
-      params.push(options.projectId);
-      paramIndex++;
+    if (searchMode === 'project') {
+      if (options.projectId) {
+        sql += ` AND project_id = $${paramIndex}`;
+        params.push(options.projectId);
+        paramIndex++;
+      } else {
+        sql += ' AND 1=0';
+      }
     } else if (searchMode === 'legacy') {
       if (options.projectId) {
         sql += ` AND (project_id = $${paramIndex} OR project_id IS NULL)`;
@@ -731,9 +831,10 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       params.push(options.minImportance);
       paramIndex++;
     }
-    if (options.tags && options.tags.length > 0) {
+    const compatibleTags = this.compatibleSearchTags(options.tags);
+    if (compatibleTags && compatibleTags.length > 0) {
       sql += ` AND ${jsonArrayContains(this.database.dialect, 'tags', paramIndex)}`;
-      params.push(jsonParam(this.database.dialect, options.tags));
+      params.push(jsonParam(this.database.dialect, compatibleTags));
       paramIndex++;
     }
 
@@ -744,7 +845,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     const memories: { memory: Memory; score: number }[] = [];
     for (const row of result.rows) {
       const memory = this.mapMemory(row as Record<string, unknown>);
-      await this.touchMemory(memory.id);
+      if (touch) await this.touchMemory(memory.id);
       memories.push({ memory, score: memory.importance });
     }
     return memories;
@@ -786,6 +887,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   async upsertProjectScope(projectId: string, name: string, directory: string): Promise<void> {
     const pool = this.database.getPool();
     const now = nowFn(this.database.dialect);
+    const safeName = this.redactor ? this.redactor.redact(name).text : name;
     
     await pool.query(
       `INSERT INTO project_scopes (project_id, name, directory, last_active_at)
@@ -794,7 +896,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
        name = EXCLUDED.name,
        directory = EXCLUDED.directory,
        last_active_at = EXCLUDED.last_active_at`,
-      [projectId, name, directory]
+      [projectId, safeName, directory]
     );
   }
 
@@ -928,12 +1030,20 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
    */
   async emitEvent(channel: string, payload: Record<string, unknown>, sessionId?: string): Promise<void> {
     const pool = this.database.getPool();
+    const safePayload = this.redactor
+      ? redactJsonValue(this.redactor, payload)
+      : payload;
+    for (const identifier of ['sessionId', 'projectId', 'memoryId', 'eventId', 'checkpointId', 'goalId']) {
+      if (Object.prototype.hasOwnProperty.call(payload, identifier)) {
+        safePayload[identifier] = payload[identifier];
+      }
+    }
     
     try {
       await pool.query(
         `INSERT INTO memory_events (channel, payload, session_id)
          VALUES ($1, $2, $3)`,
-        [channel, JSON.stringify(payload), sessionId]
+        [channel, JSON.stringify(safePayload), sessionId]
       );
     } catch (error) {
       getLogger().error('Failed to emit event', error instanceof Error ? error : undefined);
@@ -1082,6 +1192,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   ): Promise<void> {
     const pool = this.database.getPool();
     const source = sourceOverride ?? telemetry?.source ?? 'search';
+    const safeQuery = this.redactor ? this.redactor.redact(query).text : query;
 
     try {
       if (entries.length === 0) {
@@ -1091,7 +1202,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
             memoryId: null,
             sessionId: telemetry?.sessionId,
             projectId: projectId ?? null,
-            query,
+            query: safeQuery,
             source: 'empty_result',
             rank: 0,
             score: null,
@@ -1106,7 +1217,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
           memoryId: entry.memory.id,
           sessionId: telemetry?.sessionId,
           projectId: entry.memory.projectId ?? projectId ?? null,
-          query,
+          query: safeQuery,
           source,
           rank: index + 1,
           score: entry.score,

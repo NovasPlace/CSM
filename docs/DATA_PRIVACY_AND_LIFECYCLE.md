@@ -8,7 +8,13 @@ Depending on configuration and agent activity, CSM can persist prompts and respo
 
 `CSM_AUTO_STORE_CONVERSATIONS` and `CSM_FULL_TRANSCRIPTS` default to `true`. Review those settings before using CSM with regulated, confidential, or customer-controlled content.
 
-The redactor is enabled by default and runs before memory content is embedded or stored. It detects common secrets, credentials in URLs, email addresses, phone numbers, IP addresses, and absolute paths. Pattern redaction reduces accidental retention; it is not a data-loss-prevention guarantee and cannot identify every sensitive value.
+The redactor is enabled by default at the following supported boundaries: memory content, tags, metadata updates, session summaries, project display names, and event payloads; context-cache content and metadata; bridge journal entries; manual, automatic, and shutdown distillation; experience-packet payloads; AgentBook events, rules, state, summaries, and the generated `AGENTBOOK_STATE.md` front page. Search text is protected before an embedding-provider call, and both backfill implementations protect legacy content before embedding or writing a new chunk. Project IDs, session IDs, event IDs, project directories, and other database join identifiers remain intact. An explicitly disabled redactor is honored.
+
+The redactor detects common secrets, credentials in URLs, email addresses, phone numbers, IP addresses, and recognized absolute-path forms, including UNC paths and quoted paths containing spaces. Structured keys and values are protected before JSON serialization so patterns cannot corrupt stored JSON or survive in object-key names. New cached file reads store a protected display path plus a session-namespaced one-way lookup digest; the internal digest is not returned through cache reads. Lookup uses that digest for new rows and the exact raw path for legacy rows, never a shared redaction marker that could alias two files. Pattern redaction reduces accidental retention; it is not a data-loss-prevention guarantee and cannot identify every sensitive value.
+
+The supported-boundary list is not universal field-level protection. Goal descriptions and goal context, plus structured checkpoint and work-journal reference/path arrays, are not yet covered by the same end-to-end proof. Treat those inputs as sensitive, and do not use the redactor as a substitute for access control or content classification.
+
+Redaction is not retroactive. Upgrading CSM does not rewrite existing database rows, generated documents, exports, logs, or backups. If an earlier release may have captured a secret, rotate the credential, inspect those stores, and handle any cleanup through a reviewed backup-and-preview process rather than an automatic bulk rewrite.
 
 ## Project isolation
 
@@ -77,11 +83,12 @@ Before production use:
 
 1. Decide whether conversation and full-transcript capture are appropriate.
 2. Test redaction against representative sensitive data.
-3. Isolate trust domains with separate databases and credentials.
-4. Configure PostgreSQL TLS or encrypted local storage.
-5. Run cleanup in preview mode and record approval before `apply=true`.
-6. Define separate retention for logs, generated documents, exports, and backups.
-7. Test backup restoration and deletion procedures.
-8. Restrict who can invoke operator-wide diagnostics or use direct database access.
+3. Review pre-upgrade databases and generated files separately; redaction does not rewrite history.
+4. Isolate trust domains with separate databases and credentials.
+5. Configure PostgreSQL TLS or encrypted local storage.
+6. Run cleanup in preview mode and record approval before `apply=true`.
+7. Define separate retention for logs, generated documents, exports, and backups.
+8. Test backup restoration and deletion procedures.
+9. Restrict who can invoke operator-wide diagnostics or use direct database access.
 
 CSM is not certified for a particular regulatory regime. Operators remain responsible for data classification, lawful basis, consent, access requests, deletion SLAs, retention schedules, residency, incident response, and vendor review.

@@ -198,7 +198,7 @@ describe('Capability provenance migration — PostgreSQL', { skip: !PG_URL }, ()
   beforeEach(async () => {
     if (!pgPool) return;
     await pgPool.query(
-      "DELETE FROM memories WHERE metadata->>'dedup_key' IN ('cap:edit:ok', 'cap:write:ok', 'cap:read:ok', 'cap:bash:ok', 'cap:grep:ok', 'cap:closure-test:ok')",
+      "DELETE FROM memories WHERE metadata->>'dedup_key' IN ('cap:provenance-migration-pg-edit:ok', 'cap:provenance-migration-pg-grep:ok')",
     ).catch(() => {});
   });
 
@@ -208,7 +208,7 @@ describe('Capability provenance migration — PostgreSQL', { skip: !PG_URL }, ()
     const meta = JSON.stringify({
       promotion_source: 'belief_promotion_engine',
       candidate_type: 'candidate_capability',
-      dedup_key: 'cap:edit:ok',
+      dedup_key: 'cap:provenance-migration-pg-edit:ok',
       candidate_id: 100,
       source_packet_ids: [1, 2],
       evidence_sessions: 2,
@@ -229,7 +229,7 @@ describe('Capability provenance migration — PostgreSQL', { skip: !PG_URL }, ()
     assert.equal(result1.alreadyMigrated, 0);
 
     const row = await pgPool.query(
-      "SELECT content, metadata FROM memories WHERE metadata->>'dedup_key' = 'cap:edit:ok' AND metadata->>'candidate_type' = 'candidate_capability'",
+      "SELECT content, metadata FROM memories WHERE metadata->>'dedup_key' = 'cap:provenance-migration-pg-edit:ok' AND metadata->>'candidate_type' = 'candidate_capability'",
     );
     assert.equal(row.rows.length, 1);
     assert.ok(row.rows[0].content.startsWith('[Capability provenance]'));
@@ -241,7 +241,7 @@ describe('Capability provenance migration — PostgreSQL', { skip: !PG_URL }, ()
     assert.equal(result2.migrated, 0);
     assert.equal(result2.alreadyMigrated, 1);
 
-    await pgPool.query("DELETE FROM memories WHERE metadata->>'dedup_key' = 'cap:edit:ok' AND metadata->>'candidate_type' = 'candidate_capability'").catch(() => {});
+    await pgPool.query("DELETE FROM memories WHERE metadata->>'dedup_key' = 'cap:provenance-migration-pg-edit:ok' AND metadata->>'candidate_type' = 'candidate_capability'").catch(() => {});
   });
 
   it('structural dedup prevents duplicate promotion on PG', async () => {
@@ -250,7 +250,7 @@ describe('Capability provenance migration — PostgreSQL', { skip: !PG_URL }, ()
     const meta = JSON.stringify({
       promotion_source: 'belief_promotion_engine',
       candidate_type: 'candidate_capability',
-      dedup_key: 'cap:grep:ok',
+      dedup_key: 'cap:provenance-migration-pg-grep:ok',
       record_type: 'capability_provenance',
       canonical_key: 'tool:grep:reliability',
     });
@@ -263,11 +263,11 @@ describe('Capability provenance migration — PostgreSQL', { skip: !PG_URL }, ()
     const dupResult = await pgPool.query(
       `SELECT id, content FROM memories
        WHERE memory_type = 'workspace'
-         AND metadata->>'dedup_key' = 'cap:grep:ok'
+         AND metadata->>'dedup_key' = 'cap:provenance-migration-pg-grep:ok'
        LIMIT 1`,
     );
     assert.equal(dupResult.rows.length, 1, 'structural dedup should find existing record by dedup_key');
 
-    await pgPool.query("DELETE FROM memories WHERE metadata->>'dedup_key' = 'cap:grep:ok' AND metadata->>'candidate_type' = 'candidate_capability'").catch(() => {});
+    await pgPool.query("DELETE FROM memories WHERE metadata->>'dedup_key' = 'cap:provenance-migration-pg-grep:ok' AND metadata->>'candidate_type' = 'candidate_capability'").catch(() => {});
   });
 });

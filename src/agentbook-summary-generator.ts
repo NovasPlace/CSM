@@ -12,6 +12,7 @@ import {
   SUMMARY_THRESHOLD_EVENTS,
 } from './agentbook-types.js';
 import type { AgentBookEventStore } from './agentbook-event-store.js';
+import { Redactor, redactJsonValue } from './redactor.js';
 
 interface SummaryRow {
   summary_id: string;
@@ -178,6 +179,7 @@ export class AgentBookSummaryGenerator {
   constructor(
     private readonly pool: DatabasePool,
     private readonly eventStore: AgentBookEventStore,
+    private readonly redactor: Redactor = new Redactor(),
   ) {}
 
   async maybeGenerate(projectId: string): Promise<AgentBookSummary | null> {
@@ -207,6 +209,13 @@ export class AgentBookSummaryGenerator {
     if (existing) return existing;
 
     const extracted = extractSummaryFields(events);
+    const safeContent = redactJsonValue(this.redactor, {
+      summary: buildSummaryText(events),
+      openQuestions: extracted.openQuestions,
+      decisions: extracted.decisions,
+      failures: extracted.failures,
+      nextSteps: extracted.nextSteps,
+    });
     const summaryId = `summary_${randomUUID()}`;
     const dialect = dialectFromPool(this.pool);
     const values: unknown[] = [
@@ -215,11 +224,11 @@ export class AgentBookSummaryGenerator {
       fromEventId,
       toEventId,
       events.length,
-      buildSummaryText(events),
-      JSON.stringify(extracted.openQuestions),
-      JSON.stringify(extracted.decisions),
-      JSON.stringify(extracted.failures),
-      JSON.stringify(extracted.nextSteps),
+      safeContent.summary,
+      JSON.stringify(safeContent.openQuestions),
+      JSON.stringify(safeContent.decisions),
+      JSON.stringify(safeContent.failures),
+      JSON.stringify(safeContent.nextSteps),
       null,
       sourceHash,
     ];
@@ -246,7 +255,7 @@ export class AgentBookSummaryGenerator {
        LIMIT 1`,
       [projectId],
     );
-    return result.rows.length > 0 ? rowToSummary(dialect, result.rows[0]) : null;
+    return result.rows.length > 0 ? this.sanitizeSummary(dialect, result.rows[0]) : null;
   }
 
   async listSummaries(projectId: string, limit: number): Promise<AgentBookSummary[]> {
@@ -259,7 +268,7 @@ export class AgentBookSummaryGenerator {
        LIMIT ${placeholder(dialect, 2)}`,
       [projectId, safeLimit],
     );
-    return result.rows.map((row) => rowToSummary(dialect, row));
+    return result.rows.map((row) => this.sanitizeSummary(dialect, row));
   }
 
   private async getSummary(summaryId: string): Promise<AgentBookSummary | null> {
@@ -268,7 +277,7 @@ export class AgentBookSummaryGenerator {
       `SELECT * FROM agentbook_summaries WHERE summary_id = ${placeholder(dialect, 1)}`,
       [summaryId],
     );
-    return result.rows.length > 0 ? rowToSummary(dialect, result.rows[0]) : null;
+    return result.rows.length > 0 ? this.sanitizeSummary(dialect, result.rows[0]) : null;
   }
 
   private async findExisting(
@@ -288,7 +297,20 @@ export class AgentBookSummaryGenerator {
        LIMIT 1`,
       [projectId, fromEventId, toEventId, sourceHash],
     );
-    return result.rows.length > 0 ? rowToSummary(dialect, result.rows[0]) : null;
+    return result.rows.length > 0 ? this.sanitizeSummary(dialect, result.rows[0]) : null;
+  }
+
+  private sanitizeSummary(dialect: QueryDialect, row: unknown): AgentBookSummary {
+    const summary = rowToSummary(dialect, row);
+    const safe = redactJsonValue(this.redactor, {
+      summary: summary.summary,
+      openQuestions: summary.openQuestions,
+      decisions: summary.decisions,
+      failures: summary.failures,
+      nextSteps: summary.nextSteps,
+      model: summary.model,
+    });
+    return { ...summary, ...safe };
   }
 
   private async loadAllEvents(projectId: string): Promise<AgentBookEvent[]> {

@@ -11,7 +11,7 @@ import { MemoryExtractor } from './memory-extractor.js';
 import { ToolCallDistiller } from './tool-distiller.js';
 import { ContextCompactor } from './context-compactor.js';
 import { Database } from './database.js';
-import type { Redactor } from './redactor.js';
+import { Redactor, redactJsonValue } from './redactor.js';
 import { listMemoriesOp, saveMemoryOp, searchMemoriesOp } from './bridge-ops.js';
 import { RecallQualityAuditReportBuilder, validateRecallQualityAuditParams } from './recall-quality-tool.js';
 import { CSM_TOOL_NAMES } from './tool-names.js';
@@ -48,10 +48,13 @@ export function memorySaveTool(memoryManager: MemoryManager, projectId: string) 
         sessionId: context.sessionID,
         projectId,
       });
+      const savedContent = typeof memory.content === 'string'
+        ? memory.content
+        : (memoryManager.redactor ?? new Redactor()).redact(args.content).text;
 
       return {
         title: 'Memory Saved',
-        output: `Saved memory #${memory.id}: ${args.content.substring(0, 100)}${args.content.length > 100 ? '...' : ''}`,
+        output: `Saved memory #${memory.id}: ${savedContent.substring(0, 100)}${savedContent.length > 100 ? '...' : ''}`,
         metadata: {
           memoryId: memory.id,
           type: args.type,
@@ -318,14 +321,20 @@ export function memoryLessonTool(memoryManager: MemoryManager, projectId: string
         sessionId: context.sessionID,
         projectId,
       });
+      const savedContent = typeof memory.content === 'string'
+        ? memory.content
+        : (memoryManager.redactor ?? new Redactor()).redact(args.content).text;
 
-      const triggerNote = Object.keys(triggerMeta).length > 0
+      const triggerNoteRaw = Object.keys(triggerMeta).length > 0
         ? `\nTrigger patterns saved: ${JSON.stringify(triggerMeta)}`
         : '\nNo trigger patterns specified — lesson will match broadly.';
+      const triggerNote = memoryManager.redactor
+        ? memoryManager.redactor.redact(triggerNoteRaw).text
+        : triggerNoteRaw;
 
       return {
         title: 'Lesson Saved',
-        output: `Lesson #${memory.id} saved: ${args.content.substring(0, 100)}${args.content.length > 100 ? '...' : ''}${triggerNote}\n\nThis lesson will fire contextually when matching tools/files are used.`,
+        output: `Lesson #${memory.id} saved: ${savedContent.substring(0, 100)}${savedContent.length > 100 ? '...' : ''}${triggerNote}\n\nThis lesson will fire contextually when matching tools/files are used.`,
         metadata: {
           memoryId: memory.id,
           importance: memory.importance,
@@ -653,51 +662,50 @@ export function memoryDistillTool(
     },
     async execute(args, context) {
       const summary = distiller.distill();
+      const activeRedactor = redactor ?? new Redactor();
+      const safeSummary = {
+        ...summary,
+        groups: redactJsonValue(activeRedactor, summary.groups),
+        compressed: activeRedactor.redact(summary.compressed).text,
+      };
 
       const shouldPersist = args.persist ?? true;
       const shouldExtract = args.extractMemories ?? true;
 
-      if (shouldPersist && context.sessionID && summary.groups.length > 0) {
+      if (shouldPersist && context.sessionID && safeSummary.groups.length > 0) {
         const pool = database.getPool();
-        const groupsJson = JSON.stringify(summary.groups);
-        const compressedText = redactor
-          ? redactor.redact(summary.compressed).text
-          : summary.compressed;
-        const groupsText = redactor
-          ? redactor.redact(groupsJson).text
-          : groupsJson;
         await pool.query(
           `INSERT INTO distilled_summaries (id, session_id, groups, compressed, total_calls_summarized)
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (session_id, md5(compressed)) DO NOTHING`,
           [
-            summary.id,
+            safeSummary.id,
             context.sessionID,
-            groupsText,
-            compressedText,
-            summary.totalCallsSummarized,
+            JSON.stringify(safeSummary.groups),
+            safeSummary.compressed,
+            safeSummary.totalCallsSummarized,
           ],
         );
       }
 
       let extractedCount = 0;
-      if (shouldExtract && context.sessionID && summary.groups.length > 0) {
+      if (shouldExtract && context.sessionID && safeSummary.groups.length > 0) {
         const candidates = await extractor.extractFromDistilledSummaries(
           context.sessionID,
           projectId,
-          summary,
+          safeSummary,
         );
         extractedCount = candidates.length;
       }
 
       return {
         title: 'Tool Calls Distilled',
-        output: summary.compressed +
+        output: safeSummary.compressed +
           (extractedCount > 0 ? `\n\nExtracted ${extractedCount} memory candidates from distilled activity.` : ''),
         metadata: {
-          summaryId: summary.id,
-          groupsCount: summary.groups.length,
-          totalCallsSummarized: summary.totalCallsSummarized,
+          summaryId: safeSummary.id,
+          groupsCount: safeSummary.groups.length,
+          totalCallsSummarized: safeSummary.totalCallsSummarized,
           extractedCandidates: extractedCount,
           persisted: shouldPersist,
         },

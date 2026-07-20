@@ -8,50 +8,58 @@ No active goal recorded.
 
 ## Current State
 - Phase: Not recorded
-- Events: 5069
-- Sessions: 47
-- Latest summary: summary_a01e3843-97e0-43d0-a611-ecbc8f3a47ec
-- Updated: 2026-07-18T14:57:12.413Z
+- Events: 5111
+- Sessions: 49
+- Latest summary: summary_0f50a9f7-e6f1-4502-867a-ec8f69428797
+- Updated: 2026-07-19T05:07:09.012Z
 
 ## Recent Work
-- [command_run] bash: ℹ tests 42
-ℹ pass 42
-ℹ fail 0
-ℹ skipped 0
-- [command_run] bash: failing tests:
+- [note] webfetch: GitHub - NovasPlace/Autonomic\_Core: Autonomic substrate for AI agents. Decentralized immune system to prevent semantic drift. · GitHub                                             
 
-test at test\codex-bridge-lifecycle.test.ts:1:1848
-✖ releases a pending PostgreSQL ledger lease when bridge construction fails (1513.4681ms)
-  error: sorry, too many clients alread
-- [command_run] bash: records and retrieves session usage
-  ✖ reports weekly usage across sessions
-  ✖ detects over-quota usage
-✖ TokenBudgetLedger (407.5557ms)
-✔ logs a non-blocking experience packet write failure (9.
-- [command_run] bash: Name               Status
-----               ------
-postgresql-x64-16 Running
-postgresql-x64-17 Running
-True
-- [command_run] bash: failing lines: 86
-X releases a pending PostgreSQL ledger lease when bridge construction fails (1513.4681ms)
-X keeps the database open when ledger disconnect fails and retries only unfinished work (2
-- [command_run] bash: U+0020  
-U+0020  
-U+0393 �
-U+00A3 �
-U+00FB �
-U+0020  
-U+0072 r
-U+0065 e
-U+0063 c
-U+006F o
-U+0072 r
-U+0064 d
-- [command_run] bash: matches: 0
-- [command_run] bash: (no output)
-- [command_run] bash: fail lines: 0
-- [command_run] bash: (no output)
+[Skip to content](
+- [note] csm_memory_list: Found 5 memories:
+
+#479474 conversation (0.30) [auto-captured, conversation, full-transcript, assistant, memory_recall, db, session, plugin, vector] | tool:memory_recall, concept:db, concept:session, 
+- [note] csm_agentbook_events: No AgentBook events matched.
+- [note] csm_agentbook_events: No AgentBook events matched.
+- [note] csm_memory_packets: === EXPERIENCE PACKETS (5 shown / 51170 total) ===
+
+#59455 [session_checkpoint] 2026-07-19 04:05:50
+  Event: session checkpoint (2 messages)
+  Source: session=ses_0877 | confidence=80%
+  State:  load=
+- [note] csm_continuity_report: Continuity Resilience Report (compact)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Executive Summary
+───────────────────────────
+   Grade: HEALTHY
+   Score: 94/100
+   Confidence: 100% 
+- [note] csm_self_model: Self-model has 8 capabilities with drift warnings
+[code_editing] confidence=0.900 uncertainty=0.500 successes=3849 failures=0 evidence=3849 lastVerified=2026-07-17T22:09:08.433Z
+[context_budgeting] co
+- [note] csm_runtime_status: {
+  "plugin_loaded": true,
+  "database_connected": true,
+  "registered_csm_tools": [
+    "csm_memory_save",
+    "csm_memory_search",
+    "csm_memory_list",
+    "csm_memory_delete",
+    "csm_memory_con
+- [note] csm_continuity_report: Continuity Resilience Report
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Overall: HEALTHY (score: 94/100, weight: 100%)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. 
+- [note] skill: <skill_content name="customize-opencode">
+# Skill: customize-opencode
+
+<!--
+  Built-in skill. Name and description are registered in code at
+  packages/core/src/plugin/skill.ts
+  and CUSTOMIZE_OPENCOD
 
 ## Known Problems
 - No active blockers or known failures.

@@ -140,12 +140,22 @@ export class DecisionRegistry {
     const opts: MemoryListOptions = {
       type: 'preference',
       tags: ['decision', 'scope:global'],
+      tagsMatch: 'all',
+      searchMode: 'global',
       limit: 20,
       sortBy: 'recent',
     };
 
     const memories = await this.memoryManager.listMemories(opts);
-    return memories.map(m => this.toRecord(m));
+    return memories
+      .filter((memory) => {
+        const tags = memory.tags ?? [];
+        const scope = (memory.metadata as Record<string, unknown> | undefined)?.scope;
+        return tags.includes('decision')
+          && tags.includes('scope:global')
+          && (scope === undefined || scope === 'global');
+      })
+      .map(m => this.toRecord(m));
   }
 
   async searchDecisions(query: string, projectId?: string): Promise<DecisionRecord[]> {

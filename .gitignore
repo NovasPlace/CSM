@@ -1,4 +1,4 @@
-node_modules
+﻿node_modules
 dist
 *.log
 .env
@@ -18,3 +18,12 @@ opencode
 .cross-session-memory/
 .tmp/
 .release/
+.csm-backups/
+.obsidian/
+.tmp_*/
+*.canvas
+*.base
+runtime/
+2026-*.md
+Untitled*
+

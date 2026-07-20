@@ -7,6 +7,7 @@ import {
 } from './db/query-dialect.js';
 import type { AgentBookCurrentState, AgentBookEvent } from './agentbook-types.js';
 import type { AgentBookEventStore } from './agentbook-event-store.js';
+import { Redactor, redactJsonValue } from './redactor.js';
 
 interface StateRow {
   project_id: string;
@@ -166,6 +167,7 @@ export class AgentBookStateProjector {
   constructor(
     private readonly pool: DatabasePool,
     private readonly eventStore: AgentBookEventStore,
+    private readonly redactor: Redactor = new Redactor(),
   ) {}
 
   async project(projectId: string): Promise<AgentBookCurrentState> {
@@ -179,7 +181,7 @@ export class AgentBookStateProjector {
     const summarySteps = latestSummary
       ? stringArray(dialectFromPool(this.pool), latestSummary.next_steps)
       : [];
-    const state: AgentBookCurrentState = {
+    const state = this.sanitizeState({
       projectId,
       activeGoal: deriveGoal(events),
       currentPhase: derivePhase(events),
@@ -191,7 +193,7 @@ export class AgentBookStateProjector {
       updatedAt: new Date().toISOString(),
       eventCount,
       sessionCount,
-    };
+    });
     await this.upsertState(state);
     getLogger().debug('AgentBook current state projected', { projectId });
     return state;
@@ -199,18 +201,19 @@ export class AgentBookStateProjector {
 
   async upsertState(state: AgentBookCurrentState): Promise<void> {
     const dialect = dialectFromPool(this.pool);
+    const safeState = this.sanitizeState(state);
     const values: unknown[] = [
-      state.projectId,
-      state.activeGoal,
-      state.currentPhase,
-      state.latestSummaryId,
-      JSON.stringify(state.recentChanges),
-      JSON.stringify(state.blockers),
-      JSON.stringify(state.nextSteps),
-      state.rulesVersion,
-      state.updatedAt,
-      state.eventCount,
-      state.sessionCount,
+      safeState.projectId,
+      safeState.activeGoal,
+      safeState.currentPhase,
+      safeState.latestSummaryId,
+      JSON.stringify(safeState.recentChanges),
+      JSON.stringify(safeState.blockers),
+      JSON.stringify(safeState.nextSteps),
+      safeState.rulesVersion,
+      safeState.updatedAt,
+      safeState.eventCount,
+      safeState.sessionCount,
     ];
     const params = values.map((_, index) => placeholder(dialect, index + 1)).join(', ');
     const columns = `(project_id, active_goal, current_phase, latest_summary_id,
@@ -246,7 +249,18 @@ export class AgentBookStateProjector {
       `SELECT * FROM agentbook_current_state WHERE project_id = ${placeholder(dialect, 1)}`,
       [projectId],
     );
-    return result.rows.length > 0 ? rowToState(dialect, result.rows[0]) : null;
+    return result.rows.length > 0 ? this.sanitizeState(rowToState(dialect, result.rows[0])) : null;
+  }
+
+  private sanitizeState(state: AgentBookCurrentState): AgentBookCurrentState {
+    const safe = redactJsonValue(this.redactor, {
+      activeGoal: state.activeGoal,
+      currentPhase: state.currentPhase,
+      recentChanges: state.recentChanges,
+      blockers: state.blockers,
+      nextSteps: state.nextSteps,
+    });
+    return { ...state, ...safe };
   }
 
   private async loadLatestSummary(projectId: string): Promise<LatestSummaryRow | null> {

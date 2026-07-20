@@ -5,10 +5,19 @@ import { ToolCallDistiller } from './tool-distiller.js';
 import type { MemoryType, TTLConfig, ToolCallRecord } from './types.js';
 import { asLimit, asRecord, asString, asStringArray, requireSession, requireString } from './codex-bridge-extra-utils.js';
 import { withBridgeProvenance } from './bridge-provenance.js';
+import { Redactor, redactJsonValue } from './redactor.js';
 
 export async function memoryTranscriptOp(memoryManager: CodexBridgeExtraDeps['memoryManager'], sessionId: string | undefined, input: Record<string, unknown>) {
   const sid = requireSession(sessionId);
-  const memories = await memoryManager.listMemories({ type: 'conversation', limit: asLimit(input.limit, 50), sortBy: 'recent', sessionId: sid });
+  const projectId = requireString(input.projectRoot, 'projectRoot');
+  const memories = await memoryManager.listMemories({
+    type: 'conversation',
+    projectId,
+    searchMode: 'project',
+    limit: asLimit(input.limit, 50),
+    sortBy: 'recent',
+    sessionId: sid,
+  });
   const role = asString(input.role) ?? 'all';
   return { sessionId: sid, count: memories.filter((m) => m.sessionId === sid && (role === 'all' || (m.metadata?.role as string | undefined) === role)).length, transcript: memories };
 }
@@ -123,15 +132,18 @@ export async function memoryDistillOp(deps: CodexBridgeExtraDeps, sessionId: str
   for (const call of calls) distiller.record(call);
   const summary = distiller.distill();
   if (summary.groups.length === 0) return { summary, extractedCandidates: 0, reason: 'no groups met the distillation threshold' };
-  const redactor = deps.memoryManager.redactor;
-  const compressed = redactor ? redactor.redact(summary.compressed).text : summary.compressed;
-  const groupsText = redactor ? redactor.redact(JSON.stringify(summary.groups)).text : JSON.stringify(summary.groups);
+  const redactor = deps.memoryManager.redactor ?? new Redactor();
+  const safeSummary = {
+    ...summary,
+    groups: redactJsonValue(redactor, summary.groups),
+    compressed: redactor.redact(summary.compressed).text,
+  };
   await deps.database.getPool().query(
     `INSERT INTO distilled_summaries (id, session_id, groups, compressed, total_calls_summarized) VALUES ($1, $2, $3, $4, $5)`,
-    [summary.id, sid, groupsText, compressed, summary.totalCallsSummarized],
+    [safeSummary.id, sid, JSON.stringify(safeSummary.groups), safeSummary.compressed, safeSummary.totalCallsSummarized],
   );
-  const extracted = input.extractMemories === false ? [] : await deps.memoryExtractor.extractFromDistilledSummaries(sid, asString(input.projectRoot) ?? sid, summary);
-  return { summary, extractedCandidates: extracted.length };
+  const extracted = input.extractMemories === false ? [] : await deps.memoryExtractor.extractFromDistilledSummaries(sid, asString(input.projectRoot) ?? sid, safeSummary);
+  return { summary: safeSummary, extractedCandidates: extracted.length };
 }
 
 export async function reviewCandidateOp(memoryExtractor: CodexBridgeExtraDeps['memoryExtractor'], name: 'memory_candidate_approve' | 'memory_candidate_reject', input: Record<string, unknown>, sessionId: string | undefined) {

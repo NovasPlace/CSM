@@ -1,18 +1,20 @@
 import type { PluginInput } from '@opencode-ai/plugin';
 import type { PluginContext } from '../plugin-context.js';
 import { SelfContinuityGenerator } from '../self-continuity-generator.js';
+import { redactJsonValue } from '../redactor.js';
 
 export async function persistFinalDistillation(pluginCtx: PluginContext): Promise<void> {
   const { config, database, toolDistiller, redactor, state } = pluginCtx;
   if (!config.distiller.enabled || !state.currentSessionId) return;
   const summary = toolDistiller.distill();
   if (summary.groups.length === 0) return;
+  const safeGroups = redactJsonValue(redactor, summary.groups);
   await database.getPool().query(
     `INSERT INTO distilled_summaries (id, session_id, groups, compressed, total_calls_summarized)
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (session_id, md5(compressed)) DO NOTHING`,
     [summary.id, state.currentSessionId,
-      redactor.redact(JSON.stringify(summary.groups)).text,
+      JSON.stringify(safeGroups),
       redactor.redact(summary.compressed).text, summary.totalCallsSummarized],
   );
 }

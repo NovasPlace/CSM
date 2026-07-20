@@ -71,14 +71,18 @@ export function createPersistenceServices(
     environment: process.env.NODE_ENV === 'test' ? 'fixture' : 'production',
   });
   const workJournal = new AgentWorkJournal(database.getPool(), config.workJournal, core.redactor);
-  const experiencePackets = new ExperiencePacketCreator(database.getPool());
+  const experiencePackets = new ExperiencePacketCreator(database.getPool(), core.redactor);
   const selfModel = new SelfModelUpdater(database.getPool(), config.selfModel);
   const beliefKnowledge = new BeliefKnowledgeConsolidator(database.getPool(), config.beliefKnowledge);
   const beliefScanner = new BeliefPromotionScanner(database.getPool());
-  const agentBookEvents = new AgentBookEventStore(database.getPool());
-  const agentBookRules = new AgentBookRulesStore(database.getPool());
-  const agentBookState = new AgentBookStateProjector(database.getPool(), agentBookEvents);
-  const agentBookSummary = new AgentBookSummaryGenerator(database.getPool(), agentBookEvents);
+  const agentBookEvents = new AgentBookEventStore(database.getPool(), core.redactor);
+  const agentBookRules = new AgentBookRulesStore(database.getPool(), core.redactor);
+  const agentBookState = new AgentBookStateProjector(
+    database.getPool(), agentBookEvents, core.redactor,
+  );
+  const agentBookSummary = new AgentBookSummaryGenerator(
+    database.getPool(), agentBookEvents, core.redactor,
+  );
   const workLedger = config.workLedger.enabled
     ? new WorkLedger(database.getPool(), config.workLedger) : undefined;
   return {

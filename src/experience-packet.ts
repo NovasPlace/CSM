@@ -1,6 +1,7 @@
 import type { DatabasePool } from './types.js';
 import { deriveInternalState, deriveNeutralState, type InternalState, type DeriveInput } from './internal-state-deriver.js';
 import { getLogger } from './logger.js';
+import { Redactor, redactJsonValue } from './redactor.js';
 
 interface PacketRow {
   id: number;
@@ -38,7 +39,10 @@ export interface ExperiencePacket {
 }
 
 export class ExperiencePacketCreator {
-  constructor(private readonly pool: DatabasePool) {}
+  constructor(
+    private readonly pool: DatabasePool,
+    private readonly redactor: Redactor = new Redactor(),
+  ) {}
 
   async recordToolPacket(params: {
     sessionId: string;
@@ -264,7 +268,7 @@ export class ExperiencePacketCreator {
          LIMIT $1`,
         [limit],
       );
-      return result.rows.map((row: unknown) => mapPacketRow(row as PacketRow));
+      return result.rows.map((row: unknown) => this.sanitizePacket(row as PacketRow));
     } catch {
       return [];
     }
@@ -281,7 +285,7 @@ export class ExperiencePacketCreator {
          LIMIT $2`,
         [sessionId, limit],
       );
-      return result.rows.map((row: unknown) => mapPacketRow(row as PacketRow));
+      return result.rows.map((row: unknown) => this.sanitizePacket(row as PacketRow));
     } catch {
       return [];
     }
@@ -311,8 +315,13 @@ export class ExperiencePacketCreator {
   }
 
   private async insert(packet: Omit<ExperiencePacket, 'id' | 'createdAt'>): Promise<ExperiencePacket> {
-    const internalStateJson = JSON.stringify(packet.internalState);
-    const signalsJson = JSON.stringify(packet.signals);
+    // Project/session identifiers stay intact; only content-bearing payloads are redacted.
+    const internalStateJson = JSON.stringify(
+      redactJsonValue(this.redactor, packet.internalState),
+    );
+    const signalsJson = JSON.stringify(
+      redactJsonValue(this.redactor, packet.signals),
+    );
 
     try {
       const result = await this.pool.query(
@@ -328,11 +337,20 @@ export class ExperiencePacketCreator {
           packet.confidence,
         ],
       );
-      return mapPacketRow(result.rows[0] as PacketRow);
+      return this.sanitizePacket(result.rows[0] as PacketRow);
     } catch (error) {
       getLogger().error('Failed to insert experience packet', error instanceof Error ? error : undefined);
       throw error;
     }
+  }
+
+  private sanitizePacket(row: PacketRow): ExperiencePacket {
+    const packet = mapPacketRow(row);
+    return {
+      ...packet,
+      internalState: redactJsonValue(this.redactor, packet.internalState),
+      signals: redactJsonValue(this.redactor, packet.signals),
+    };
   }
 }
 

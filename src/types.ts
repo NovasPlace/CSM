@@ -552,6 +552,7 @@ export interface MemoryListOptions {
   limit?: number;
   sortBy?: SortBy;
   tags?: string[];
+  tagsMatch?: 'any' | 'all';
   projectId?: string;
   searchMode?: MemorySearchMode;
   entityType?: ExtractedConcept["type"];

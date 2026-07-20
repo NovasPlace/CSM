@@ -43,7 +43,7 @@ export async function resumeContextOp(
   input: { projectRoot: string; task: string; sessionId: string; recentLimit?: number },
 ): Promise<ResumeContextPayload> {
   const context = await buildResumeContext(deps, input, false);
-  if (deps.database) await cacheBridgeWorkflowSignal(deps.database.getPool(), { sessionId: input.sessionId, projectId: input.projectRoot, task: input.task, source: 'bridge_resume_context', summary: `Resume ${input.task}: ${previewText(context.actionPlan.map((item) => item.tool))}`, content: formatResumeCapture(context), actionPlan: context.actionPlan.map((item) => item.tool), activeGoal: context.sessionState?.activeGoal?.description, nextStep: context.workJournal?.nextStepInferred, checkpointId: context.recovery?.activeCheckpoint?.checkpointId, lastErrorId: context.recovery?.lastError?.displayId });
+  if (deps.database) await cacheBridgeWorkflowSignal(deps.database.getPool(), { sessionId: input.sessionId, projectId: input.projectRoot, task: input.task, source: 'bridge_resume_context', summary: `Resume ${input.task}: ${previewText(context.actionPlan.map((item) => item.tool))}`, content: formatResumeCapture(context), actionPlan: context.actionPlan.map((item) => item.tool), activeGoal: context.sessionState?.activeGoal?.description, nextStep: context.workJournal?.nextStepInferred, checkpointId: context.recovery?.activeCheckpoint?.checkpointId, lastErrorId: context.recovery?.lastError?.displayId }, deps.redactor);
   return context;
 }
 
@@ -83,7 +83,7 @@ export async function syncTurnOp(
       role: input.role,
       content: input.content,
       resultSummary: `Synced bridge turn into memory #${memory.id}.`,
-    });
+    }, deps.redactor);
   }
   return { sessionId: input.sessionId, channel, memory };
 }
@@ -95,7 +95,7 @@ export async function handoffSummaryOp(
   const context = await buildResumeContext(deps, input, true);
   const compaction = await getCompactionReportOp(deps, input.sessionId);
   const summary = formatHandoffSummary(context, compaction);
-  if (deps.database) await cacheBridgeWorkflowSignal(deps.database.getPool(), { sessionId: input.sessionId, projectId: input.projectRoot, task: input.task, source: 'bridge_handoff_summary', summary: `Handoff ${input.task}: ${previewText(context.actionPlan.map((item) => item.tool))}`, content: summary, actionPlan: context.actionPlan.map((item) => item.tool), activeGoal: context.sessionState?.activeGoal?.description, nextStep: context.workJournal?.nextStepInferred, checkpointId: context.recovery?.activeCheckpoint?.checkpointId, lastErrorId: context.recovery?.lastError?.displayId });
+  if (deps.database) await cacheBridgeWorkflowSignal(deps.database.getPool(), { sessionId: input.sessionId, projectId: input.projectRoot, task: input.task, source: 'bridge_handoff_summary', summary: `Handoff ${input.task}: ${previewText(context.actionPlan.map((item) => item.tool))}`, content: summary, actionPlan: context.actionPlan.map((item) => item.tool), activeGoal: context.sessionState?.activeGoal?.description, nextStep: context.workJournal?.nextStepInferred, checkpointId: context.recovery?.activeCheckpoint?.checkpointId, lastErrorId: context.recovery?.lastError?.displayId }, deps.redactor);
   return { sessionId: input.sessionId, summary, context, compaction };
 }
 

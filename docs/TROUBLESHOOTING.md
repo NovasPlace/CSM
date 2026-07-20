@@ -93,6 +93,10 @@ When asking for support, include:
 Never include `.env`, database dumps, raw memories, transcripts, API keys, or unredacted connection
 strings in a support ticket.
 
+Redaction protects new writes at supported persistence boundaries; it does not rewrite old rows,
+generated files, exports, logs, or backups. If an older installation may have captured a credential,
+rotate it first and inspect each copy before sharing diagnostics or deleting data.
+
 ## Log collection
 
 CSM emits runtime logs on stderr so stdout remains safe for JSON reports and MCP JSON-RPC traffic.

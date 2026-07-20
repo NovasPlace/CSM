@@ -103,7 +103,8 @@ function livingStateTools(ctx: PluginContext): Record<string, unknown> {
     csm_living_state_preview: livingStatePreviewTool(ctx.livingState),
     csm_living_state_debug: livingStateDebugTool(ctx.livingStateAdvisor),
     ...createAgentBookTools({ eventStore: ctx.agentBookEvents, rulesStore: ctx.agentBookRules,
-      stateProjector: ctx.agentBookState, summaryGenerator: ctx.agentBookSummary }, ctx.directory, ctx.worktree ?? ctx.directory),
+      stateProjector: ctx.agentBookState, summaryGenerator: ctx.agentBookSummary,
+      redactor: ctx.redactor }, ctx.directory, ctx.worktree ?? ctx.directory),
     csm_runtime_status: runtimeStatusTool(database, memoryManager, config, ctx.state.currentSessionId),
     csm_compaction_audit: compactionAuditTool(database),
     csm_recall_quality_report: recallQualityReportTool(database, ctx.directory),
@@ -125,7 +126,7 @@ function operationalTools(ctx: PluginContext): Record<string, unknown> {
     context_review: contextReviewTool({ pool }),
     context_fetch: contextFetchTool({ pool }),
     context_search: contextSearchTool({ pool }),
-    context_fetch_file_region: contextFetchFileRegionTool({ pool }),
+    context_fetch_file_region: contextFetchFileRegionTool({ pool, redactor: ctx.redactor }),
     context_fetch_last_error: contextFetchLastErrorTool({ pool }),
     context_fetch_decision_log: contextFetchDecisionLogTool({ pool }),
     context_fault: ctx.vcmManager.faultTool(),
@@ -138,7 +139,7 @@ function operationalTools(ctx: PluginContext): Record<string, unknown> {
 function maintenanceServices(ctx: PluginContext): MaintenanceServices {
   const pool = ctx.database.getPool();
   return {
-    backfill: new EmbeddingBackfill(ctx.database, ctx.embeddings),
+    backfill: new EmbeddingBackfill(ctx.database, ctx.embeddings, ctx.redactor),
     dedup: new DedupCandidateDetector(ctx.database), merger: new MemoryMerger(ctx.database),
     candidates: new CandidateGenerator(ctx.database), archive: new ArchiveCandidateReportBuilder(ctx.database),
     governance: new MemoryGovernanceReportBuilder(ctx.database),

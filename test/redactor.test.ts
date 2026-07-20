@@ -151,6 +151,45 @@ describe('Redactor — paths', () => {
     assert.ok(!result.text.includes('Alice'));
   });
 
+  it('redacts UNC, quoted paths with spaces, and common macOS roots', () => {
+    const r = new Redactor({ workspaceRoot: 'C:\\Users\\Donovan\\project' });
+    const input = [
+      '\\\\server\\share\\customer\\secret.txt',
+      '"C:\\Users\\Alice Smith\\Customer Files\\secret file.txt"',
+      "'/Volumes/Customer Data/secret file.txt'",
+    ].join(' ');
+    const result = r.redact(input);
+    assert.equal(result.audit.byCategory.path, 3);
+    assert.ok(!result.text.includes('server'));
+    assert.ok(!result.text.includes('Alice Smith'));
+    assert.ok(!result.text.includes('Customer Data'));
+  });
+
+  it('redacts whole unquoted paths with spaces and root-level Windows paths', () => {
+    const r = new Redactor({ workspaceRoot: 'C:\\Users\\Donovan\\project' });
+    const windows = r.redact('C:\\Users\\Alice Smith\\Customer Files\\secret file.txt');
+    const posix = r.redact('/Volumes/Customer Data/secret file.txt');
+    const roots = r.redact('Files at C:\\secret.txt and \\\\server\\share');
+    assert.equal(windows.text, '[REDACTED_PATH]');
+    assert.equal(posix.text, '[REDACTED_PATH]');
+    assert.equal(roots.audit.byCategory.path, 2);
+    assert.ok(!roots.text.includes('secret.txt'));
+    assert.ok(!roots.text.includes('server'));
+  });
+
+  it('does not treat sibling prefixes or traversal paths as workspace children', () => {
+    const r = new Redactor({ workspaceRoot: 'C:\\Users\\Donovan\\project' });
+    const input = [
+      'C:\\Users\\Donovan\\project-other\\secrets\\.env',
+      'C:\\Users\\Donovan\\project\\..\\outside\\secret.txt',
+    ].join(' ');
+    const result = r.redact(input);
+    assert.equal(result.text.includes('[WORKSPACE]'), false);
+    assert.equal(result.audit.byCategory.path, 2);
+    assert.ok(!result.text.includes('project-other'));
+    assert.ok(!result.text.includes('outside'));
+  });
+
   it('redacts POSIX paths outside workspace', () => {
     const r = new Redactor({ workspaceRoot: '/home/user/project' });
     const input = 'Log at /var/log/app.log and config /etc/nginx/nginx.conf';
@@ -165,6 +204,13 @@ describe('Redactor — paths', () => {
     const result = r.redact(input);
     assert.ok(result.text.includes('[WORKSPACE]/src/index.ts'));
     assert.ok(!result.text.includes('/home/user'));
+  });
+
+  it('keeps POSIX containment case-sensitive even on Windows hosts', () => {
+    const r = new Redactor({ workspaceRoot: '/home/User/project' });
+    const result = r.redact('Edited /home/user/project/src/secret.ts');
+    assert.ok(result.text.includes('[REDACTED_PATH]'));
+    assert.equal(result.text.includes('[WORKSPACE]'), false);
   });
 
   it('redacts all paths when path mode is "redact"', () => {
@@ -279,6 +325,25 @@ describe('Redactor — redactObject', () => {
     assert.ok(!JSON.stringify(result).includes('sk-proj-abc'));
     assert.ok(result.nested.items[0].includes('[REDACTED_EMAIL]'));
     assert.ok(audit.totalRedacted >= 2);
+  });
+
+  it('redacts nested object keys without dropping post-redaction collisions', () => {
+    const r = new Redactor();
+    const secretKeyA = 'sk-proj-abc123def456ghi789jkl012mno345pqr';
+    const secretKeyB = 'sk-proj-zxy987wvu654tsr321qpo098nml765kji';
+    const { result, audit } = r.redactObject({
+      nested: {
+        [secretKeyA]: 'first',
+        [secretKeyB]: 'second',
+      },
+    });
+    const serialized = JSON.stringify(result);
+    const keys = Object.keys(result.nested);
+    assert.ok(!serialized.includes(secretKeyA));
+    assert.ok(!serialized.includes(secretKeyB));
+    assert.deepEqual(keys, ['[REDACTED_SECRET]', '[REDACTED_SECRET]#2']);
+    assert.deepEqual(Object.values(result.nested), ['first', 'second']);
+    assert.ok(audit.byCategory.secret >= 2);
   });
 });
 

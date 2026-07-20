@@ -227,6 +227,7 @@ function runContractTests(label: string, getMgr: () => MemoryManager, getDb: () 
 
     const memories = await mgr.listMemories({
       sessionId: `${label}-list-session`,
+      projectId: `${label}-project`,
     });
 
     assert.ok(memories.length >= 1, 'should return at least one memory');
@@ -250,7 +251,10 @@ function runContractTests(label: string, getMgr: () => MemoryManager, getDb: () 
     });
 
     assert.ok(saved);
-    const list = await mgr.listMemories({ sessionId: `${label}-meta-session` });
+    const list = await mgr.listMemories({
+      sessionId: `${label}-meta-session`,
+      projectId: `${label}-project`,
+    });
     assert.ok(list.length >= 1);
     const meta = (list[0] as Record<string, unknown>).metadata as Record<string, unknown> | undefined;
     assert.ok(meta, 'metadata should be present');
@@ -284,7 +288,10 @@ function runContractTests(label: string, getMgr: () => MemoryManager, getDb: () 
     await mgr.touchMemory(memId);
     await mgr.touchMemory(memId);
 
-    const list = await mgr.listMemories({ sessionId: `${label}-touch-session` });
+    const list = await mgr.listMemories({
+      sessionId: `${label}-touch-session`,
+      projectId: `${label}-project`,
+    });
     const touched = list[0] as Record<string, unknown>;
     assert.ok((touched.accessCount as number) >= 2, 'accessCount should be >= 2');
   });
@@ -638,6 +645,83 @@ function runSearchContractTests(label: string, getMgr: () => MemoryManager): voi
         'all results should be from project B',
       );
     }
+  });
+
+  it('project mode without a projectId fails closed', async () => {
+    const mgr = getMgr();
+    await mgr.createSession(`${label}-missing-scope-session`, `${label}-missing-scope-project`);
+    await mgr.saveMemory({
+      sessionId: `${label}-missing-scope-session`,
+      content: 'Phase3F-MissingScope must not become a global result',
+      type: 'episodic',
+      importance: 0.8,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+
+    const searched = await mgr.searchMemories({
+      query: 'Phase3F-MissingScope',
+      searchMode: 'project',
+      limit: 10,
+    });
+    const listed = await mgr.listMemories({
+      searchMode: 'project',
+      limit: 10,
+    });
+    const defaultListed = await mgr.listMemories({ limit: 10 });
+    assert.deepEqual(searched, []);
+    assert.deepEqual(listed, []);
+    assert.deepEqual(defaultListed, []);
+  });
+
+  it('listMemories widens scope only when global or legacy is explicit', async () => {
+    const mgr = getMgr();
+    const projectId = `${label}-explicit-scope-project`;
+    const projectSession = `${label}-explicit-scope-session`;
+    await mgr.createSession(projectSession, projectId);
+    const projectMemory = await mgr.saveMemory({
+      sessionId: projectSession,
+      content: 'Phase3F-ExplicitScope named project memory',
+      type: 'episodic',
+      importance: 0.8,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+    const legacyMemory = await mgr.saveMemory({
+      content: 'Phase3F-ExplicitScope legacy memory',
+      type: 'episodic',
+      importance: 0.8,
+      emotion: 'neutral',
+      confidence: 1.0,
+      source: 'manual',
+      tags: [],
+    });
+
+    const global = await mgr.listMemories({
+      projectId,
+      searchMode: 'global',
+      limit: 100,
+    });
+    const legacyOnly = await mgr.listMemories({
+      searchMode: 'legacy',
+      limit: 100,
+    });
+    const projectPlusLegacy = await mgr.listMemories({
+      projectId,
+      searchMode: 'legacy',
+      limit: 100,
+    });
+
+    assert.ok(global.some((memory) => memory.id === projectMemory.id));
+    assert.ok(global.some((memory) => memory.id === legacyMemory.id));
+    assert.ok(legacyOnly.some((memory) => memory.id === legacyMemory.id));
+    assert.ok(legacyOnly.every((memory) => memory.projectId == null));
+    assert.ok(projectPlusLegacy.some((memory) => memory.id === projectMemory.id));
+    assert.ok(projectPlusLegacy.some((memory) => memory.id === legacyMemory.id));
   });
 }
 

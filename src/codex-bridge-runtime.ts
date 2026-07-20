@@ -62,7 +62,7 @@ function createRuntime(config: RuntimePluginConfig, database: Database): CodexBr
   const embeddings = new EmbeddingGenerator(config);
   const memoryManager = new MemoryManager(database, embeddings, redactor);
   const deps = {
-    database, memoryManager,
+    database, redactor, memoryManager,
     contextRecall: new ContextRecallDaemon(database, config.contextRecallInterval),
     primingEngine: new PrimingEngine(database),
     contextCompactor: new ContextCompactor(config.compactor),

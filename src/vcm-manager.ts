@@ -35,7 +35,12 @@ export class VcmManager {
   private async buildWorkingSet(projectId: string, _sessionId: string): Promise<VcmWorkingSet> {
     let memories = await this.mm.listMemories({ projectId, sortBy: 'accessed', limit: MAX_PAGES * 2 });
     if (memories.length === 0) {
-      memories = await this.mm.listMemories({ sortBy: 'recent', limit: MAX_PAGES });
+      memories = await this.mm.listMemories({
+        projectId,
+        searchMode: 'legacy',
+        sortBy: 'recent',
+        limit: MAX_PAGES,
+      });
     }
 
     const pages: VcmPage[] = [];

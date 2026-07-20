@@ -12,6 +12,8 @@
  *      C:\Users\Donovan\project\src/foo.ts → [WORKSPACE]/src/foo.ts
  *  - Fail-closed: on error, return input with safe redaction applied.
  */
+import { posix, win32 } from 'node:path';
+
 export type RedactCategory =
   | 'secret'
   | 'email'
@@ -102,8 +104,10 @@ const URL_CRED_PATTERN = /\bhttps?:\/\/[^:\s]+:[^@\s]+@[^\s/]+/g;
 const URL_QUERY_SECRET_PATTERN = /([?&](?:api[_-]?key|token|secret|password|access[_-]?token|private[_-]?key|client[_-]?secret)=[^&\s]+)/gi;
 
 // Absolute filesystem paths (Windows + POSIX)
-const WIN_PATH_PATTERN = /[A-Za-z]:[\\/](?:[^\s\\/:*?"<>|]+[\\/])+[^\s\\/:*?"<>|]+/g;
-const POSIX_PATH_PATTERN = /\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www)(?:\/[^\s:*?"<>|]+)+/g;
+const QUOTED_WIN_PATH_PATTERN = /(["'])(?:[A-Za-z]:[\\/]|\\\\[^\\/:*?"'<>|\r\n]+[\\/][^\\/:*?"'<>|\r\n]+[\\/])[^"'<>|\r\n]+\1/g;
+const WIN_PATH_PATTERN = /(?:[A-Za-z]:[\\/](?:[^\s\\/:*?"<>|]+[\\/])*[^\s\\/:*?"<>|]+|\\\\[^\s\\/:*?"<>|]+[\\/][^\s\\/:*?"<>|]+(?:[\\/][^\s\\/:*?"<>|]+)*)/g;
+const QUOTED_POSIX_PATH_PATTERN = /(["'])\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www|private|Volumes|Library|Applications)(?:\/[^"'\r\n]+)+\1/g;
+const POSIX_PATH_PATTERN = /\/(?:home|Users|root|var|opt|etc|tmp|usr|mnt|srv|data|www|private|Volumes|Library|Applications)(?:\/[^\s:*?"<>|]+)+/g;
 
 // ── Redactor class ────────────────────────────────────────────────────
 
@@ -144,7 +148,41 @@ export class Redactor {
   }
 
   /**
-   * Redact an object's string values in-place (deep).
+   * Redact a value whose schema identifies it as a filesystem path.
+   *
+   * Free-form text is intentionally not treated as one whole path: a command
+   * such as `/usr/bin/node --version` or a slash command such as `/review` is
+   * ambiguous. Callers with a real path field can use this method so unquoted
+   * paths containing spaces are still protected without erasing commands.
+   */
+  redactPath(text: string): RedactionResult {
+    if (!this.config.enabled || this.config.categories.path === 'off') {
+      return this.redact(text);
+    }
+
+    try {
+      const trimmed = text.trim();
+      if (!isAbsolutePath(trimmed)) return this.redact(text);
+
+      const pathMode = this.config.categories.path;
+      const replacement = pathMode === 'redact' ? MARKERS.path : this.normalizePath(trimmed);
+      const start = text.indexOf(trimmed);
+      const protectedText = `${text.slice(0, start)}${replacement}${text.slice(start + trimmed.length)}`;
+      const result = this.redactUnsafe(protectedText);
+
+      if (replacement !== trimmed) {
+        result.audit.byCategory.path++;
+        result.audit.totalRedacted++;
+        result.changed = true;
+      }
+      return result;
+    } catch {
+      return this.failClosed(text);
+    }
+  }
+
+  /**
+   * Redact an object's string keys and values (deep).
    * Returns the object with redacted strings + aggregated audit.
    */
   redactObject<T>(obj: T): { result: T; audit: RedactionAudit } {
@@ -177,6 +215,8 @@ export class Redactor {
     // Paths: normalize, redact, or leave alone
     const pathMode = this.config.categories.path;
     if (pathMode === 'redact') {
+      result = this.applyPattern(result, QUOTED_WIN_PATH_PATTERN, 'path', audit);
+      result = this.applyPattern(result, QUOTED_POSIX_PATH_PATTERN, 'path', audit);
       result = this.applyPattern(result, WIN_PATH_PATTERN, 'path', audit);
       result = this.applyPattern(result, POSIX_PATH_PATTERN, 'path', audit);
     } else if (pathMode === 'normalize') {
@@ -232,7 +272,17 @@ export class Redactor {
       return match;
     };
 
-    let result = text.replace(WIN_PATH_PATTERN, replacePath);
+    const replaceQuotedPath = (match: string): string => {
+      const quote = match[0];
+      const inner = match.slice(1, -1);
+      const normalized = this.normalizePath(inner);
+      if (normalized !== inner) count++;
+      return `${quote}${normalized}${quote}`;
+    };
+
+    let result = text.replace(QUOTED_WIN_PATH_PATTERN, replaceQuotedPath);
+    result = result.replace(QUOTED_POSIX_PATH_PATTERN, replaceQuotedPath);
+    result = result.replace(WIN_PATH_PATTERN, replacePath);
     result = result.replace(POSIX_PATH_PATTERN, replacePath);
 
     audit.byCategory.path += count;
@@ -246,14 +296,27 @@ export class Redactor {
       return MARKERS.path;
     }
 
-    // Normalize separators for comparison
-    const normalizedInput = absPath.replace(/\\/g, '/');
-    const normalizedRoot = this.workspaceRoot.replace(/\\/g, '/').replace(/\/$/, '');
+    const rootStyle = pathStyle(this.workspaceRoot);
+    const inputStyle = pathStyle(absPath);
 
-    // Check if path is within workspace
-    if (normalizedInput.toLowerCase().startsWith(normalizedRoot.toLowerCase())) {
-      const relative = normalizedInput.slice(normalizedRoot.length);
-      return `[WORKSPACE]${relative}`;
+    // Different path families can never share a containment boundary.
+    if (rootStyle !== inputStyle) {
+      return MARKERS.path;
+    }
+
+    const pathApi = rootStyle === 'windows' ? win32 : posix;
+    const resolvedRoot = pathApi.resolve(this.workspaceRoot);
+    const resolvedInput = pathApi.resolve(absPath);
+    const relative = pathApi.relative(resolvedRoot, resolvedInput);
+    const isWithinWorkspace = relative === '' || (
+      relative !== '..'
+      && !relative.startsWith(`..${pathApi.sep}`)
+      && !pathApi.isAbsolute(relative)
+    );
+
+    if (isWithinWorkspace) {
+      const portableRelative = relative.split(pathApi.sep).join('/');
+      return portableRelative ? `[WORKSPACE]/${portableRelative}` : '[WORKSPACE]';
     }
 
     // Outside workspace — redact
@@ -278,7 +341,20 @@ export class Redactor {
     if (obj && typeof obj === 'object') {
       const result: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(obj)) {
-        result[key] = this.redactStringsDeep(value, audit);
+        const keyResult = this.redact(key);
+        mergeAudit(audit, keyResult.audit);
+        let safeKey = keyResult.text;
+        let suffix = 2;
+        while (Object.prototype.hasOwnProperty.call(result, safeKey)) {
+          safeKey = `${keyResult.text}#${suffix}`;
+          suffix++;
+        }
+        Object.defineProperty(result, safeKey, {
+          value: this.redactStringsDeep(value, audit),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
       }
       return result as unknown as T;
     }
@@ -321,6 +397,27 @@ function emptyAudit(): RedactionAudit {
   };
 }
 
+function mergeAudit(target: RedactionAudit, source: RedactionAudit): void {
+  target.byCategory.secret += source.byCategory.secret;
+  target.byCategory.email += source.byCategory.email;
+  target.byCategory.phone += source.byCategory.phone;
+  target.byCategory.ip += source.byCategory.ip;
+  target.byCategory.urlCreds += source.byCategory.urlCreds;
+  target.byCategory.path += source.byCategory.path;
+  target.totalRedacted += source.totalRedacted;
+}
+
+function pathStyle(value: string): 'windows' | 'posix' {
+  if (/^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value)) return 'windows';
+  if (value.startsWith('/')) return 'posix';
+  return process.platform === 'win32' ? 'windows' : 'posix';
+}
+
+function isAbsolutePath(value: string): boolean {
+  if (!value || /[\r\n"']/.test(value)) return false;
+  return pathStyle(value) === 'windows' ? win32.isAbsolute(value) : posix.isAbsolute(value);
+}
+
 /**
  * Convenience function: redact a string with default config.
  */
@@ -333,4 +430,16 @@ export function redact(text: string, config?: Partial<RedactorConfig>): Redactio
  */
 export function redactObject<T>(obj: T, config?: Partial<RedactorConfig>): { result: T; audit: RedactionAudit } {
   return new Redactor(config).redactObject(obj);
+}
+
+/**
+ * Normalize a value exactly as JSON persistence would, then redact each string
+ * key and value structurally. This preserves valid JSON even when a secret occurs
+ * in a URL query and preserves Date/toJSON behavior that a direct object walk loses.
+ */
+export function redactJsonValue<T>(redactor: Redactor, value: T): T {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) return value;
+  const normalized = JSON.parse(serialized) as T;
+  return redactor.redactObject(normalized).result;
 }

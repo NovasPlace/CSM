@@ -169,8 +169,8 @@ async function regenerateAgentBookFrontPage(ctx: PluginContext, projectId: strin
       ctx.agentBookRules.getActiveRules(),
       ctx.agentBookEvents.getRecentEvents(projectId, 10),
     ]);
-    const frontPage = generateFrontPage(state, latestSummary, rules, recentEvents);
-    writeFrontPageFile(frontPage.markdown, ctx.directory);
+    const frontPage = generateFrontPage(state, latestSummary, rules, recentEvents, ctx.redactor);
+    writeFrontPageFile(frontPage.markdown, ctx.directory, ctx.redactor);
   } catch (regenError) {
     getLogger().debug(`AgentBook frontpage regen skipped: ${regenError instanceof Error ? regenError.message : String(regenError)}`);
   }
@@ -500,5 +500,5 @@ async function recordContinuitySignals(
     output: toolOutput,
     error: output.metadata?.error as string | undefined,
     exitCode: output.metadata?.exitCode as number | undefined,
-  });
+  }, ctx.redactor);
 }

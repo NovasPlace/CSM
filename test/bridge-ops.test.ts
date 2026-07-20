@@ -106,4 +106,26 @@ describe('bridge ops project fallback', () => {
     assert.equal(result.results[0].memory.id, 7);
     assert.deepEqual(calls, ['global']);
   });
+
+  it('fails closed when project context is absent unless global is explicit', async () => {
+    const calls: Array<{ searchMode?: string; projectId?: string }> = [];
+    const deps = {
+      memoryManager: {
+        async searchMemories(input: { searchMode?: string; projectId?: string }) {
+          calls.push(input);
+          return [];
+        },
+      },
+      primingEngine: { async cascadeFromMultiple() { return { memories: [] }; } },
+      contextRecall: {},
+      contextCompactor: {},
+    } as any;
+
+    const result = await searchMemoriesOp(deps, { query: 'unscoped', limit: 5 }, {});
+
+    assert.deepEqual(result.results, []);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].searchMode, 'project');
+    assert.equal(calls[0].projectId, undefined);
+  });
 });
