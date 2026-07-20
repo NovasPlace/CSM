@@ -15,12 +15,12 @@ jobs:
         uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
 
       - name: Build source archive
-        run: tar --exclude=.git -czf csm-source.tgz .
+        run: tar --exclude=.git -czf "$RUNNER_TEMP/csm-source.tgz" .
 
       - name: Upload source archive
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: csm-source-${{ github.sha }}
-          path: csm-source.tgz
+          path: ${{ runner.temp }}/csm-source.tgz
           if-no-files-found: error
           retention-days: 1
