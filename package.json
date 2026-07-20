@@ -135,7 +135,7 @@
   "dependencies": {
     "@opencode-ai/plugin": "1.17.13",
     "better-sqlite3": "^12.11.1",
-    "pg": "^8.13.0",
+    "pg": "^8.22.0",
     "pgvector": "^0.3.0"
   },
   "peerDependencies": {
