@@ -1,4 +1,4 @@
-﻿# Exact historical fingerprints reviewed as synthetic redaction fixtures.
+# Exact historical fingerprints reviewed as synthetic redaction fixtures.
 # Never add a path-wide allowlist; each new finding requires individual review.
 dc39bf67d7fb234cf69878c72a6552282ecc41af:src/benchmark.ts:generic-api-key:158
 8214dd82a2daa1e615f7185b1ab34adb8d976a07:test/redactor.test.ts:slack-bot-token:26
