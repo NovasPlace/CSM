@@ -15,7 +15,7 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
     artifact(
       'src/embeddings.ts',
       'cc668cc041bc38510dbd72970ae697b11bae3470186a3da94781f4c9bc7f936b',
-      '3ccf20fbe761ba020ef74913eee0a749e60719c516c9af23a0595e23721af93c',
+      'fe016fe6221d0a388e8f006fd17d750bb4857e77681001d6c1345231e1717f4d',
     ),
   ],
   '20260709-004-core': [artifact('src/schema/core-schema.ts', 'f7ac5f2b0aa8892cc4b8c168a0a3e4d1e60fbc42afff917a4b0c9540aaeee233', '2dade867455651b8157909b48df246af8c777377f5d2c3f7a2feef474a2c9b5b')],

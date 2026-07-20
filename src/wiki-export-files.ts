@@ -55,7 +55,7 @@ export function pruneOwnedFiles(outputDir: string, paths: string[]): number {
 }
 
 export function resolveOwnedPath(outputDir: string, manifestPath: string): string {
-  if (!manifestPath || isAbsolute(manifestPath)) {
+  if (!manifestPath || isAbsolute(manifestPath) || /^[A-Za-z]:[\\/]/.test(manifestPath)) {
     throw new Error(`Unsafe wiki manifest path: ${manifestPath}`);
   }
   const root = resolve(outputDir);
