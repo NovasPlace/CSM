@@ -133,7 +133,7 @@
     "doctor": "node dist/cli/doctor.js"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.13",
+    "@opencode-ai/plugin": "1.18.3",
     "better-sqlite3": "^12.11.1",
     "pg": "^8.13.0",
     "pgvector": "^0.3.0"
