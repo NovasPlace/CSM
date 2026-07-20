@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { dirname, posix, win32 } from 'node:path';
 import { renderLogEntry, type LogEntry, type RenderedNote } from './wiki-note-renderer.js';
 import type { WikiExportManifest } from './wiki-export-types.js';
 
@@ -55,16 +55,38 @@ export function pruneOwnedFiles(outputDir: string, paths: string[]): number {
 }
 
 export function resolveOwnedPath(outputDir: string, manifestPath: string): string {
-  if (!manifestPath || isAbsolute(manifestPath)) {
+  const windowsRoot = isWindowsPath(outputDir)
+    || (!posix.isAbsolute(outputDir) && process.platform === 'win32');
+  const pathApi = windowsRoot ? win32 : posix;
+  const containsTraversal = manifestPath.split(/[\\/]/u).includes('..');
+
+  if (
+    !manifestPath
+    || manifestPath.includes('\0')
+    || containsTraversal
+    || /^[A-Za-z]:/u.test(manifestPath)
+    || win32.isAbsolute(manifestPath)
+    || posix.isAbsolute(manifestPath)
+  ) {
     throw new Error(`Unsafe wiki manifest path: ${manifestPath}`);
   }
-  const root = resolve(outputDir);
-  const candidate = resolve(root, manifestPath);
-  const fromRoot = relative(root, candidate);
-  if (!fromRoot || fromRoot.startsWith('..') || isAbsolute(fromRoot)) {
+
+  const root = pathApi.resolve(outputDir);
+  const candidate = pathApi.resolve(root, manifestPath);
+  const fromRoot = pathApi.relative(root, candidate);
+  if (
+    !fromRoot
+    || fromRoot === '..'
+    || fromRoot.startsWith(`..${pathApi.sep}`)
+    || pathApi.isAbsolute(fromRoot)
+  ) {
     throw new Error(`Unsafe wiki manifest path: ${manifestPath}`);
   }
   return candidate;
+}
+
+function isWindowsPath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith('\\\\');
 }
 
 export function appendExportLog(outputDir: string, entry: LogEntry): void {
