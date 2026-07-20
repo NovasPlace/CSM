@@ -35,8 +35,8 @@ describe('Phase 19b — backfill and recall telemetry', () => {
     databaseUrl: buildTempDbUrl(BASE_DB_URL, tempDbName),
     databaseProvider: 'postgres',
     sqlitePath: '.data/csm-memory.db',
-    embeddingModel: 'nomic-embed-text',
-    embeddingApiUrl: process.env.OLLAMA_URL ?? 'http://localhost:11434',
+    embeddingModel: 'test-hash',
+    embeddingDimensions: 768,
   } as PluginConfig;
 
   let db: Database;
