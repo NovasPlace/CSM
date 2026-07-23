@@ -1,0 +1,88 @@
+{
+  "$comment": "Authoritative surface manifest for the native Claude Code CSM plugin. Every command, agent, and skill is declared here with the MCP tools it orchestrates. scripts/validate-claude-surface.mjs enforces that this catalog, the on-disk bundle files, and the live MCP tool set stay in agreement. MCP is the sole tool authority; commands/agents/skills only orchestrate it.",
+  "mcpServer": "cross-session-memory",
+  "commands": [
+    {
+      "name": "csm-recall",
+      "description": "Search project memory and assemble focused evidence for the current task.",
+      "tools": ["csm_memory_search", "csm_memory_context", "csm_memory_related", "recall_lessons"]
+    },
+    {
+      "name": "csm-brief",
+      "description": "Build a context brief for the current task from prior sessions.",
+      "tools": ["get_context_brief", "bridge_resume_context", "csm_reentry_preview"]
+    },
+    {
+      "name": "csm-checkpoint",
+      "description": "Create or inspect durable checkpoints of expensive-to-reconstruct state.",
+      "tools": ["create_checkpoint", "list_checkpoints", "expand_checkpoint_ref"]
+    },
+    {
+      "name": "csm-handoff",
+      "description": "Write a concrete handoff summary before stopping or transferring work.",
+      "tools": ["bridge_handoff_summary", "bridge_sync_turn", "create_checkpoint"]
+    },
+    {
+      "name": "csm-goals",
+      "description": "List, set, or update tracked goals for this project.",
+      "tools": ["goal_list", "goal_set", "goal_update"]
+    },
+    {
+      "name": "csm-beliefs",
+      "description": "Review belief knowledge, run a belief scan, and preview promotions.",
+      "tools": ["csm_belief_knowledge", "csm_belief_scan_report", "csm_belief_promotion_scan", "csm_belief_promote"]
+    },
+    {
+      "name": "csm-selfmodel",
+      "description": "Inspect the live self-model and living-state capability snapshot.",
+      "tools": ["csm_self_model", "csm_living_state_preview"]
+    },
+    {
+      "name": "csm-agentbook",
+      "description": "Read AgentBook state and events, or manage AgentBook rules.",
+      "tools": ["csm_agentbook_state", "csm_agentbook_events", "csm_agentbook_rule"]
+    },
+    {
+      "name": "csm-governance",
+      "description": "Run memory governance: dedup detection, candidate and archive reports, merges.",
+      "tools": ["csm_memory_governance_report", "csm_memory_dedup_detect", "csm_memory_candidate_report", "csm_memory_archive_candidate_report", "csm_memory_merge"]
+    },
+    {
+      "name": "csm-compaction",
+      "description": "Show context pressure and audit compaction behavior.",
+      "tools": ["csm_context_pressure", "csm_compaction_audit", "get_compaction_report", "csm_context_budget"]
+    },
+    {
+      "name": "csm-reentry",
+      "description": "Preview re-entry context and onboarding for resuming work.",
+      "tools": ["csm_reentry_preview", "csm_onboard_agent", "csm_continuity_report"]
+    },
+    {
+      "name": "csm-workledger",
+      "description": "Show the surviving work-ledger entries across sessions.",
+      "tools": ["csm_work_ledger_surviving"]
+    }
+  ],
+  "agents": [
+    {
+      "name": "csm-archivist",
+      "description": "Memory governance specialist: preview dedup, candidate, and archive reports, then perform merges/deletions only when explicitly requested.",
+      "tools": ["csm_memory_governance_report", "csm_memory_dedup_detect", "csm_memory_candidate_report", "csm_memory_archive_candidate_report", "csm_memory_merge", "csm_memory_delete", "csm_recall_quality_report"]
+    },
+    {
+      "name": "csm-continuity-scout",
+      "description": "Session-start continuity specialist: assemble re-entry context and a task brief from prior sessions, verifying claims against the workspace.",
+      "tools": ["csm_reentry_preview", "get_context_brief", "bridge_resume_context", "csm_memory_search", "csm_memory_context", "csm_continuity_report", "csm_runtime_status"]
+    },
+    {
+      "name": "csm-handoff-writer",
+      "description": "Handoff specialist: checkpoint expensive state and write a concrete handoff summary before a transition.",
+      "tools": ["create_checkpoint", "bridge_handoff_summary", "bridge_sync_turn", "csm_context_pressure", "list_checkpoints"]
+    }
+  ],
+  "skills": [
+    { "name": "csm-continuity", "description": "Use the full native CSM runtime for continuity across Claude Code tasks." },
+    { "name": "csm-governance", "description": "Safely dedup, merge, and archive project memory." },
+    { "name": "csm-handoff", "description": "Checkpoint and hand off work durably before a transition." }
+  ]
+}
