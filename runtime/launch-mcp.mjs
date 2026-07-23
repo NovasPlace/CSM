@@ -16,5 +16,11 @@ if (!root) {
   throw new Error(`Unable to locate the packaged CSM runtime. Tried: ${candidates.join(', ')}`);
 }
 
+const pluginRoot = process.env.PLUGIN_ROOT ?? root;
+const pluginData = process.env.PLUGIN_DATA
+  ?? process.env.CLAUDE_PLUGIN_DATA
+  ?? path.join(pluginRoot, '.data');
+process.env.OPENCODE_CSM_STATS_PATH ??= path.join(pluginData, 'csm-stats.json');
+process.env.CSM_PLUGIN_ROOT = pluginRoot;
 process.chdir(root);
 await import(pathToFileURL(path.join(root, 'dist', 'codex-mcp-server.js')).href);

@@ -145,7 +145,7 @@ describe('Phase 10C2 — Compaction metric writer (SQLite)', () => {
     await db.close();
   });
 
-  it('writes all 16 columns correctly', async () => {
+  it('writes all canonical and attribution columns correctly', async () => {
     const db = new Database(makeConfig());
     await db.connect();
     const pool = db.getPool();
@@ -160,6 +160,8 @@ describe('Phase 10C2 — Compaction metric writer (SQLite)', () => {
       'before_chars', 'after_chars', 'before_tokens', 'after_tokens',
       'tokens_saved', 'saved_percent', 'semantic_signal_count_preserved',
       'context_brief_chars', 'discard_marker_present', 'status', 'created_at',
+      'project_id', 'client_kind', 'runtime_kind', 'eligible_parts', 'persisted_parts',
+      'failure_stage', 'failure_code', 'failure_message',
     ];
     for (const col of expectedColumns) {
       assert.ok(col in stored, `missing column: ${col}`);

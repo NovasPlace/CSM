@@ -1,0 +1,4 @@
+interface:
+  display_name: "CSM Continuity"
+  short_description: "Resume and preserve work across Codex tasks"
+  default_prompt: "Use $csm-continuity to resume this project from its saved CSM context."

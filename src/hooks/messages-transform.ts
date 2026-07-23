@@ -33,6 +33,15 @@ interface TransformMessage extends GovernorMessage {
   parts?: TransformPart[];
 }
 
+interface ExpandablePersistenceResult {
+  recordsForCompaction: ToolCallRecord[];
+  eligibleParts: number;
+  persistedParts: number;
+  failedParts: number;
+  failure?: unknown;
+  failureCode?: 'cache_disabled' | 'cache_write_failed' | 'partial_cache_write_failed';
+}
+
 export function createMessagesTransformHook(ctx: PluginContext) {
   return async (_input: unknown, output: { messages: TransformMessage[] }) => {
     const observedSession = latestSessionId(output.messages)
@@ -98,16 +107,52 @@ export function createMessagesTransformHook(ctx: PluginContext) {
       const createdAt = new Date().toISOString();
 
       try {
-        await persistExpandableRecords(ctx, pool, records);
-        const compactOutput = ctx.contextCompactor.compact(records, undefined, messages);
+        const persistence = await persistExpandableRecords(ctx, pool, records);
+        if (persistence.failedParts > 0) {
+          getLogger().warn(
+            'Some compaction candidates could not be stored for recovery: '
+            + `eligible=${persistence.eligibleParts} persisted=${persistence.persistedParts} `
+            + `failed=${persistence.failedParts} code=${persistence.failureCode ?? 'unknown'}`,
+          );
+        }
+
+        const compactOutput = ctx.contextCompactor.compact(
+          persistence.recordsForCompaction,
+          undefined,
+          messages,
+        );
         const result = compactOutput.result;
-        const status: 'compressed' | 'skipped_under_budget' =
-          result.compactedParts > 0 ? 'compressed' : 'skipped_under_budget';
+        const status = result.compactedParts > 0
+          ? 'compressed'
+          : persistence.eligibleParts > 0 && persistence.persistedParts === 0
+            ? 'failed'
+            : 'skipped_under_budget';
+        const failure = persistence.failedParts > 0
+          ? diagnosticFailure(ctx, persistence.failure)
+          : undefined;
+        const quality = ctx.contextCompactor.getLastQuality();
+        const qualityRejected = result.compactedParts === 0
+          && result.skippedParts > 0
+          && quality?.safe === false;
+        const failureStage = persistence.failedParts > 0
+          ? 'context_cache'
+          : qualityRejected ? 'quality_gate' : undefined;
+        const failureCode = persistence.failureCode
+          ?? (qualityRejected ? 'quality_rejected' : undefined);
+        const failureMessage = failure?.message
+          ?? (qualityRejected
+            ? `quality_score=${quality.qualityScore.toFixed(3)} threshold=0.600`
+            : undefined);
         persistCompactionTelemetry(pool, {
           sessionId,
-          totalToolParts: result.totalToolParts,
+          projectId: ctx.directory,
+          clientKind: 'opencode',
+          runtimeKind: 'plugin',
+          totalToolParts: records.length,
           compactedParts: result.compactedParts,
-          skippedParts: result.skippedParts,
+          skippedParts: result.skippedParts + persistence.failedParts,
+          eligibleParts: persistence.eligibleParts,
+          persistedParts: persistence.persistedParts,
           beforeChars: result.beforeChars,
           afterChars: result.afterChars,
           beforeTokens: result.beforeTokens,
@@ -118,25 +163,38 @@ export function createMessagesTransformHook(ctx: PluginContext) {
           contextBriefChars: 0,
           discardMarkerPresent: 0,
           status,
+          failureStage,
+          failureCode,
+          failureMessage,
           createdAt,
         });
       } catch (compactError) {
         getLogger().error(`Compaction failed: ${String(compactError)}`);
+        const snapshot = recordSnapshot(records);
+        const failure = diagnosticFailure(ctx, compactError);
         persistCompactionTelemetry(pool, {
           sessionId,
+          projectId: ctx.directory,
+          clientKind: 'opencode',
+          runtimeKind: 'plugin',
           totalToolParts: records.length,
           compactedParts: 0,
           skippedParts: 0,
-          beforeChars: 0,
-          afterChars: 0,
-          beforeTokens: 0,
-          afterTokens: 0,
+          eligibleParts: 0,
+          persistedParts: 0,
+          beforeChars: snapshot.chars,
+          afterChars: snapshot.chars,
+          beforeTokens: snapshot.tokens,
+          afterTokens: snapshot.tokens,
           tokensSaved: 0,
           savedPercent: 0,
           semanticSignalCountPreserved: 0,
           contextBriefChars: 0,
           discardMarkerPresent: 0,
           status: 'failed',
+          failureStage: 'compactor',
+          failureCode: failure.code,
+          failureMessage: failure.message,
           createdAt,
         });
       }
@@ -186,16 +244,35 @@ async function persistExpandableRecords(
   ctx: PluginContext,
   pool: ReturnType<PluginContext['database']['getPool']>,
   records: ToolCallRecord[],
-): Promise<void> {
-  if (ctx.config?.contextCache?.enabled === false) {
-    throw new Error('tool compaction requires context cache for recoverable TOOL_REF output');
-  }
+): Promise<ExpandablePersistenceResult> {
   const candidates = records.filter((record) => {
     const source = record.error ?? record.output ?? '';
     return source.trim().length > 0
       && ctx.contextCompactor.createExpandableRef(record).length < source.length;
   });
-  await Promise.all(candidates.map(async (record) => {
+  const candidateSet = new Set(candidates);
+  const ineligible = records.filter((record) => !candidateSet.has(record));
+
+  if (candidates.length === 0) {
+    return {
+      recordsForCompaction: records,
+      eligibleParts: 0,
+      persistedParts: 0,
+      failedParts: 0,
+    };
+  }
+  if (ctx.config?.contextCache?.enabled === false) {
+    return {
+      recordsForCompaction: ineligible,
+      eligibleParts: candidates.length,
+      persistedParts: 0,
+      failedParts: candidates.length,
+      failure: new Error('tool compaction requires context cache for recoverable TOOL_REF output'),
+      failureCode: 'cache_disabled',
+    };
+  }
+
+  const writes = await Promise.allSettled(candidates.map(async (record) => {
     const source = record.error ?? record.output ?? '';
     const refId = ctx.contextCompactor.getExpandableRefId(record);
     await storeItem(pool, {
@@ -215,7 +292,48 @@ async function persistExpandableRecords(
       },
       tokens: estimateTokens(source),
     }, ctx.redactor);
+    return record;
   }));
+
+  const persisted: ToolCallRecord[] = [];
+  let firstFailure: unknown;
+  for (const write of writes) {
+    if (write.status === 'fulfilled') persisted.push(write.value);
+    else firstFailure ??= write.reason;
+  }
+  const failedParts = candidates.length - persisted.length;
+  return {
+    recordsForCompaction: [...ineligible, ...persisted],
+    eligibleParts: candidates.length,
+    persistedParts: persisted.length,
+    failedParts,
+    failure: firstFailure,
+    failureCode: failedParts === 0
+      ? undefined
+      : persisted.length === 0 ? 'cache_write_failed' : 'partial_cache_write_failed',
+  };
+}
+
+function diagnosticFailure(ctx: PluginContext, error: unknown): { code: string; message: string } {
+  const code = error instanceof Error && error.name ? error.name : 'unknown_error';
+  const rawMessage = error instanceof Error ? error.message : String(error ?? 'unknown error');
+  const redactedMessage = ctx.redactor
+    ? ctx.redactor.redact(rawMessage).text
+    : rawMessage;
+  return {
+    code: code.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 80),
+    message: redactedMessage.replace(/\s+/g, ' ').trim().slice(0, 500),
+  };
+}
+
+function recordSnapshot(records: ToolCallRecord[]): { chars: number; tokens: number } {
+  const text = records.map((record) => JSON.stringify({
+    tool: record.tool,
+    args: record.args,
+    output: record.output,
+    error: record.error,
+  })).join('\n');
+  return { chars: text.length, tokens: estimateTokens(text) };
 }
 
 function cacheKind(record: ToolCallRecord): CacheKind {

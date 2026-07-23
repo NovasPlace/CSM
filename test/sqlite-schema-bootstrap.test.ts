@@ -13,6 +13,7 @@ const EXPECTED_SQLITE_MIGRATION_IDS = [
   '20260711-024-sqlite-compaction-metrics',
   '20260712-025-sqlite-context-injection-telemetry',
   '20260713-026-sqlite-agentbook',
+  '20260721-027-sqlite-compaction-attribution',
 ] as const;
 
 describe('Phase 3C â€” SQLite schema bootstrap', () => {

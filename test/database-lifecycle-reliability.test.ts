@@ -68,7 +68,7 @@ it('coalesces real PostgreSQL startup and records one migration history', async 
     databaseUrl: databaseUrl(postgresName) });
   await Promise.all(Array.from({ length: 10 }, () => database.connect()));
   const count = await database.getPool().query('SELECT count(*)::int AS count FROM csm_schema_migrations');
-  assert.equal((count.rows[0] as { count: number }).count, 27);
+  assert.equal((count.rows[0] as { count: number }).count, 28);
   const pool = database.getPool();
   await database.connect();
   assert.equal(database.getPool(), pool);

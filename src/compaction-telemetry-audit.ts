@@ -42,6 +42,15 @@ export interface AuditResult {
   };
   totalsMatch: boolean;
   sessionBreakdown: SessionBreakdown[];
+  projectBreakdown: ProjectBreakdown[];
+  failureBreakdown: FailureBreakdown[];
+  sessionCoverage: SessionCoverage;
+  unattributedRows: number;
+  injectionOverheadTokens: number;
+  databaseInjectionOverheadTokens: number;
+  unmatchedInjectionOverheadTokens: number;
+  netTokensSaved: number;
+  netReductionPercent: number;
   passed: boolean;
   summary: string;
 }
@@ -62,6 +71,30 @@ export interface SessionBreakdown {
   afterTokens: number;
   firstCompaction: string;
   lastCompaction: string;
+}
+
+export interface ProjectBreakdown {
+  projectId: string;
+  clientKind: string;
+  runtimeKind: string;
+  compactionCount: number;
+  distinctSessions: number;
+  tokensSaved: number;
+  beforeTokens: number;
+  afterTokens: number;
+}
+
+export interface FailureBreakdown {
+  stage: string;
+  code: string;
+  count: number;
+}
+
+export interface SessionCoverage {
+  totalSessions: number;
+  measuredSessions: number;
+  totalProjects: number;
+  measuredPercent: number;
 }
 
 // --- Typed DB row DTOs (Phase L4-B) ---
@@ -119,6 +152,29 @@ interface SessionBreakdownRow {
   last: string;
 }
 
+interface ProjectBreakdownRow {
+  project_id: string;
+  client_kind: string;
+  runtime_kind: string;
+  count: string | number;
+  sessions: string | number;
+  saved: string | number;
+  before: string | number;
+  after: string | number;
+}
+
+interface FailureBreakdownRow {
+  stage: string;
+  code: string;
+  count: string | number;
+}
+
+interface CoverageRow {
+  total_sessions: string | number;
+  measured_sessions: string | number;
+  total_projects: string | number;
+}
+
 export async function auditCompactionTelemetry(pool: DatabasePool): Promise<AuditAvailability> {
   const dialect = dialectFromPool(pool);
 
@@ -132,7 +188,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
     return { available: false, reason: 'table_missing', passed: null };
   }
 
-  // 2. Schema-completeness check (all 15 non-id columns must exist)
+  // 2. Schema-completeness check
   const schemaQuery = dialect === 'sqlite'
     ? 'PRAGMA table_info(compaction_metrics)'
     : `SELECT column_name FROM information_schema.columns WHERE table_name = 'compaction_metrics'`;
@@ -145,6 +201,8 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
     'before_chars', 'after_chars', 'before_tokens', 'after_tokens',
     'tokens_saved', 'saved_percent', 'semantic_signal_count_preserved',
     'context_brief_chars', 'discard_marker_present', 'status', 'created_at',
+    'project_id', 'client_kind', 'runtime_kind', 'eligible_parts', 'persisted_parts',
+    'failure_stage', 'failure_code', 'failure_message',
   ];
   const missingColumns = requiredColumns.filter((c) => !existingColumns.includes(c));
   if (missingColumns.length > 0) {
@@ -159,7 +217,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
   }
 
   // 4. Run the actual audit logic
-  const result = await runAuditLogic(pool);
+  const result = await runAuditLogic(pool, dialect);
   return {
     available: true,
     passed: result.passed,
@@ -168,7 +226,7 @@ export async function auditCompactionTelemetry(pool: DatabasePool): Promise<Audi
   };
 }
 
-async function runAuditLogic(pool: DatabasePool): Promise<AuditResult> {
+async function runAuditLogic(pool: DatabasePool, dialect: 'pg' | 'sqlite'): Promise<AuditResult> {
   const anomalies_neg = await pool.query(`
     SELECT id, session_id,
       'before_tokens=' || before_tokens || ' after_tokens=' || after_tokens || ' tokens_saved=' || tokens_saved as detail
@@ -209,7 +267,7 @@ async function runAuditLogic(pool: DatabasePool): Promise<AuditResult> {
   const anomalies_zero = await pool.query(`
     SELECT id, session_id, before_tokens, after_tokens
     FROM compaction_metrics
-    WHERE before_tokens = 0 OR after_tokens = 0
+    WHERE status != 'failed' AND (before_tokens = 0 OR after_tokens = 0)
   `);
 
   const zeroBeforeOrAfter: AuditAnomaly[] = [];
@@ -340,12 +398,90 @@ async function runAuditLogic(pool: DatabasePool): Promise<AuditResult> {
     lastCompaction: row.last,
   }));
 
+  const projectResult = await pool.query(`
+    SELECT COALESCE(project_id, 'unknown') AS project_id,
+      client_kind, runtime_kind,
+      COUNT(*) AS count,
+      COUNT(DISTINCT session_id) AS sessions,
+      SUM(tokens_saved) AS saved,
+      SUM(before_tokens) AS before,
+      SUM(after_tokens) AS after
+    FROM compaction_metrics
+    GROUP BY COALESCE(project_id, 'unknown'), client_kind, runtime_kind
+    ORDER BY saved DESC, count DESC
+  `);
+  const projectBreakdown: ProjectBreakdown[] = (projectResult.rows as ProjectBreakdownRow[])
+    .map((row) => ({
+      projectId: row.project_id,
+      clientKind: row.client_kind,
+      runtimeKind: row.runtime_kind,
+      compactionCount: parseInt(String(row.count), 10),
+      distinctSessions: parseInt(String(row.sessions), 10),
+      tokensSaved: parseInt(String(row.saved), 10),
+      beforeTokens: parseInt(String(row.before), 10),
+      afterTokens: parseInt(String(row.after), 10),
+    }));
+
+  const failureResult = await pool.query(`
+    SELECT COALESCE(failure_stage, 'unknown') AS stage,
+      COALESCE(failure_code, 'unclassified') AS code,
+      COUNT(*) AS count
+    FROM compaction_metrics
+    WHERE status = 'failed' OR failure_code IS NOT NULL
+    GROUP BY COALESCE(failure_stage, 'unknown'), COALESCE(failure_code, 'unclassified')
+    ORDER BY count DESC
+  `);
+  const failureBreakdown: FailureBreakdown[] = (failureResult.rows as FailureBreakdownRow[])
+    .map((row) => ({
+      stage: row.stage,
+      code: row.code,
+      count: parseInt(String(row.count), 10),
+    }));
+
+  const coverageResult = await pool.query(`
+    SELECT
+      (SELECT COUNT(*) FROM sessions) AS total_sessions,
+      (SELECT COUNT(DISTINCT session_id) FROM compaction_metrics) AS measured_sessions,
+      (SELECT COUNT(DISTINCT project_id) FROM sessions WHERE project_id IS NOT NULL) AS total_projects
+  `);
+  const coverageRow = coverageResult.rows[0] as CoverageRow;
+  const totalSessions = parseInt(String(coverageRow.total_sessions), 10);
+  const measuredSessions = parseInt(String(coverageRow.measured_sessions), 10);
+  const sessionCoverage: SessionCoverage = {
+    totalSessions,
+    measuredSessions,
+    totalProjects: parseInt(String(coverageRow.total_projects), 10),
+    measuredPercent: totalSessions > 0
+      ? Math.round((measuredSessions / totalSessions) * 10_000) / 100
+      : 0,
+  };
+
+  const unattributedResult = await pool.query(`
+    SELECT COUNT(*) AS cnt FROM compaction_metrics
+    WHERE project_id IS NULL OR client_kind = 'unknown' OR runtime_kind = 'unknown'
+  `);
+  const unattributedRows = parseInt(
+    String((unattributedResult.rows[0] as CountRow).cnt),
+    10,
+  );
+
+  const injectionOverhead = await readInjectionOverhead(pool, dialect);
+  const injectionOverheadTokens = injectionOverhead.matchedTokens;
+  const databaseInjectionOverheadTokens = injectionOverhead.databaseTokens;
+  const unmatchedInjectionOverheadTokens = databaseInjectionOverheadTokens
+    - injectionOverheadTokens;
+  const netTokensSaved = recomputedTotals.totalTokensSaved - injectionOverheadTokens;
+  const netReductionPercent = recomputedTotals.totalBeforeTokens > 0
+    ? Math.round((netTokensSaved / recomputedTotals.totalBeforeTokens) * 10_000) / 100
+    : 0;
+
   const allClean = negativeValues.length === 0
     && mathErrors.length === 0
     && zeroBeforeOrAfter.length === 0
     && savedExceedsBefore.length === 0
     && afterExceedsBefore.length === 0
     && duplicateIds.length === 0
+    && statusBreakdown.failed === 0
     && totalsMatch;
 
   const k = (n: number) => n >= 1_000_000_000 ? `${(n / 1_000_000_000).toFixed(2)}B`
@@ -355,7 +491,7 @@ async function runAuditLogic(pool: DatabasePool): Promise<AuditResult> {
 
   const summary = allClean
     ? `AUDIT PASSED. ${totalRows} compactions verified. ${k(recomputedTotals.totalTokensSaved)} tokens saved (${recomputedTotals.overallReductionPercent}% reduction). No duplicates, negative values, or math errors found. Stored totals match recomputed.`
-    : `AUDIT ISSUES FOUND. ${negativeValues.length} negative values, ${mathErrors.length} math errors, ${zeroBeforeOrAfter.length} zero fields, ${savedExceedsBefore.length} saved>before, ${afterExceedsBefore.length} after>before, ${duplicateIds.length} possible duplicates. Totals ${totalsMatch ? 'match' : 'MISMATCH'}.`;
+    : `AUDIT ISSUES FOUND. ${statusBreakdown.failed} failed runs, ${negativeValues.length} negative values, ${mathErrors.length} math errors, ${zeroBeforeOrAfter.length} zero fields, ${savedExceedsBefore.length} saved>before, ${afterExceedsBefore.length} after>before, ${duplicateIds.length} possible duplicates. Totals ${totalsMatch ? 'match' : 'MISMATCH'}.`;
 
   return {
     totalRows,
@@ -370,8 +506,48 @@ async function runAuditLogic(pool: DatabasePool): Promise<AuditResult> {
     storedTotals,
     totalsMatch,
     sessionBreakdown,
+    projectBreakdown,
+    failureBreakdown,
+    sessionCoverage,
+    unattributedRows,
+    injectionOverheadTokens,
+    databaseInjectionOverheadTokens,
+    unmatchedInjectionOverheadTokens,
+    netTokensSaved,
+    netReductionPercent,
     passed: allClean,
     summary,
+  };
+}
+
+async function readInjectionOverhead(
+  pool: DatabasePool,
+  dialect: 'pg' | 'sqlite',
+): Promise<{ matchedTokens: number; databaseTokens: number }> {
+  const tableResult = dialect === 'sqlite'
+    ? await pool.query(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='context_injection_events'",
+    )
+    : await pool.query("SELECT to_regclass('context_injection_events') AS name");
+  const table = tableResult.rows[0] as { name?: string | null } | undefined;
+  if (!table?.name) return { matchedTokens: 0, databaseTokens: 0 };
+
+  const result = await pool.query(`
+    SELECT
+      COALESCE(SUM(estimated_tokens), 0) AS database_tokens,
+      COALESCE(SUM(CASE
+        WHEN session_id IN (SELECT DISTINCT session_id FROM compaction_metrics)
+        THEN estimated_tokens ELSE 0 END), 0) AS matched_tokens
+    FROM context_injection_events
+    WHERE status = 'injected' AND environment = 'production'
+  `);
+  const row = result.rows[0] as {
+    database_tokens: string | number;
+    matched_tokens: string | number;
+  };
+  return {
+    matchedTokens: parseInt(String(row.matched_tokens), 10),
+    databaseTokens: parseInt(String(row.database_tokens), 10),
   };
 }
 
@@ -419,6 +595,21 @@ function formatAuditReportInner(result: AuditResult): string {
   lines.push(`  Avg saved per compaction: ${rt.avgTokensSavedPerCompaction.toLocaleString()} tokens`);
   lines.push('');
 
+  lines.push('--- Net Token Accounting ---');
+  lines.push(`  Gross compaction savings: ${rt.totalTokensSaved.toLocaleString()} tokens`);
+  lines.push(`  Matched-session production injection overhead: ${result.injectionOverheadTokens.toLocaleString()} tokens`);
+  lines.push(`  Net matched-session savings: ${result.netTokensSaved.toLocaleString()} tokens (${result.netReductionPercent}% of measured input)`);
+  lines.push(`  Database-wide production injection overhead: ${result.databaseInjectionOverheadTokens.toLocaleString()} tokens`);
+  lines.push(`  Overhead outside measured compaction sessions: ${result.unmatchedInjectionOverheadTokens.toLocaleString()} tokens`);
+  lines.push('');
+
+  lines.push('--- Database-wide Session Coverage ---');
+  lines.push(`  Sessions with compaction telemetry: ${result.sessionCoverage.measuredSessions.toLocaleString()} / ${result.sessionCoverage.totalSessions.toLocaleString()} (${result.sessionCoverage.measuredPercent}%)`);
+  lines.push(`  Projects represented in sessions: ${result.sessionCoverage.totalProjects.toLocaleString()}`);
+  lines.push(`  Unattributed compaction rows: ${result.unattributedRows.toLocaleString()}`);
+  lines.push('  Scope: all rows in the selected CSM database; no project-folder filter applied.');
+  lines.push('');
+
   lines.push('--- Stored vs Recomputed ---');
   lines.push(`  Stored SUM(tokens_saved):  ${result.storedTotals.totalTokensSaved.toLocaleString()}`);
   lines.push(`  Recomputed SUM(before-after): ${result.recomputedTotals.totalTokensSaved.toLocaleString()}`);
@@ -433,6 +624,28 @@ function formatAuditReportInner(result: AuditResult): string {
   lines.push(`  After exceeds before (expansion): ${result.afterExceedsBefore.length}`);
   lines.push(`  Possible duplicate rows: ${result.duplicateIds.length}`);
   lines.push('');
+
+  if (result.failureBreakdown.length > 0) {
+    lines.push('--- Failure Breakdown ---');
+    for (const failure of result.failureBreakdown.slice(0, 10)) {
+      lines.push(`  ${failure.stage}/${failure.code}: ${failure.count}`);
+    }
+    if (result.failureBreakdown.length > 10) {
+      lines.push(`  ... and ${result.failureBreakdown.length - 10} more failure groups`);
+    }
+    lines.push('');
+  }
+
+  if (result.projectBreakdown.length > 0) {
+    lines.push('--- Project / Runtime Breakdown ---');
+    for (const project of result.projectBreakdown.slice(0, 20)) {
+      lines.push(`  ${project.projectId} [${project.clientKind}/${project.runtimeKind}]: ${project.tokensSaved.toLocaleString()} saved / ${project.compactionCount} runs / ${project.distinctSessions} sessions`);
+    }
+    if (result.projectBreakdown.length > 20) {
+      lines.push(`  ... and ${result.projectBreakdown.length - 20} more project/runtime groups`);
+    }
+    lines.push('');
+  }
 
   if (result.negativeValues.length > 0) {
     lines.push('--- Negative Values ---');

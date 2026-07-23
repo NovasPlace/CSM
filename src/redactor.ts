@@ -9,7 +9,7 @@
  *  - Secure by default; categories opt-out via config.
  *  - Audit metadata contains counts ONLY — never raw redacted values.
  *  - Paths are normalized (not blindly redacted) to preserve coding utility:
- *      C:\Users\Donovan\project\src/foo.ts → [WORKSPACE]/src/foo.ts
+ *      C:\Users\ExampleUser\project\src/foo.ts → [WORKSPACE]/src/foo.ts
  *  - Fail-closed: on error, return input with safe redaction applied.
  */
 import { posix, win32 } from 'node:path';

@@ -163,7 +163,7 @@ export const EXTRA_MCP_TOOLS = [
     sessionId: sessionTool,
     projectRoot: projectTool,
   }, [], hints(true, false, false)),
-  toolSpec('csm_compaction_audit', 'Run a compaction telemetry audit.', {}, [], hints(true, false, false)),
+  toolSpec('csm_compaction_audit', 'Audit database-wide compaction coverage, attribution, failures, and net token savings across all recorded projects and sessions.', {}, [], hints(true, false, false)),
 ];
 
 export const EXTRA_MCP_TOOL_NAMES = EXTRA_MCP_TOOLS.map((tool) => tool.name);

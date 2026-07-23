@@ -890,7 +890,7 @@ export function runtimeStatusTool(
 
 export function compactionAuditTool(database: Database) {
   return tool({
-    description: 'Audit compaction telemetry for correctness. Recomputes totals from raw before/after values, checks for duplicates, negative values, math errors, and zero fields. Verifies SUM(tokens_saved) matches SUM(before_tokens - after_tokens).',
+    description: 'Audit all compaction telemetry in the selected CSM database. Reports integrity, failures, project/client/runtime attribution, cross-session coverage, gross savings, production injection overhead, and net measured savings. No project-folder filter is applied.',
     args: {},
     async execute() {
       const { auditCompactionTelemetry, formatAuditAvailability } = await import('./compaction-telemetry-audit.js');
