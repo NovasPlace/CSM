@@ -1,0 +1,46 @@
+{
+  "name": "cross-session-memory",
+  "version": "1.0.0",
+  "description": "The complete self-hosted Cross-Session Memory runtime and lifecycle automation, native to Claude Code.",
+  "author": {
+    "name": "Donovan"
+  },
+  "homepage": "https://github.com/NovasPlace/CSM",
+  "repository": "https://github.com/NovasPlace/CSM",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "claude-code",
+    "continuity",
+    "postgres",
+    "sqlite"
+  ],
+  "commands": "./commands/",
+  "agents": "./agents/",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Cross-Session Memory",
+    "shortDescription": "Full CSM continuity runtime for Claude Code.",
+    "longDescription": "Memory, governance, living state, beliefs, self-model, AgentBook, checkpoints, context cache, goals, work ledger, onboarding, re-entry, compaction, and handoff automation — wired into Claude Code's native lifecycle hooks, slash commands, subagents, and skills.",
+    "developerName": "Donovan",
+    "category": "Productivity",
+    "capabilities": [
+      "Search",
+      "Write",
+      "Long-term memory",
+      "Lifecycle automation",
+      "Living state",
+      "AgentBook"
+    ],
+    "defaultPrompt": [
+      "Search project memory before we start changing code.",
+      "Build a context brief for this task from prior sessions.",
+      "Show the current context pressure before we continue."
+    ],
+    "brandColor": "#2563EB",
+    "websiteURL": "https://github.com/NovasPlace/CSM",
+    "privacyPolicyURL": "https://github.com/NovasPlace/CSM/blob/master/docs/DATA_PRIVACY_AND_LIFECYCLE.md"
+  }
+}
