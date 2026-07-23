@@ -1,35 +1,44 @@
 {
   "name": "cross-session-memory-bridge",
-  "version": "1.1.0",
-  "description": "Repo-local Codex plugin wrapper for the cross-session memory bridge.",
+  "version": "1.1.0+codex.20260722014812",
+  "description": "Native Codex plugin containing the complete Cross-Session Memory runtime and lifecycle automation.",
   "author": {
     "name": "Donovan"
   },
   "license": "MIT",
+  "homepage": "https://github.com/NovasPlace/CSM",
+  "repository": "https://github.com/NovasPlace/CSM",
   "keywords": [
     "memory",
     "codex",
     "postgres",
     "bridge"
   ],
+  "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Cross-Session Memory Bridge",
-    "shortDescription": "Resume and sync Codex work across sessions.",
-    "longDescription": "Postgres-backed memory, compaction, checkpointing, and context briefs that keep long coding sessions coherent while reducing token spend.",
+    "displayName": "Cross-Session Memory",
+    "shortDescription": "Full CSM continuity runtime for Codex.",
+    "longDescription": "The complete self-hosted CSM runtime for Codex: memory, governance, living state, beliefs, self-model, AgentBook, checkpoints, context cache, goals, work ledger, onboarding, re-entry, compaction, and handoff automation.",
     "developerName": "Donovan",
     "category": "Productivity",
     "capabilities": [
       "Search",
       "Write",
-      "Long-term memory"
+      "Long-term memory",
+      "Checkpointing",
+      "Living state",
+      "Belief and self-model",
+      "AgentBook",
+      "Lifecycle automation"
     ],
     "defaultPrompt": [
       "Resume context for this coding task from prior sessions.",
-      "Mirror this turn into bridge memory for later handoff.",
       "Build a handoff summary before we stop.",
       "Show the current context pressure before we continue."
     ],
-    "brandColor": "#2563EB"
+    "brandColor": "#2563EB",
+    "websiteURL": "https://github.com/NovasPlace/CSM",
+    "privacyPolicyURL": "https://github.com/NovasPlace/CSM/blob/master/docs/DATA_PRIVACY_AND_LIFECYCLE.md"
   }
 }

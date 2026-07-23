@@ -185,4 +185,40 @@ describe('messages transform compaction safety', () => {
     strictEqual(messages[0].parts[0].state.output, original);
   });
 
+  it('continues compacting safely stored outputs when another cache write fails', async () => {
+    const ctx = runtimeContext();
+    ctx.config = { contextCache: { enabled: true }, contextGovernor: { enabled: false } } as PluginContext['config'];
+    ctx.database = {
+      getPool: () => ({
+        query: async (sql: string, params?: unknown[]) => {
+          if (sql.includes('INSERT INTO context_cache') && params?.[1] === 'call-fail') {
+            throw new Error('one cache row unavailable');
+          }
+          return { rows: [], rowCount: 1 };
+        },
+      }),
+    } as PluginContext['database'];
+    const failedOriginal = `must remain visible ${'f'.repeat(500)}`;
+    const storedOriginal = `can be compacted ${'s'.repeat(500)}`;
+    const timestamp = Date.now() - 120_000;
+    const messages = [
+      { info: { role: 'assistant', sessionID: SESSION_ID }, parts: [
+        {
+          ...toolPart('read', failedOriginal, timestamp),
+          callID: 'call-fail',
+        },
+        {
+          ...toolPart('read', storedOriginal, timestamp + 1),
+          callID: 'call-ok',
+        },
+      ] },
+      { info: { role: 'user', sessionID: SESSION_ID }, parts: [{ type: 'text', text: 'next task' }] },
+    ];
+
+    await createMessagesTransformHook(ctx)({}, { messages });
+
+    strictEqual(messages[0].parts[0].state.output, failedOriginal);
+    ok(messages[0].parts[1].state.output.startsWith('TOOL_REF id=call-ok'));
+  });
+
 });

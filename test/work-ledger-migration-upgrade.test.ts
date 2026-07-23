@@ -87,7 +87,7 @@ it('upgrades csm-postgres-v1 through current migrations', async () => {
             to_regclass('public.coordination_events') AS coordination_table
      FROM csm_schema_migrations`,
   );
-  assert.equal(afterResult.rows[0].count, 27);
+  assert.equal(afterResult.rows[0].count, 28);
   assert.equal(afterResult.rows[0].ledger_table, 'work_ledger_changes');
   assert.equal(afterResult.rows[0].coordination_table, 'coordination_events');
   const vectors = await current.getPool().query(
@@ -110,7 +110,8 @@ it('upgrades csm-postgres-v1 through current migrations', async () => {
      WHERE migration_id IN (
        '20260710-021-work-ledger', '20260710-022-coordination-persistence',
        '20260718-026-postgres-embedding-dimension',
-       '20260718-027-postgres-embedding-dimension-repair'
+       '20260718-027-postgres-embedding-dimension-repair',
+       '20260721-028-compaction-attribution'
      )
      ORDER BY migration_id`,
   );
@@ -118,5 +119,6 @@ it('upgrades csm-postgres-v1 through current migrations', async () => {
     '20260710-021-work-ledger', '20260710-022-coordination-persistence',
     '20260718-026-postgres-embedding-dimension',
     '20260718-027-postgres-embedding-dimension-repair',
+    '20260721-028-compaction-attribution',
   ]);
 });

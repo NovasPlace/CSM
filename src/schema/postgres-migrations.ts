@@ -27,6 +27,7 @@ import { initializeWorkLedgerSchema } from '../work-ledger-schema.js';
 import { runCapabilityProvenanceMigration } from './capability-provenance-migration.js';
 import { initializeAgentBookSchema } from './agentbook-schema.js';
 import { migrateEmbeddingDimensions } from './embedding-dimension-migration.js';
+import { migrateCompactionAttribution } from './compaction-attribution-migration.js';
 
 export function buildPostgresMigrations(
   database: Database, pool: DatabasePool, dimensions = 1_536,
@@ -37,7 +38,10 @@ export function buildPostgresMigrations(
     migration('20260709-002-session', 'sessions, events, and session contexts', () => initializeSessionSchema(pool)),
     withAcceptedLegacy(
       migration('20260709-003-memory', 'memories, chunks, merges, search, and archive metadata', () => initializeMemorySchema(pool, dimensions)),
-      ['6f13c75b1355c9fbfae316d894ac6e211dfaaa7f42ace36d2c01d5dd41b924e4'],
+      [
+        '6f13c75b1355c9fbfae316d894ac6e211dfaaa7f42ace36d2c01d5dd41b924e4',
+        '70806f76a9274302dfa73592bc8aec7e2c0656224bfced6d4cddfd011e0e5944',
+      ],
     ),
     migration('20260709-004-core', 'distillation, compaction, candidates, projects, and quality', () => initializeCoreSchema(pool)),
     migration('20260709-005-project-isolation', 'project ids and project-scoped indexes', () => migrateProjectIsolation(pool)),
@@ -66,6 +70,7 @@ export function buildPostgresMigrations(
     migrationV2('20260713-025-agentbook', 'agentbook operational ledger, summaries, current state, and rules', () => initializeAgentBookSchema(pool)),
     migrationV2('20260718-026-postgres-embedding-dimension', 'explicit provider embedding dimension transition', () => migrateEmbeddingDimensions(pool, dimensions)),
     migrationV2('20260718-027-postgres-embedding-dimension-repair', 'repair legacy embedding transition constraints and values', () => migrateEmbeddingDimensions(pool, dimensions)),
+    migrationV2('20260721-028-compaction-attribution', 'database-wide compaction attribution and failure diagnostics', () => migrateCompactionAttribution(pool)),
   ];
 }
 

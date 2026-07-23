@@ -2,24 +2,32 @@ import type { RuntimePluginConfig } from './runtime-plugin-config.js';
 export type { RuntimePluginConfig } from './runtime-plugin-config.js';
 import { baseDefaultsFromEnv } from './config-defaults-base.js';
 import { continuityDefaultsFromEnv } from './config-defaults-continuity.js';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
 import { loadDotEnv } from './config-env.js';
 import { validateConfig } from './config-validation.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const pluginRoot = resolve(__dirname, '..');
-
-// Load environment from process.cwd() (project specific overrides) first,
-// then fallback to pluginRoot's .env for default configuration.
+// Load the active project's environment. Packaged launchers provide any shared
+// checkout/config directory explicitly through CSM_CONFIG_DIR.
 loadDotEnv(process.cwd());
-loadDotEnv(pluginRoot);
+if (process.env.CSM_CONFIG_DIR) loadDotEnv(process.env.CSM_CONFIG_DIR);
 
 export const DEFAULT_CONFIG: RuntimePluginConfig = {
   ...baseDefaultsFromEnv(),
   ...continuityDefaultsFromEnv(),
 };
+
+export function defaultConfigForDirectory(directory?: string): RuntimePluginConfig {
+  if (directory) loadDotEnv(directory);
+  const sharedConfigDirectories = [
+    process.env.CSM_CONFIG_DIR,
+    process.env.PLUGIN_DATA,
+    process.env.CLAUDE_PLUGIN_DATA,
+  ].filter((value): value is string => Boolean(value?.trim()));
+  sharedConfigDirectories.forEach((configDirectory) => loadDotEnv(configDirectory));
+  return {
+    ...baseDefaultsFromEnv(),
+    ...continuityDefaultsFromEnv(),
+  };
+}
 
 export function validateAndReturnConfig(): RuntimePluginConfig {
   validateConfig(DEFAULT_CONFIG);

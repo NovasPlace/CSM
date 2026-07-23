@@ -2,8 +2,9 @@
 - SQLite MVP complete (Phase 3). Lint debt reduction complete: Phase L1+L2, L3.1-L3.5, L4-A through L4-K done. Baseline locked at **7 warnings** (all in opentui.d.ts, skipped by design).
 - Phase 4 (Living State Layer) complete: experience packets, self-model, belief knowledge, advisory context-brief injection. All 4F-C requirements verified.
 - Phase 9B (Onboarding Quality + Telemetry) complete: context injection telemetry schema, compaction telemetry audit, observation window active.
+- Phase 9C (Database-Wide Compaction Observability) implemented: project/client/runtime attribution, classified failures, cross-session coverage, gross/injection/net token accounting, and safe partial cache-write handling. Production migration/observation pending runtime restart.
 - Capability promotion closure: all 7 criteria implemented, independently reviewed, cross-database verified. Unblocked.
-- **Observation window active** — baseline: 2026-07-13T07:54:15Z, 3 context_injection_events (1 onboarding, 2 reentry), 0 natural traffic yet. Monitoring whether CSM onboarding/re-entry improves agent cold-start continuity.
+- **Observation window active** — pre-9C compaction baseline captured 2026-07-21: 390 rows from 1 session, 232 skipped, 158 failed, 0 compressed, 4,107,005→4,107,005 estimated tokens, 0 verified savings. Next observation begins after runtime restart applies the attribution migration.
 
 ## Constraints & Preferences
 - Each sub-phase is behavior-preserving, boring, verbatim moves first
@@ -29,8 +30,10 @@
 ### Done
 Phases 1A–4F-C, 7A–9B, L1–L4-K, and capability promotion closure are complete. Full per-phase detail (commits, schemas, test counts) is archived in `docs/PHASE_HISTORY.md`. Per-phase design docs live alongside it (e.g. `PHASE3G_SQLITE_MVP.md`, `PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md`).
 
+**Native Claude Code plugin** (`plugins/cross-session-memory/`): CSM is now a first-class Claude Code feature. A `HostProfile` seam (`src/native-host-profile.ts`) parameterizes the shared relay/runtime/hooks so Codex and Claude reuse one implementation (no duplication) while getting distinct transport pipes (`csm-claude-<hash>` vs `csm-codex-<hash>`). `runNativeMcpServer(profile)` / `runNativeHookClient(profile)` back thin `claude-mcp-server.ts` / `cli/claude-hook-client.ts` entrypoints. The bundle ships the manifest, `.mcp.json`, 10 lifecycle hooks, 12 slash commands, 3 subagents, and 3 skills, validated against one authoritative `surface-catalog.json`. Codex behavior is locked by `test/codex-native-golden.test.ts`. Packaging via `plugin:build:claude` / `plugin:release:claude:windows` with a clean-room `verify-claude-plugin-release.mjs`. See `docs/CLAUDE_INSTALLATION.md`.
+
 ### In Progress
-- **Observation Window**: Monitoring whether CSM onboarding/re-entry improves agent cold-start continuity. Baseline: 2026-07-13T07:54:15Z, 3 context_injection_events (1 onboarding, 2 reentry), 0 natural traffic yet. Next: fresh-session test with source attribution diagnostic.
+- **Observation Window**: Restart/reload the runtime, confirm migration `20260721-028-compaction-attribution` (PostgreSQL) or `20260721-027-sqlite-compaction-attribution`, then run fresh sessions across at least two project folders. Audit must report attributed session coverage plus gross, injection-overhead, and net token totals.
 
 ### Next (not started)
 - **Phase L4+ typed DTO continuation**: `checkpoint-store.ts`, `agent-work-journal.ts`, and `context-cache-runtime.ts`.
@@ -56,7 +59,7 @@ Phases 1A–4F-C, 7A–9B, L1–L4-K, and capability promotion closure are compl
 - **`isJunkBelief()` over-broad filter**: `subject.startsWith('tool:')` discards both success AND failure tool beliefs. Should inspect polarity/specificity, not blanket-reject `tool:` subjects.
 
 ## Next Steps
-1. **Observation window**: Run fresh-session test with source attribution diagnostic to verify CSM onboarding/re-entry contributes to cold-start continuity (not just AGENTS.md)
+1. **Observation window**: Reload the updated runtime, verify the Phase 9C attribution migration, and run fresh-session/source-attribution tests across multiple project folders.
 2. Phase L4+: continue typed-DTO pass on `checkpoint-store.ts`, `agent-work-journal.ts`, `context-cache-runtime.ts`
 3. Fix remaining `no-console` warnings (auto-docs.ts x3, system-transform.ts x3, work-journal-inject.ts x1) — convert to logger
 

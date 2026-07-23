@@ -19,6 +19,7 @@ opencode
 .tmp/
 .release/
 .csm-backups/
+.data/
 .obsidian/
 .tmp_*/
 *.canvas
