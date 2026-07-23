@@ -12,8 +12,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  * Exit 0 when the surface is consistent, exit 1 with a report otherwise.
  */
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pluginRoot = path.join(repoRoot, 'plugins', 'cross-session-memory');
+const argPluginRoot = argValue('--plugin-root');
+const pluginRoot = argPluginRoot
+  ? path.resolve(argPluginRoot)
+  : path.join(repoRoot, 'plugins', 'cross-session-memory');
 const MCP_PREFIX = 'mcp__cross-session-memory__';
+
+function argValue(flag) {
+  const index = process.argv.indexOf(flag);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
 
 const errors = [];
 const fail = (message) => errors.push(message);
