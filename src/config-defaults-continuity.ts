@@ -6,7 +6,7 @@ import { getEnvBoolean, getEnvInteger, getEnvNumber, getEnvString } from './conf
 type ContinuityDefaults = Pick<PluginConfig,
   'contextCompiler' | 'contextGovernor' | 'contextCache' | 'contextRollover'
   | 'workJournal' | 'autoDocs' | 'redactor' | 'selfModel' | 'beliefKnowledge'
-  | 'beliefPromotion' | 'livingState' | 'reentry' | 'selfContinuity'>;
+  | 'beliefPromotion' | 'livingState' | 'memoryMaintenance' | 'reentry' | 'selfContinuity'>;
 
 export function continuityDefaultsFromEnv(): ContinuityDefaults {
   return {
@@ -21,6 +21,7 @@ export function continuityDefaultsFromEnv(): ContinuityDefaults {
     beliefKnowledge: beliefKnowledgeDefaults(),
     beliefPromotion: beliefPromotionDefaults(),
     livingState: livingStateDefaults(),
+    memoryMaintenance: memoryMaintenanceDefaults(),
     reentry: reentryDefaults(),
     selfContinuity: selfContinuityDefaults(),
   };
@@ -123,6 +124,20 @@ function livingStateDefaults(): PluginConfig['livingState'] {
     scanLookbackMinutes: getEnvInteger('CSM_LIVING_STATE_LOOKBACK_MINUTES', 10),
     maxScanPerType: getEnvInteger('CSM_LIVING_STATE_MAX_PER_TYPE', 10),
     updateIntervalMs: getEnvInteger('CSM_LIVING_STATE_INTERVAL', 60_000),
+  };
+}
+
+function memoryMaintenanceDefaults(): PluginConfig['memoryMaintenance'] {
+  return {
+    enabled: getEnvBoolean('CSM_MEMORY_MAINTENANCE_ENABLED', true),
+    intervalMs: getEnvInteger('CSM_MEMORY_MAINTENANCE_INTERVAL', 300_000),
+    maxPerType: getEnvInteger('CSM_MEMORY_MAINTENANCE_MAX_PER_TYPE', 50),
+    lessonPromotion: {
+      enabled: getEnvBoolean('CSM_LESSON_AUTO_PROMOTION_ENABLED', true),
+      minRecall: getEnvInteger('CSM_LESSON_MIN_RECALL', 10),
+      minSessions: getEnvInteger('CSM_LESSON_MIN_SESSIONS', 2),
+      maxPromotePerRun: getEnvInteger('CSM_LESSON_MAX_PROMOTE_PER_RUN', 5),
+    },
   };
 }
 

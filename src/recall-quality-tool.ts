@@ -542,7 +542,7 @@ export class RecallQualityAuditReportBuilder {
 
   private async buildRelevanceSection(win: AuditWindow): Promise<string> {
     // Relevance metrics: search sources only (context_recall is not a ranked search)
-    const searchSourceFilter = `AND source IN ('search', 'vector_only', 'text_only', 'text_fallback')`;
+    const searchSourceFilter = ` AND source IN ('search', 'vector_only', 'text_only', 'text_fallback')`;
     const { sql: top3Sql, params: top3Params } = this.buildQuery(win, `
       SELECT
         COUNT(*) FILTER (WHERE rank <= 3) * 100.0 / NULLIF(COUNT(*), 0) as rate,

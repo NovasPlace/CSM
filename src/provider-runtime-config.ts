@@ -52,6 +52,7 @@ export function normalizeProviderRuntimeConfig(config: RuntimePluginConfig): Run
     beliefKnowledge: { ...config.beliefKnowledge, enabled: false },
     beliefPromotion: { ...config.beliefPromotion, enabled: false },
     livingState: { ...config.livingState, enabled: false, injectAdvisoryBlock: false },
+    memoryMaintenance: { ...config.memoryMaintenance, enabled: false, lessonPromotion: { ...config.memoryMaintenance.lessonPromotion, enabled: false } },
     reentry: { ...config.reentry, enabled: false },
   };
 }

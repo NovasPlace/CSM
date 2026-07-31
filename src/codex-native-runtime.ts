@@ -9,6 +9,7 @@ import { startPluginContext } from './plugin-runtime-start.js';
 import { mergePluginConfig, normalizeProviderRuntimeConfig } from './provider-runtime-config.js';
 import { CodexTranscriptClient } from './codex-transcript-client.js';
 import { CODEX_HOST_PROFILE, type HostProfile } from './native-host-profile.js';
+import type { ToolCallRecord } from './types.js';
 
 export interface CodexNativeInvocation {
   projectRoot: string;
@@ -21,6 +22,8 @@ export class CodexNativeRuntime {
   private readonly transcript: CodexTranscriptClient;
   private readonly input: PluginInput;
   private disposed = false;
+  /** Per-session buffer of tool-call records, flushed at Stop for native compaction. */
+  private readonly toolCallBuffer = new Map<string, ToolCallRecord[]>();
 
   private constructor(
     readonly projectRoot: string,
@@ -56,6 +59,24 @@ export class CodexNativeRuntime {
 
   transcriptMessages(sessionId: string) {
     return this.transcript.messages(sessionId);
+  }
+
+  /** Buffer a tool-call record for later native compaction at Stop. */
+  bufferToolCall(sessionId: string, record: ToolCallRecord): void {
+    let buffer = this.toolCallBuffer.get(sessionId);
+    if (!buffer) {
+      buffer = [];
+      this.toolCallBuffer.set(sessionId, buffer);
+    }
+    buffer.push(record);
+  }
+
+  /** Drain the buffered tool-call records for a session (for compaction at Stop). */
+  drainToolCalls(sessionId: string): ToolCallRecord[] {
+    const buffer = this.toolCallBuffer.get(sessionId);
+    if (!buffer) return [];
+    this.toolCallBuffer.delete(sessionId);
+    return buffer;
   }
 
   tools(): Record<string, ToolDefinition> {

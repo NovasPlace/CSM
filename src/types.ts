@@ -364,6 +364,8 @@ export interface PluginConfig {
   beliefPromotion: BeliefPromotionConfig;
   // Phase 4F — Living state runtime loop
   livingState: LivingStateConfig;
+  // Memory maintenance — advisory candidate generation (prune, merge, archive)
+  memoryMaintenance: MemoryMaintenanceConfig;
   // Phase 8B — Re-entry live enablement
   reentry: ReEntryConfig;
 }
@@ -875,6 +877,33 @@ export interface LivingStateConfig {
   maxScanPerType: number;
   updateIntervalMs: number;
 }
+
+export interface MemoryMaintenanceConfig {
+  enabled: boolean;
+  intervalMs: number;
+  maxPerType: number;
+  /** Auto-promote high-recall, cross-session memories into lessons. */
+  lessonPromotion: LessonPromotionConfig;
+}
+
+export interface LessonPromotionConfig {
+  enabled: boolean;
+  minRecall: number;
+  minSessions: number;
+  maxPromotePerRun: number;
+}
+
+export const DEFAULT_MEMORY_MAINTENANCE_CONFIG: MemoryMaintenanceConfig = {
+  enabled: true,
+  intervalMs: 300_000, // 5 minutes
+  maxPerType: 50,
+  lessonPromotion: {
+    enabled: true,
+    minRecall: 10,
+    minSessions: 2,
+    maxPromotePerRun: 5,
+  },
+};
 
 export const CAPABILITY_PROVENANCE_TAG = 'capability-provenance';
 

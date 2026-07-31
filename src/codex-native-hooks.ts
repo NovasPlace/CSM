@@ -6,6 +6,7 @@ import {
   createToolExecuteAfterHook,
   createToolExecuteBeforeHook,
 } from './hooks/tool-execute.js';
+import { runNativeCompaction } from './hooks/native-compaction.js';
 import type { CodexNativeRuntime, CodexNativeRuntimeManager } from './codex-native-runtime.js';
 
 export type CodexHookPayload = Record<string, unknown> & {
@@ -53,6 +54,12 @@ export async function handleCodexNativeHook(
     await createEventHook(runtimeInput(runtime), runtime.context)({
       event: { type: 'session.updated', properties: { info: { id: sessionId } } },
     });
+    // Flush buffered tool calls through the compaction pipeline.
+    const records = runtime.drainToolCalls(sessionId);
+    if (records.length > 0) {
+      const clientKind = runtime.profile.hostName === 'codex' ? 'codex' : 'unknown';
+      await runNativeCompaction(runtime.context, records, sessionId, clientKind);
+    }
   }
   return { continue: true };
 }
@@ -120,24 +127,39 @@ async function postTool(
   payload: CodexHookPayload,
   sessionId: string,
 ): Promise<CodexHookOutput> {
+  const tool = toolName(payload);
   const response = payload.tool_response ?? payload.tool_output ?? payload.response ?? '';
   const error = stringValue(payload.error);
+  const args = objectValue(payload.tool_input ?? payload.input);
+  const output = typeof response === 'string' ? response : JSON.stringify(response);
   await createToolExecuteAfterHook(runtime.context)(
     {
-      tool: toolName(payload),
+      tool,
       sessionID: sessionId,
       callID: callIdValue(payload, runtime.profile.hostName),
-      args: objectValue(payload.tool_input ?? payload.input),
+      args,
     },
     {
-      title: toolName(payload),
-      output: typeof response === 'string' ? response : JSON.stringify(response),
+      title: tool,
+      output,
       metadata: {
         error,
         exitCode: numberValue(payload.exit_code),
       },
     },
   );
+  // Buffer for native compaction at Stop
+  runtime.bufferToolCall(sessionId, {
+    tool,
+    args,
+    output,
+    error,
+    exitCode: numberValue(payload.exit_code),
+    timestamp: Date.now(),
+    sessionId,
+    toolCallId: callIdValue(payload, runtime.profile.hostName),
+    filePath: extractFilePath(args),
+  });
   return {};
 }
 
@@ -221,6 +243,11 @@ function requiredString(value: unknown, name: string, label: string): string {
   const resolved = stringValue(value);
   if (!resolved) throw new Error(`${name} is required for the CSM ${label} hook.`);
   return resolved;
+}
+
+function extractFilePath(args: Record<string, unknown>): string | undefined {
+  const path = args.filePath ?? args.path ?? args.file;
+  return typeof path === 'string' ? path : undefined;
 }
 
 function numberValue(value: unknown): number | undefined {

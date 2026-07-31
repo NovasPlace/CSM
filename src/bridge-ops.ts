@@ -108,7 +108,13 @@ export async function recallLessonsOp(
     sortBy: 'important',
     limit,
   });
-  return rankMemoriesByProvenance(uniqueMemories([...direct, ...fallback])).slice(0, limit);
+  const globalLessons = await deps.memoryManager.listMemories({
+    type: 'lesson',
+    searchMode: 'global',
+    sortBy: 'important',
+    limit,
+  });
+  return rankMemoriesByProvenance(uniqueMemories([...direct, ...fallback, ...globalLessons])).slice(0, limit);
 }
 
 export async function getContextBriefOp(

@@ -18,7 +18,7 @@ interface CompactableMessagePart {
   compacted?: boolean;
 }
 
-interface CompactableMessage {
+export interface CompactableMessage {
   info?: { role?: string; sessionID?: string };
   parts?: CompactableMessagePart[];
 }

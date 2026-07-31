@@ -5,7 +5,7 @@ import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
 import { getLogger, withLogContext } from '../logger.js';
 import { isAlreadyCompacted } from '../compaction-utils.js';
 import type { GovernorMessage, GovernorPart } from '../context-governor.js';
-import { storeItem, type CacheKind } from '../context-cache-store.js';
+import { runCompactionPipeline } from './messages-transform-pipeline.js';
 import { estimateTokens } from '../token-bucket-analyzer.js';
 
 interface TransformToolState {
@@ -31,15 +31,6 @@ interface TransformPart extends GovernorPart {
 interface TransformMessage extends GovernorMessage {
   info?: { role?: string; sessionID?: string; id?: string };
   parts?: TransformPart[];
-}
-
-interface ExpandablePersistenceResult {
-  recordsForCompaction: ToolCallRecord[];
-  eligibleParts: number;
-  persistedParts: number;
-  failedParts: number;
-  failure?: unknown;
-  failureCode?: 'cache_disabled' | 'cache_write_failed' | 'partial_cache_write_failed';
 }
 
 export function createMessagesTransformHook(ctx: PluginContext) {
@@ -107,71 +98,35 @@ export function createMessagesTransformHook(ctx: PluginContext) {
       const createdAt = new Date().toISOString();
 
       try {
-        const persistence = await persistExpandableRecords(ctx, pool, records);
-        if (persistence.failedParts > 0) {
-          getLogger().warn(
-            'Some compaction candidates could not be stored for recovery: '
-            + `eligible=${persistence.eligibleParts} persisted=${persistence.persistedParts} `
-            + `failed=${persistence.failedParts} code=${persistence.failureCode ?? 'unknown'}`,
-          );
-        }
-
-        const compactOutput = ctx.contextCompactor.compact(
-          persistence.recordsForCompaction,
-          undefined,
-          messages,
-        );
-        const result = compactOutput.result;
-        const status = result.compactedParts > 0
-          ? 'compressed'
-          : persistence.eligibleParts > 0 && persistence.persistedParts === 0
-            ? 'failed'
-            : 'skipped_under_budget';
-        const failure = persistence.failedParts > 0
-          ? diagnosticFailure(ctx, persistence.failure)
-          : undefined;
-        const quality = ctx.contextCompactor.getLastQuality();
-        const qualityRejected = result.compactedParts === 0
-          && result.skippedParts > 0
-          && quality?.safe === false;
-        const failureStage = persistence.failedParts > 0
-          ? 'context_cache'
-          : qualityRejected ? 'quality_gate' : undefined;
-        const failureCode = persistence.failureCode
-          ?? (qualityRejected ? 'quality_rejected' : undefined);
-        const failureMessage = failure?.message
-          ?? (qualityRejected
-            ? `quality_score=${quality.qualityScore.toFixed(3)} threshold=0.600`
-            : undefined);
+        const outcome = await runCompactionPipeline(ctx, pool, records, messages);
         persistCompactionTelemetry(pool, {
           sessionId,
           projectId: ctx.directory,
           clientKind: 'opencode',
           runtimeKind: 'plugin',
           totalToolParts: records.length,
-          compactedParts: result.compactedParts,
-          skippedParts: result.skippedParts + persistence.failedParts,
-          eligibleParts: persistence.eligibleParts,
-          persistedParts: persistence.persistedParts,
-          beforeChars: result.beforeChars,
-          afterChars: result.afterChars,
-          beforeTokens: result.beforeTokens,
-          afterTokens: result.afterTokens,
-          tokensSaved: result.tokensSaved,
-          savedPercent: result.savedPercent,
-          semanticSignalCountPreserved: result.semanticSignalCountPreserved,
+          compactedParts: outcome.compactedParts,
+          skippedParts: outcome.skippedParts,
+          eligibleParts: outcome.eligibleParts,
+          persistedParts: outcome.persistedParts,
+          beforeChars: outcome.beforeChars,
+          afterChars: outcome.afterChars,
+          beforeTokens: outcome.beforeTokens,
+          afterTokens: outcome.afterTokens,
+          tokensSaved: outcome.tokensSaved,
+          savedPercent: outcome.savedPercent,
+          semanticSignalCountPreserved: outcome.semanticSignalCountPreserved,
           contextBriefChars: 0,
           discardMarkerPresent: 0,
-          status,
-          failureStage,
-          failureCode,
-          failureMessage,
+          status: outcome.status,
+          failureStage: outcome.failureStage,
+          failureCode: outcome.failureCode,
+          failureMessage: outcome.failureMessage,
           createdAt,
         });
       } catch (compactError) {
         getLogger().error(`Compaction failed: ${String(compactError)}`);
         const snapshot = recordSnapshot(records);
-        const failure = diagnosticFailure(ctx, compactError);
         persistCompactionTelemetry(pool, {
           sessionId,
           projectId: ctx.directory,
@@ -193,8 +148,11 @@ export function createMessagesTransformHook(ctx: PluginContext) {
           discardMarkerPresent: 0,
           status: 'failed',
           failureStage: 'compactor',
-          failureCode: failure.code,
-          failureMessage: failure.message,
+          failureCode: compactError instanceof Error && compactError.name
+            ? compactError.name.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 80)
+            : 'unknown_error',
+          failureMessage: (compactError instanceof Error ? compactError.message : String(compactError))
+            .replace(/\s+/g, ' ').trim().slice(0, 500),
           createdAt,
         });
       }
@@ -240,92 +198,6 @@ function auditGovernor(ctx: PluginContext, messages: TransformMessage[]): void {
   });
 }
 
-async function persistExpandableRecords(
-  ctx: PluginContext,
-  pool: ReturnType<PluginContext['database']['getPool']>,
-  records: ToolCallRecord[],
-): Promise<ExpandablePersistenceResult> {
-  const candidates = records.filter((record) => {
-    const source = record.error ?? record.output ?? '';
-    return source.trim().length > 0
-      && ctx.contextCompactor.createExpandableRef(record).length < source.length;
-  });
-  const candidateSet = new Set(candidates);
-  const ineligible = records.filter((record) => !candidateSet.has(record));
-
-  if (candidates.length === 0) {
-    return {
-      recordsForCompaction: records,
-      eligibleParts: 0,
-      persistedParts: 0,
-      failedParts: 0,
-    };
-  }
-  if (ctx.config?.contextCache?.enabled === false) {
-    return {
-      recordsForCompaction: ineligible,
-      eligibleParts: candidates.length,
-      persistedParts: 0,
-      failedParts: candidates.length,
-      failure: new Error('tool compaction requires context cache for recoverable TOOL_REF output'),
-      failureCode: 'cache_disabled',
-    };
-  }
-
-  const writes = await Promise.allSettled(candidates.map(async (record) => {
-    const source = record.error ?? record.output ?? '';
-    const refId = ctx.contextCompactor.getExpandableRefId(record);
-    await storeItem(pool, {
-      sessionId: record.sessionId,
-      displayId: refId,
-      kind: cacheKind(record),
-      createdAt: record.timestamp,
-      summary: summarizeRecord(record, source),
-      content: source,
-      metadata: {
-        source: 'tool_compaction',
-        tool: record.tool,
-        filePath: record.filePath,
-        messageId: record.messageId,
-        partId: record.partId,
-        toolCallId: record.toolCallId,
-      },
-      tokens: estimateTokens(source),
-    }, ctx.redactor);
-    return record;
-  }));
-
-  const persisted: ToolCallRecord[] = [];
-  let firstFailure: unknown;
-  for (const write of writes) {
-    if (write.status === 'fulfilled') persisted.push(write.value);
-    else firstFailure ??= write.reason;
-  }
-  const failedParts = candidates.length - persisted.length;
-  return {
-    recordsForCompaction: [...ineligible, ...persisted],
-    eligibleParts: candidates.length,
-    persistedParts: persisted.length,
-    failedParts,
-    failure: firstFailure,
-    failureCode: failedParts === 0
-      ? undefined
-      : persisted.length === 0 ? 'cache_write_failed' : 'partial_cache_write_failed',
-  };
-}
-
-function diagnosticFailure(ctx: PluginContext, error: unknown): { code: string; message: string } {
-  const code = error instanceof Error && error.name ? error.name : 'unknown_error';
-  const rawMessage = error instanceof Error ? error.message : String(error ?? 'unknown error');
-  const redactedMessage = ctx.redactor
-    ? ctx.redactor.redact(rawMessage).text
-    : rawMessage;
-  return {
-    code: code.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 80),
-    message: redactedMessage.replace(/\s+/g, ' ').trim().slice(0, 500),
-  };
-}
-
 function recordSnapshot(records: ToolCallRecord[]): { chars: number; tokens: number } {
   const text = records.map((record) => JSON.stringify({
     tool: record.tool,
@@ -334,18 +206,6 @@ function recordSnapshot(records: ToolCallRecord[]): { chars: number; tokens: num
     error: record.error,
   })).join('\n');
   return { chars: text.length, tokens: estimateTokens(text) };
-}
-
-function cacheKind(record: ToolCallRecord): CacheKind {
-  if (record.error) return 'error';
-  if (record.tool === 'read' && record.filePath) return 'file_read';
-  return 'tool_output';
-}
-
-function summarizeRecord(record: ToolCallRecord, source: string): string {
-  const subject = record.filePath ?? String(record.args.command ?? record.tool);
-  const summary = source.replace(/\s+/g, ' ').trim().slice(0, 100);
-  return `${record.tool} ${subject}: ${summary}`.slice(0, 180);
 }
 
 function cloneForGovernorAudit(messages: TransformMessage[]): TransformMessage[] {

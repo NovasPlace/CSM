@@ -13,7 +13,7 @@
  */
 export interface HostProfile {
   /** Stable host identity. Used as the agent name, message id prefix, and model fallback. */
-  hostName: 'codex' | 'claude';
+  hostName: 'codex' | 'claude' | 'hermes';
   /** Named-pipe / unix-socket basename prefix. The plugin-root hash is appended for isolation. */
   pipePrefix: string;
   /** Session id used when the host does not supply one. */
@@ -40,4 +40,13 @@ export const CLAUDE_HOST_PROFILE: HostProfile = {
   clientLabel: 'Claude Code',
   restartMessage:
     'CSM native runtime is installed but its lifecycle relay is not running. Restart Claude Code to reload the plugin.',
+};
+
+export const HERMES_HOST_PROFILE: HostProfile = {
+  hostName: 'hermes',
+  pipePrefix: 'csm-hermes-',
+  defaultSessionId: 'hermes-default',
+  clientLabel: 'Hermes',
+  restartMessage:
+    'CSM native runtime is installed but its lifecycle relay is not running. Restart Hermes to reload the integration.',
 };
