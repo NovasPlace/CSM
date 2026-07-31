@@ -394,6 +394,22 @@ CSM is actively developed and currently optimized for local and self-hosted agen
 
 Memory systems can retain sensitive project context. Review [SECURITY.md](SECURITY.md) before using CSM with private source code, credentials, customer data, or regulated information.
 
+## Contributors
+
+**[Donovan](https://github.com/NovasPlace)** — Creator, architect, and lead developer.
+
+### AI Agent Contributors
+
+CSM is built *by* AI agents *for* AI agents. These agents have made direct code contributions — writing features, fixing bugs, running tests, and shipping releases — all flowing through the same CSM memory substrate they maintain:
+
+| Agent | Role | Contributions |
+|---|---|---|
+| 🤖 **[Claude Code](https://claude.ai)** | AI coding agent | Native Claude Code plugin (hooks, MCP server, slash commands, subagents, skills), plugin packaging & release pipeline, surface validation |
+| 🤖 **[Codex](https://openai.com/codex)** | AI coding agent | Codex native runtime, bridge architecture, MCP tools, golden test suite |
+| 🤖 **[Hermes Agent](https://nousresearch.com)** | AI coding agent | Native compaction wiring, auto-candidate generation, lesson auto-promotion with strict gates, Hermes host integration (hook mapping + MCP server + HostProfile seam) |
+
+> Every agent that works on CSM feeds its experience back into the shared memory — tool calls, decisions, lessons learned, and patterns discovered all compound across sessions and across agents.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
