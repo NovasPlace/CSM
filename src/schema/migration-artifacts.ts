@@ -86,8 +86,14 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
   '20260718-027-postgres-embedding-dimension-repair': [
     artifact('src/schema/embedding-dimension-migration.ts', '420c4c55db208592c769af2bbe5ca06bc3446854c2bc9c33f8d6cb4a88e2d143'),
   ],
+  '20260721-028-compaction-attribution': [
+    artifact('src/schema/compaction-attribution-migration.ts', 'bfb4a398e7a8afc13af16ab172464052ae6b6ea424c9ed8c63afa98cd1bd67ae'),
+  ],
   '20260713-026-sqlite-agentbook': [
     artifact('src/schema/agentbook-schema.ts', '09fa9b9c1545cc358bd06e5356f49b7baab518fa49e0f107fa361c4877a064e3'),
+  ],
+  '20260721-027-sqlite-compaction-attribution': [
+    artifact('src/schema/compaction-attribution-migration.ts', 'bfb4a398e7a8afc13af16ab172464052ae6b6ea424c9ed8c63afa98cd1bd67ae'),
   ],
 };
 

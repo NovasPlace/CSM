@@ -1,10 +1,27 @@
 {
   "mcpServers": {
     "cross-session-memory-bridge": {
-      "cwd": "../..",
+      "cwd": ".",
       "command": "node",
       "args": [
-        "./dist/codex-mcp-server.js"
+        "./scripts/launch-mcp.mjs"
+      ],
+      "required": true,
+      "startup_timeout_sec": 60,
+      "tool_timeout_sec": 120,
+      "env": {
+        "CSM_REQUIRE_EXPLICIT_DATABASE_URL": "true"
+      },
+      "env_vars": [
+        "CSM_CONFIG_DIR",
+        "CSM_DATABASE_PROVIDER",
+        "CSM_DATABASE_URL",
+        "CSM_SQLITE_PATH",
+        "CSM_DB_TLS_MODE",
+        "CSM_EMBEDDING_PROVIDER",
+        "CSM_EMBEDDING_DIMENSIONS",
+        "OLLAMA_HOST",
+        "OPENAI_API_KEY"
       ]
     }
   }

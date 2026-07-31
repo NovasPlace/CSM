@@ -58,6 +58,19 @@ function fakeDatabase() {
     ));
   });
 
+  it('accepts both known production checksums for the evolved memory migration', () => {
+    const { database, pool } = fakeDatabase();
+    const migration = buildSource(database as never, pool)
+      .find((entry) => entry.id === '20260709-003-memory');
+    assert.ok(migration);
+    for (const checksum of [
+      '6f13c75b1355c9fbfae316d894ac6e211dfaaa7f42ace36d2c01d5dd41b924e4',
+      '70806f76a9274302dfa73592bc8aec7e2c0656224bfced6d4cddfd011e0e5944',
+    ]) {
+      assert.ok(migration.acceptedLegacyChecksums?.includes(checksum));
+    }
+  });
+
   it('accepts every previously shipped source pin for an evolved migration artifact', () => {
     const { database, pool } = fakeDatabase();
     const migration = buildSource(database as never, pool)

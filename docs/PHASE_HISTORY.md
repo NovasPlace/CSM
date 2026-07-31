@@ -1,5 +1,7 @@
 # Phase History
 
+- **Phase 9C — Database-Wide Compaction Observability (2026-07-21)**: Added additive PostgreSQL/SQLite attribution migrations for `compaction_metrics`; project/client/runtime and failure-stage diagnostics; safe partial recoverability-cache handling; database-wide session coverage and per-project/runtime audit breakdowns; gross savings minus production injection overhead for net measured savings. Pre-change live baseline: 390 rows from one session, 0 successful compressions, 0 verified savings. Full details: `PHASE9C_COMPACTION_OBSERVABILITY.md`.
+
 > Archived completed-phase history. Moved out of `AGENTS.md` to keep the live agent prompt lean.
 > Current state, constraints, and active work remain in `AGENTS.md`; this file is provenance only.
 > Per-phase design docs live alongside this file (e.g. `PHASE3G_SQLITE_MVP.md`, `PHASE7C_REENTRY_PROTOCOL_DOCUMENTATION.md`).

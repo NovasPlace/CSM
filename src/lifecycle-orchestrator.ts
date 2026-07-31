@@ -1,10 +1,11 @@
 /**
- * LifecycleOrchestrator — single timer, three maintenance jobs.
+ * LifecycleOrchestrator — single timer, four maintenance jobs.
  *
  * Owns:
  *   1. selfModel.updateIntervalMs   → selfModel.updateAll()
  *   2. beliefKnowledge.consolidationIntervalMs → beliefKnowledge.consolidate()
  *   3. livingState.updateIntervalMs → livingState.runPreviewPass()
+ *   4. memoryMaintenance.intervalMs → CandidateGenerator.generate() (advisory)
  *
  * Per-job: nextDue check, running lock, error isolation, optional debounced trigger.
  * No duplicate runs. No timer drift. Clean dispose.
@@ -12,6 +13,8 @@
 
 import { getLogger } from './logger.js';
 import type { PluginContext } from './plugin-context.js';
+import { CandidateGenerator } from './candidate-generator.js';
+import { autoPromoteLessons } from './lesson-auto-promotion.js';
 
 interface JobConfig {
   name: string;
@@ -151,6 +154,22 @@ export class LifecycleOrchestrator {
         run: async (ctx) => {
           if (!ctx.config.livingState?.enabled) return;
           await ctx.livingState.runPass();
+        },
+      });
+    }
+    if (config.memoryMaintenance?.enabled) {
+      jobs.push({
+        name: 'memory-maintenance',
+        intervalMs: config.memoryMaintenance?.intervalMs ?? 300_000,
+        run: async (ctx) => {
+          const generator = new CandidateGenerator(ctx.database);
+          const maxPerType = ctx.config.memoryMaintenance?.maxPerType ?? 50;
+          await generator.generate({ dryRun: false, maxPerType });
+          // Auto-promote high-confidence candidates into lessons
+          const lessonCfg = ctx.config.memoryMaintenance?.lessonPromotion;
+          if (lessonCfg?.enabled) {
+            await autoPromoteLessons(ctx, lessonCfg);
+          }
         },
       });
     }

@@ -25,7 +25,11 @@ function packageManifest(): PackResult {
     cwd: process.cwd(),
     encoding: 'utf8',
     timeout: 120_000,
-    env: { ...process.env, npm_config_loglevel: 'error' },
+    env: {
+      ...process.env,
+      npm_config_loglevel: 'error',
+      npm_config_cache: join(tmpdir(), 'csm-package-test-npm-cache'),
+    },
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const parsed = JSON.parse(result.stdout) as PackResult[];
@@ -64,6 +68,7 @@ describe('commercial package boundary', () => {
     const server = mcp.mcpServers['cross-session-memory-bridge'];
     assert.equal(plugin.version, packageJson.version);
     assert.deepEqual(readdirSync(join(process.cwd(), '.codex-plugin')), ['plugin.json']);
+    assert.equal(plugin.skills, './skills/');
     assert.equal(plugin.mcpServers, './.mcp.json');
     assert.deepEqual(server.args, ['./runtime/launch-mcp.mjs']);
     assert.equal(server.env.CSM_DATABASE_PROVIDER, 'postgres');
@@ -72,6 +77,40 @@ describe('commercial package boundary', () => {
     const launcher = readFileSync(join(process.cwd(), 'runtime', 'launch-mcp.mjs'), 'utf8');
     assert.match(launcher, /PLUGIN_ROOT/u);
     assert.doesNotMatch(launcher, /homedir|Desktop|Documents/u);
+    const skill = readFileSync(
+      join(process.cwd(), 'skills', 'csm-continuity', 'SKILL.md'),
+      'utf8',
+    );
+    assert.match(skill, /^---\r?\nname: csm-continuity\r?\n/u);
+    assert.doesNotMatch(skill, /\[TODO:/u);
+  });
+
+  it('keeps the repo-local native plugin self-contained and aligned', () => {
+    const pluginRoot = join(process.cwd(), 'plugins', 'cross-session-memory-bridge');
+    const plugin = JSON.parse(
+      readFileSync(join(pluginRoot, '.codex-plugin', 'plugin.json'), 'utf8'),
+    );
+    const mcp = JSON.parse(readFileSync(join(pluginRoot, '.mcp.json'), 'utf8'));
+    const server = mcp.mcpServers['cross-session-memory-bridge'];
+    assert.equal(plugin.name, 'cross-session-memory-bridge');
+    assert.equal(plugin.skills, './skills/');
+    assert.equal(plugin.mcpServers, './.mcp.json');
+    assert.equal(plugin.interface.defaultPrompt.length, 3);
+    assert.equal(server.cwd, '.');
+    assert.deepEqual(server.args, ['./scripts/launch-mcp.mjs']);
+    assert.equal(server.env.CSM_REQUIRE_EXPLICIT_DATABASE_URL, 'true');
+    assert.ok(server.env_vars.includes('CSM_DATABASE_PROVIDER'));
+    assert.ok(server.env_vars.includes('CSM_SQLITE_PATH'));
+    assert.equal(
+      readFileSync(join(pluginRoot, 'skills', 'csm-continuity', 'SKILL.md'), 'utf8'),
+      readFileSync(join(process.cwd(), 'skills', 'csm-continuity', 'SKILL.md'), 'utf8'),
+    );
+    const launcher = readFileSync(join(pluginRoot, 'scripts', 'launch-mcp.mjs'), 'utf8');
+    assert.match(launcher, /runtime.+package/su);
+    assert.doesNotMatch(launcher, /npx|spawn\(/u);
+    assert.doesNotMatch(launcher, /Desktop|Documents/u);
+    assert.ok(existsSync(join(pluginRoot, 'hooks', 'hooks.json')));
+    assert.ok(existsSync(join(pluginRoot, 'scripts', 'run-hook.mjs')));
   });
 
   it('publishes a buyer manifest without unavailable maintainer commands', () => {
@@ -93,6 +132,8 @@ describe('commercial package boundary', () => {
       'package.json', 'README.md', 'LICENSE', 'SECURITY.md',
       'dist/index.js', 'dist/index.d.ts', 'dist/cli/init-db.js', 'dist/cli/doctor.js',
       'dist/cli/mcp.js', '.codex-plugin/plugin.json', 'runtime/launch-mcp.mjs', '.mcp.json',
+      'hooks/hooks.json', 'scripts/run-hook.mjs',
+      'skills/csm-continuity/SKILL.md', 'skills/csm-continuity/agents/openai.yaml',
       'docs/CODEX_INSTALLATION.md',
       'docs/RELEASE_PROCESS.md', 'docs/SUPPLY_CHAIN_SECURITY.md', 'docs/TROUBLESHOOTING.md',
     ];
@@ -104,7 +145,7 @@ describe('commercial package boundary', () => {
       /^\.codex-plugin\/(?!plugin\.json$)/u,
       /^runtime\/(?!launch-mcp\.mjs$)/u,
       /^src\//u, /^test\//u, /^wip-tests\//u, /^workflow-project\//u,
-      /^scripts\//u, /(?:^|\/)full-test-output\.txt$/u, /-README\.txt$/u, /\.patch$/u,
+      /^scripts\/(?!run-hook\.mjs$)/u, /(?:^|\/)full-test-output\.txt$/u, /-README\.txt$/u, /\.patch$/u,
     ];
     for (const path of paths) {
       assert.ok(!forbidden.some((pattern) => pattern.test(path)), `forbidden packaged file: ${path}`);
@@ -119,6 +160,10 @@ describe('commercial package boundary', () => {
     try {
       assertMcpEntrypoint(join(process.cwd(), 'dist', 'cli', 'mcp.js'), directory);
       assertMcpEntrypoint(join(process.cwd(), 'runtime', 'launch-mcp.mjs'), directory);
+      assertMcpEntrypoint(
+        join(process.cwd(), 'plugins', 'cross-session-memory-bridge', 'scripts', 'launch-mcp.mjs'),
+        directory,
+      );
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

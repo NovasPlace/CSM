@@ -1,7 +1,7 @@
 {
   "name": "cross-session-memory-bridge",
   "version": "1.0.0",
-  "description": "Self-hosted cross-session memory and continuity tools for Codex.",
+  "description": "The complete self-hosted Cross-Session Memory runtime and lifecycle automation for Codex.",
   "author": {
     "name": "Donovan"
   },
@@ -14,17 +14,21 @@
     "postgres",
     "bridge"
   ],
+  "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Cross-Session Memory Bridge",
-    "shortDescription": "Resume Codex work across sessions.",
-    "longDescription": "Self-hosted PostgreSQL memory, context briefs, lessons, checkpoints, and handoff tools for durable Codex project continuity.",
+    "displayName": "Cross-Session Memory",
+    "shortDescription": "Full CSM continuity runtime for Codex.",
+    "longDescription": "Memory, governance, living state, beliefs, self-model, AgentBook, checkpoints, context cache, goals, work ledger, onboarding, re-entry, compaction, and handoff automation.",
     "developerName": "Donovan",
     "category": "Productivity",
     "capabilities": [
       "Search",
       "Write",
-      "Long-term memory"
+      "Long-term memory",
+      "Lifecycle automation",
+      "Living state",
+      "AgentBook"
     ],
     "defaultPrompt": [
       "Search project memory before we start changing code.",

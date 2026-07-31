@@ -15,7 +15,7 @@ Persistent memory, operational state, re-entry, context governance, and durable 
   <a href="LICENSE"><img src="https://img.shields.io/github/license/NovasPlace/CSM" alt="License"></a>
 </p>
 
-[Quick start](#quick-start) · [Codex setup](docs/CODEX_INSTALLATION.md) · [Feature map](docs/FEATURES.md) · [Architecture](docs/PRODUCT_ARCHITECTURE.md) · [Privacy](docs/DATA_PRIVACY_AND_LIFECYCLE.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Documentation](docs/README.md) · [Contributing](https://github.com/NovasPlace/CSM/blob/master/CONTRIBUTING.md)
+[Quick start](#quick-start) · [Claude Code setup](docs/CLAUDE_INSTALLATION.md) · [Codex setup](docs/CODEX_INSTALLATION.md) · [Feature map](docs/FEATURES.md) · [Architecture](docs/PRODUCT_ARCHITECTURE.md) · [Privacy](docs/DATA_PRIVACY_AND_LIFECYCLE.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Documentation](docs/README.md) · [Contributing](https://github.com/NovasPlace/CSM/blob/master/CONTRIBUTING.md)
 
 </div>
 
@@ -50,7 +50,7 @@ CSM turns continuity into infrastructure.
 | Recall | Vector, text, entity, relationship, and fallback retrieval paths |
 | Internal state | Experience packets, self-model, belief knowledge, and advisory context |
 | Governance | Deduplication, merge/supersede, archive candidates, quality reports, and continuity health |
-| Host | OpenCode plugin plus a packaged Codex MCP command and installable PostgreSQL Codex plugin |
+| Host | OpenCode plugin, a native Claude Code plugin (hooks + MCP tools + slash commands + subagents + skills), and a packaged Codex MCP command / installable Codex plugin |
 
 ## Capability map
 
@@ -258,6 +258,17 @@ default_tools_approval_mode = "writes"
 The Codex MCP bridge exposes explicit memory, context, lesson, checkpoint, and handoff tools; it does
 not receive OpenCode's automatic lifecycle hooks. See [Codex Installation](docs/CODEX_INSTALLATION.md)
 for live verification and the PostgreSQL-only marketplace-plugin option.
+
+For Claude Code, install the native plugin — it wires the full CSM runtime into Claude's own
+lifecycle hooks, MCP tools, slash commands, subagents, and skills:
+
+```
+/plugin marketplace add <repo>/.agents/plugins
+/plugin install cross-session-memory
+```
+
+See [Claude Code Installation](docs/CLAUDE_INSTALLATION.md) for build, configuration, verification,
+and concurrent-host isolation details.
 
 Pin the package version so an upgrade is an intentional, testable change.
 

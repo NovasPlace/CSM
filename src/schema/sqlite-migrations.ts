@@ -7,6 +7,7 @@ import type { SchemaMigration } from './migration-ledger.js';
 import { migrateCompactionMetricsSqlite } from './sqlite/compaction-metrics-migration.js';
 import { initializeMinimalSqliteSchema } from './sqlite/index.js';
 import { initializeSqliteWorkJournal } from './sqlite/work-journal.js';
+import { migrateCompactionAttribution } from './compaction-attribution-migration.js';
 
 export const SQLITE_MIGRATION_IDS: readonly string[] = [
   '20260709-001-sqlite-baseline',
@@ -15,6 +16,7 @@ export const SQLITE_MIGRATION_IDS: readonly string[] = [
   '20260711-024-sqlite-compaction-metrics',
   '20260712-025-sqlite-context-injection-telemetry',
   '20260713-026-sqlite-agentbook',
+  '20260721-027-sqlite-compaction-attribution',
 ];
 
 export function buildSqliteMigrations(pool: DatabasePool): SchemaMigration[] {
@@ -34,6 +36,8 @@ export function buildSqliteMigrations(pool: DatabasePool): SchemaMigration[] {
       () => initializeContextInjectionTelemetrySchema(pool)),
     sqliteMigration(5, 'agentbook operational ledger, summaries, current state, and rules',
       () => initializeAgentBookSchema(pool)),
+    sqliteMigration(6, 'database-wide compaction attribution and failure diagnostics',
+      () => migrateCompactionAttribution(pool)),
   ];
 }
 

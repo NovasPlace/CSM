@@ -67,6 +67,9 @@ function stripProvenanceKeys(meta: Record<string, unknown> | undefined): Record<
 
 export async function memoryLessonOp(memoryManager: CodexBridgeExtraDeps['memoryManager'], sessionId: string | undefined, input: Record<string, unknown>) {
   const sid = requireSession(sessionId);
+  const rawProject = asString(input.projectRoot);
+  const isGlobal = rawProject?.toLowerCase() === 'global';
+  const projectRoot = isGlobal ? undefined : (rawProject ?? sid);
   return {
     memory: await memoryManager.saveMemory(withBridgeProvenance({
       content: requireString(input.content, 'content'),
@@ -75,10 +78,10 @@ export async function memoryLessonOp(memoryManager: CodexBridgeExtraDeps['memory
       emotion: 'frustration',
       confidence: 0.9,
       source: 'lesson',
-      tags: asStringArray(input.tags) ?? ['lesson'],
+      tags: isGlobal ? [...(asStringArray(input.tags) ?? ['lesson']), 'global'] : (asStringArray(input.tags) ?? ['lesson']),
       metadata: stripProvenanceKeys(asRecord(input.context)),
-      sessionId: sid,
-    }, { sessionId: sid, projectRoot: asString(input.projectRoot) ?? sid, sourceKind: 'user_supplied' })),
+      sessionId: isGlobal ? undefined : sid,
+    }, { sessionId: isGlobal ? undefined : sid, projectRoot, sourceKind: 'user_supplied' })),
   };
 }
 

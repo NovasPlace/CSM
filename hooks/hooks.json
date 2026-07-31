@@ -1,0 +1,128 @@
+{
+  "description": "Full Cross-Session Memory lifecycle integration for Codex.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 60,
+            "statusMessage": "Loading CSM continuity"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 60,
+            "statusMessage": "CSM pre-tool continuity"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 60,
+            "statusMessage": "Recording CSM evidence"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 90,
+            "statusMessage": "Creating CSM checkpoint"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 90,
+            "statusMessage": "Restoring CSM continuity"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+          "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -400,7 +400,7 @@
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |
 | `src/context-budget-governor.ts` | RuleMode, ToolOutputMode, DocContextMode, VerificationLevel, BudgetGovernorInput, BudgetGovernorDecision, ShellEvidenceInput, GovernedShellOutput, ContextBudgetGovernor | src | Module |
-| `src/config.ts` | DEFAULT_CONFIG, validateAndReturnConfig, validatePluginConfig | src | Configuration |
+| `src/config.ts` | DEFAULT_CONFIG, defaultConfigForDirectory, validateAndReturnConfig, validatePluginConfig | src | Configuration |
 | `src/config-validation.ts` | validateConfig | src | Configuration |
 | `src/config-validation-ranges.ts` | ConfigRange, allConfigRanges | src | Configuration |
 | `src/config-provider.ts` | databaseSettingsFromEnv, embeddingSettingsFromEnv, validateDatabaseTarget | src | Configuration |
@@ -411,9 +411,9 @@
 | `src/compaction-utils.ts` | hasOpenCodeDiscardMarker, isCompactedToolText, isAlreadyCompacted, adaptiveWindow, isRecentEnough, collectToolParts, extractCriticalSignals, findMatchingGroup, extractFile, truncateInput, measureTotalChars | src | Module |
 | `src/compaction-types.ts` | ToolPartLike, ToolPartLocation | src | Module |
 | `src/compaction-tracker.ts` | ReprocessingEntry, CompactionTracker | src | Context compaction engine |
-| `src/compaction-telemetry-audit.ts` | AuditAvailability, AuditResult, AuditAnomaly, SessionBreakdown, auditCompactionTelemetry, formatAuditReport, formatAuditAvailability | src | Context compaction engine |
+| `src/compaction-telemetry-audit.ts` | AuditAvailability, AuditResult, AuditAnomaly, SessionBreakdown, ProjectBreakdown, FailureBreakdown, SessionCoverage, auditCompactionTelemetry, formatAuditReport, formatAuditAvailability | src | Context compaction engine |
 | `src/compaction-quality.ts` | extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeCompressionRatio, computeQualityScore, measureCompactionQuality, cosineSimilarity | src | Context compaction engine |
-| `src/compaction-metric-writer.ts` | CompactionStatus, CompactionMetricInput, writeCompactionMetric, persistCompactionTelemetry | src | Context compaction engine |
+| `src/compaction-metric-writer.ts` | CompactionStatus, CompactionClientKind, CompactionRuntimeKind, CompactionMetricInput, writeCompactionMetric, persistCompactionTelemetry | src | Context compaction engine |
 | `src/compaction-analytics.ts` | DEFAULT_PROVIDER_PRICING, CompactionAnalytics | src | Context compaction engine |
 | `src/codex-mcp-vault-tools.ts` | VAULT_TOOL_SPECS, teacherTraceArgs, traceVaultArgs, traceVaultPreviewArgs, ToolAnnotations | src | Tool registration |
 | `src/codex-mcp-tools.ts` | MCP_TOOLS, invokeMcpTool, ToolAnnotations | src | Tool registration |
@@ -3115,7 +3115,7 @@
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool, SqlitePragmaConnection, initializeSqliteConnection | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool, buildPostgresPoolConfig | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/database-runtime-config.ts` | DEFAULT_DATABASE_RUNTIME_CONFIG, databaseRuntimeConfigFromEnv, validateDatabaseRuntimeConfig | src | Configuration |
@@ -3150,7 +3150,7 @@
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |
 | `src/context-budget-governor.ts` | RuleMode, ToolOutputMode, DocContextMode, VerificationLevel, BudgetGovernorInput, BudgetGovernorDecision, ShellEvidenceInput, GovernedShellOutput, ContextBudgetGovernor | src | Module |
-| `src/config.ts` | DEFAULT_CONFIG, validateAndReturnConfig, validatePluginConfig | src | Configuration |
+| `src/config.ts` | DEFAULT_CONFIG, defaultConfigForDirectory, validateAndReturnConfig, validatePluginConfig | src | Configuration |
 | `src/concept-extractor.ts` | ExtractedConcept, ExtractionResult, extractConcepts, mergeConcepts | src | Module |
 | `src/compaction-utils.ts` | hasOpenCodeDiscardMarker, isCompactedToolText, isAlreadyCompacted, adaptiveWindow, isRecentEnough, collectToolParts, extractCriticalSignals, findMatchingGroup, extractFile, truncateInput, measureTotalChars | src | Module |
 | `src/compaction-types.ts` | ToolPartLike, ToolPartLocation | src | Module |
@@ -5760,7 +5760,7 @@
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool, buildPostgresPoolConfig | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/database-runtime-config.ts` | DEFAULT_DATABASE_RUNTIME_CONFIG, databaseRuntimeConfigFromEnv, validateDatabaseRuntimeConfig | src | Configuration |
@@ -5795,7 +5795,7 @@
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |
 | `src/context-budget-governor.ts` | RuleMode, ToolOutputMode, DocContextMode, VerificationLevel, BudgetGovernorInput, BudgetGovernorDecision, ShellEvidenceInput, GovernedShellOutput, ContextBudgetGovernor | src | Module |
-| `src/config.ts` | DEFAULT_CONFIG, validateAndReturnConfig, validatePluginConfig | src | Configuration |
+| `src/config.ts` | DEFAULT_CONFIG, defaultConfigForDirectory, validateAndReturnConfig, validatePluginConfig | src | Configuration |
 | `src/concept-extractor.ts` | ExtractedConcept, ExtractionResult, extractConcepts, mergeConcepts | src | Module |
 | `src/compaction-utils.ts` | hasOpenCodeDiscardMarker, isCompactedToolText, isAlreadyCompacted, adaptiveWindow, isRecentEnough, collectToolParts, extractCriticalSignals, findMatchingGroup, extractFile, truncateInput, measureTotalChars | src | Module |
 | `src/compaction-types.ts` | ToolPartLike, ToolPartLocation | src | Module |
@@ -8405,7 +8405,7 @@
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool, buildPostgresPoolConfig | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/database-runtime-config.ts` | DEFAULT_DATABASE_RUNTIME_CONFIG, databaseRuntimeConfigFromEnv, validateDatabaseRuntimeConfig | src | Configuration |
@@ -8440,7 +8440,7 @@
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |
 | `src/context-budget-governor.ts` | RuleMode, ToolOutputMode, DocContextMode, VerificationLevel, BudgetGovernorInput, BudgetGovernorDecision, ShellEvidenceInput, GovernedShellOutput, ContextBudgetGovernor | src | Module |
-| `src/config.ts` | DEFAULT_CONFIG, validateAndReturnConfig, validatePluginConfig | src | Configuration |
+| `src/config.ts` | DEFAULT_CONFIG, defaultConfigForDirectory, validateAndReturnConfig, validatePluginConfig | src | Configuration |
 | `src/concept-extractor.ts` | ExtractedConcept, ExtractionResult, extractConcepts, mergeConcepts | src | Module |
 | `src/compaction-utils.ts` | hasOpenCodeDiscardMarker, isCompactedToolText, isAlreadyCompacted, adaptiveWindow, isRecentEnough, collectToolParts, extractCriticalSignals, findMatchingGroup, extractFile, truncateInput, measureTotalChars | src | Module |
 | `src/compaction-types.ts` | ToolPartLike, ToolPartLocation | src | Module |
@@ -11050,7 +11050,7 @@
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool, buildPostgresPoolConfig | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/database-runtime-config.ts` | DEFAULT_DATABASE_RUNTIME_CONFIG, databaseRuntimeConfigFromEnv, validateDatabaseRuntimeConfig | src | Configuration |
@@ -11085,7 +11085,7 @@
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |
 | `src/context-budget-governor.ts` | RuleMode, ToolOutputMode, DocContextMode, VerificationLevel, BudgetGovernorInput, BudgetGovernorDecision, ShellEvidenceInput, GovernedShellOutput, ContextBudgetGovernor | src | Module |
-| `src/config.ts` | DEFAULT_CONFIG, validateAndReturnConfig, validatePluginConfig | src | Configuration |
+| `src/config.ts` | DEFAULT_CONFIG, defaultConfigForDirectory, validateAndReturnConfig, validatePluginConfig | src | Configuration |
 | `src/concept-extractor.ts` | ExtractedConcept, ExtractionResult, extractConcepts, mergeConcepts | src | Module |
 | `src/compaction-utils.ts` | hasOpenCodeDiscardMarker, isCompactedToolText, isAlreadyCompacted, adaptiveWindow, isRecentEnough, collectToolParts, extractCriticalSignals, findMatchingGroup, extractFile, truncateInput, measureTotalChars | src | Module |
 | `src/compaction-types.ts` | ToolPartLike, ToolPartLocation | src | Module |
@@ -13694,7 +13694,7 @@
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool, buildPostgresPoolConfig | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -13728,7 +13728,7 @@
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |
 | `src/context-budget-governor.ts` | RuleMode, ToolOutputMode, DocContextMode, VerificationLevel, BudgetGovernorInput, BudgetGovernorDecision, ShellEvidenceInput, GovernedShellOutput, ContextBudgetGovernor | src | Module |
-| `src/config.ts` | DEFAULT_CONFIG, validateAndReturnConfig, validatePluginConfig | src | Configuration |
+| `src/config.ts` | DEFAULT_CONFIG, defaultConfigForDirectory, validateAndReturnConfig, validatePluginConfig | src | Configuration |
 | `src/concept-extractor.ts` | ExtractedConcept, ExtractionResult, extractConcepts, mergeConcepts | src | Module |
 | `src/compaction-utils.ts` | hasOpenCodeDiscardMarker, isCompactedToolText, isAlreadyCompacted, adaptiveWindow, isRecentEnough, collectToolParts, extractCriticalSignals, findMatchingGroup, extractFile, truncateInput, measureTotalChars | src | Module |
 | `src/compaction-types.ts` | ToolPartLike, ToolPartLocation | src | Module |
@@ -16291,7 +16291,7 @@
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -18883,7 +18883,7 @@
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -21474,7 +21474,7 @@
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -24060,7 +24060,7 @@
 | `src/evidence-vault.ts` | EvidenceRecordInput, EvidenceRecord, EvidenceVaultOptions, EvidenceVault | src | Module |
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -26636,7 +26636,7 @@
 | `src/evidence-vault.ts` | EvidenceRecordInput, EvidenceRecord, EvidenceVaultOptions, EvidenceVault | src | Module |
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -29211,7 +29211,7 @@
 | `src/evidence-vault.ts` | EvidenceRecordInput, EvidenceRecord, EvidenceVaultOptions, EvidenceVault | src | Module |
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -31793,7 +31793,7 @@
 | `src/evidence-vault.ts` | EvidenceRecordInput, EvidenceRecord, EvidenceVaultOptions, EvidenceVault | src | Module |
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -34337,7 +34337,7 @@
 | `src/evidence-vault.ts` | EvidenceRecordInput, EvidenceRecord, EvidenceVaultOptions, EvidenceVault | src | Module |
 | `src/dedup-detector.ts` | DedupDetectorConfig, DedupMemoryRef, DedupCluster, DedupReport, DedupCandidateDetector | src | Memory & recall subsystem |
 | `src/db/sqlite-pool.ts` | createSqlitePool | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/cross-session-causal-types.ts` | CrossSessionLinkType, CrossSessionLinkStatus, CrossSessionGapKind, CrossSessionCausalLink, GrowthEvidence, StitchMemoryRecord, CrossSessionLinkInput, FailureTraceStitchResult | src | Memory & recall subsystem |
@@ -58408,6 +58408,20 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `src/native-mcp-server.ts` | runNativeMcpServer | src | Module |
+| `src/native-host-profile.ts` | HostProfile, CODEX_HOST_PROFILE, CLAUDE_HOST_PROFILE | src | Module |
+| `src/cli/native-hook-client.ts` | runNativeHookClient | src | Hook handler |
+| `src/cli/claude-hook-client.ts` | none | src | Hook handler |
+| `src/claude-mcp-server.ts` | none | src | Module |
+| `src/claude-hook-relay.ts` | claudeHookEndpoint, startClaudeHookRelay | src | Hook handler |
+| `src/schema/compaction-attribution-migration.ts` | COMPACTION_ATTRIBUTION_COLUMNS, migrateCompactionAttribution | src | SQL schema |
+| `src/codex-hook-output.ts` | toCodexHookOutput, parseCodexHookOutput | src | Hook handler |
+| `src/codex-transcript-client.ts` | CodexTranscriptMessage, CodexTranscriptClient | src | Module |
+| `src/codex-native-tool-catalog.ts` | CodexNativeToolSpec, createCodexNativeToolCatalog, CODEX_NATIVE_TOOL_NAMES, isCodexNativeTool | src | Tool registration |
+| `src/codex-native-runtime.ts` | CodexNativeInvocation, CodexNativeRuntime, CodexNativeRuntimeManager | src | Module |
+| `src/codex-native-hooks.ts` | CodexHookPayload, handleCodexNativeHook | src | Hook handler |
+| `src/codex-hook-relay.ts` | CodexHookRelay, codexHookEndpoint, startCodexHookRelay | src | Hook handler |
+| `src/cli/codex-hook-client.ts` | none | src | Hook handler |
 | `src/cli/mcp.ts` | none | src | Module |
 | `src/sensitive-redaction.ts` | redactSensitiveText | src | Module |
 | `src/doctor.ts` | DoctorCheckStatus, DoctorOverallStatus, DoctorCheck, DoctorReport, DoctorOptions, runDoctor, inspectRuntime, isSupportedNodeVersion, reportOverall, formatDoctorReport, redactDoctorError | src | Module |
@@ -58645,7 +58659,7 @@
 | `src/decision-registry.ts` | DecisionScope, SaveDecisionParams, DecisionRecord, DecisionRegistry | src | Module |
 | `src/db/sqlite-sql-rewriter.ts` | RewrittenSql, rewriteSqliteSql | src | Module |
 | `src/db/sqlite-pool.ts` | createSqlitePool, SqlitePragmaConnection, initializeSqliteConnection | src | Module |
-| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
+| `src/db/query-dialect.ts` | QueryDialect, dialectFromProvider, dialectFromPool, nowFn, ilikeExpr, ilikeLiteralExpr, jsonKeyExists, jsonExtractText, jsonArrayContains, jsonArrayContainsAll, jsonContainsPath, jsonExtractValue, ageDaysExpr, colInParamArray, paramInColArray, colNotInParamArray, jsonContainsParam, isUniqueViolation, jsonParam, toDate, parseArrayField, parseJsonField | src | Module |
 | `src/db/postgres-pool.ts` | createPostgresPool, buildPostgresPoolConfig | src | Module |
 | `src/db/database-pool.ts` | PoolFactoryOptions, createDatabasePool | src | Module |
 | `src/database-runtime-config.ts` | DEFAULT_DATABASE_RUNTIME_CONFIG, databaseRuntimeConfigFromEnv, validateDatabaseRuntimeConfig | src | Configuration |
@@ -58725,7 +58739,7 @@
 | `src/context-cache-runtime.ts` | CacheRuntimeConfig, CacheRuntimeResult, cacheOldContext | src | Module |
 | `src/context-cache-manifest.ts` | ManifestEntry, ManifestResult, buildManifestFromRows, buildManifest | src | Module |
 | `src/context-budget-governor.ts` | RuleMode, ToolOutputMode, DocContextMode, VerificationLevel, BudgetGovernorInput, BudgetGovernorDecision, ShellEvidenceInput, GovernedShellOutput, ContextBudgetGovernor | src | Module |
-| `src/config.ts` | DEFAULT_CONFIG, validateAndReturnConfig, validatePluginConfig | src | Configuration |
+| `src/config.ts` | DEFAULT_CONFIG, defaultConfigForDirectory, validateAndReturnConfig, validatePluginConfig | src | Configuration |
 | `src/config-validation.ts` | validateConfig | src | Configuration |
 | `src/config-validation-ranges.ts` | ConfigRange, allConfigRanges | src | Configuration |
 | `src/config-provider.ts` | databaseSettingsFromEnv, embeddingSettingsFromEnv, validateDatabaseTarget | src | Configuration |
@@ -58736,9 +58750,9 @@
 | `src/compaction-utils.ts` | hasOpenCodeDiscardMarker, isCompactedToolText, isAlreadyCompacted, adaptiveWindow, isRecentEnough, collectToolParts, extractCriticalSignals, findMatchingGroup, extractFile, truncateInput, measureTotalChars | src | Module |
 | `src/compaction-types.ts` | ToolPartLike, ToolPartLocation | src | Module |
 | `src/compaction-tracker.ts` | ReprocessingEntry, CompactionTracker | src | Context compaction engine |
-| `src/compaction-telemetry-audit.ts` | AuditAvailability, AuditResult, AuditAnomaly, SessionBreakdown, auditCompactionTelemetry, formatAuditReport, formatAuditAvailability | src | Context compaction engine |
+| `src/compaction-telemetry-audit.ts` | AuditAvailability, AuditResult, AuditAnomaly, SessionBreakdown, ProjectBreakdown, FailureBreakdown, SessionCoverage, auditCompactionTelemetry, formatAuditReport, formatAuditAvailability | src | Context compaction engine |
 | `src/compaction-quality.ts` | extractEntities, extractDecisions, extractWarningsErrors, computeRetention, computeCompressionRatio, computeQualityScore, measureCompactionQuality, cosineSimilarity | src | Context compaction engine |
-| `src/compaction-metric-writer.ts` | CompactionStatus, CompactionMetricInput, writeCompactionMetric, persistCompactionTelemetry | src | Context compaction engine |
+| `src/compaction-metric-writer.ts` | CompactionStatus, CompactionClientKind, CompactionRuntimeKind, CompactionMetricInput, writeCompactionMetric, persistCompactionTelemetry | src | Context compaction engine |
 | `src/compaction-analytics.ts` | DEFAULT_PROVIDER_PRICING, CompactionAnalytics | src | Context compaction engine |
 | `src/codex-mcp-vault-tools.ts` | VAULT_TOOL_SPECS, teacherTraceArgs, traceVaultArgs, traceVaultPreviewArgs, ToolAnnotations | src | Tool registration |
 | `src/codex-mcp-tools.ts` | MCP_TOOLS, invokeMcpTool, ToolAnnotations | src | Tool registration |
@@ -60310,6 +60324,14 @@
 
 | File | Exports | Type | Role |
 |------|---------|------|------|
+| `test/codex-plugin-release.test.ts` | none | test | Test suite |
+| `test/codex-native-golden.test.ts` | none | test | Test suite |
+| `test/claude-transport-isolation.test.ts` | none | test | Test suite |
+| `test/claude-surface-catalog.test.ts` | none | test | Test suite |
+| `test/claude-native-plugin.test.ts` | none | test | Test suite |
+| `test/claude-hook-safety.test.ts` | none | test | Hook handler |
+| `test/compaction-attribution.test.ts` | none | test | Test suite |
+| `test/codex-native-plugin.test.ts` | none | test | Test suite |
 | `test/privacy-persistence-boundaries.test.ts` | none | test | Test suite |
 | `test/logger.test.ts` | none | test | Test suite |
 | `test/codex-mcp-stdio.test.ts` | none | test | Test suite |

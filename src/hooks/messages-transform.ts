@@ -5,7 +5,7 @@ import { persistCompactionTelemetry } from '../compaction-metric-writer.js';
 import { getLogger, withLogContext } from '../logger.js';
 import { isAlreadyCompacted } from '../compaction-utils.js';
 import type { GovernorMessage, GovernorPart } from '../context-governor.js';
-import { storeItem, type CacheKind } from '../context-cache-store.js';
+import { runCompactionPipeline } from './messages-transform-pipeline.js';
 import { estimateTokens } from '../token-bucket-analyzer.js';
 
 interface TransformToolState {
@@ -98,45 +98,61 @@ export function createMessagesTransformHook(ctx: PluginContext) {
       const createdAt = new Date().toISOString();
 
       try {
-        await persistExpandableRecords(ctx, pool, records);
-        const compactOutput = ctx.contextCompactor.compact(records, undefined, messages);
-        const result = compactOutput.result;
-        const status: 'compressed' | 'skipped_under_budget' =
-          result.compactedParts > 0 ? 'compressed' : 'skipped_under_budget';
+        const outcome = await runCompactionPipeline(ctx, pool, records, messages);
         persistCompactionTelemetry(pool, {
           sessionId,
-          totalToolParts: result.totalToolParts,
-          compactedParts: result.compactedParts,
-          skippedParts: result.skippedParts,
-          beforeChars: result.beforeChars,
-          afterChars: result.afterChars,
-          beforeTokens: result.beforeTokens,
-          afterTokens: result.afterTokens,
-          tokensSaved: result.tokensSaved,
-          savedPercent: result.savedPercent,
-          semanticSignalCountPreserved: result.semanticSignalCountPreserved,
+          projectId: ctx.directory,
+          clientKind: 'opencode',
+          runtimeKind: 'plugin',
+          totalToolParts: records.length,
+          compactedParts: outcome.compactedParts,
+          skippedParts: outcome.skippedParts,
+          eligibleParts: outcome.eligibleParts,
+          persistedParts: outcome.persistedParts,
+          beforeChars: outcome.beforeChars,
+          afterChars: outcome.afterChars,
+          beforeTokens: outcome.beforeTokens,
+          afterTokens: outcome.afterTokens,
+          tokensSaved: outcome.tokensSaved,
+          savedPercent: outcome.savedPercent,
+          semanticSignalCountPreserved: outcome.semanticSignalCountPreserved,
           contextBriefChars: 0,
           discardMarkerPresent: 0,
-          status,
+          status: outcome.status,
+          failureStage: outcome.failureStage,
+          failureCode: outcome.failureCode,
+          failureMessage: outcome.failureMessage,
           createdAt,
         });
       } catch (compactError) {
         getLogger().error(`Compaction failed: ${String(compactError)}`);
+        const snapshot = recordSnapshot(records);
         persistCompactionTelemetry(pool, {
           sessionId,
+          projectId: ctx.directory,
+          clientKind: 'opencode',
+          runtimeKind: 'plugin',
           totalToolParts: records.length,
           compactedParts: 0,
           skippedParts: 0,
-          beforeChars: 0,
-          afterChars: 0,
-          beforeTokens: 0,
-          afterTokens: 0,
+          eligibleParts: 0,
+          persistedParts: 0,
+          beforeChars: snapshot.chars,
+          afterChars: snapshot.chars,
+          beforeTokens: snapshot.tokens,
+          afterTokens: snapshot.tokens,
           tokensSaved: 0,
           savedPercent: 0,
           semanticSignalCountPreserved: 0,
           contextBriefChars: 0,
           discardMarkerPresent: 0,
           status: 'failed',
+          failureStage: 'compactor',
+          failureCode: compactError instanceof Error && compactError.name
+            ? compactError.name.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 80)
+            : 'unknown_error',
+          failureMessage: (compactError instanceof Error ? compactError.message : String(compactError))
+            .replace(/\s+/g, ' ').trim().slice(0, 500),
           createdAt,
         });
       }
@@ -182,52 +198,14 @@ function auditGovernor(ctx: PluginContext, messages: TransformMessage[]): void {
   });
 }
 
-async function persistExpandableRecords(
-  ctx: PluginContext,
-  pool: ReturnType<PluginContext['database']['getPool']>,
-  records: ToolCallRecord[],
-): Promise<void> {
-  if (ctx.config?.contextCache?.enabled === false) {
-    throw new Error('tool compaction requires context cache for recoverable TOOL_REF output');
-  }
-  const candidates = records.filter((record) => {
-    const source = record.error ?? record.output ?? '';
-    return source.trim().length > 0
-      && ctx.contextCompactor.createExpandableRef(record).length < source.length;
-  });
-  await Promise.all(candidates.map(async (record) => {
-    const source = record.error ?? record.output ?? '';
-    const refId = ctx.contextCompactor.getExpandableRefId(record);
-    await storeItem(pool, {
-      sessionId: record.sessionId,
-      displayId: refId,
-      kind: cacheKind(record),
-      createdAt: record.timestamp,
-      summary: summarizeRecord(record, source),
-      content: source,
-      metadata: {
-        source: 'tool_compaction',
-        tool: record.tool,
-        filePath: record.filePath,
-        messageId: record.messageId,
-        partId: record.partId,
-        toolCallId: record.toolCallId,
-      },
-      tokens: estimateTokens(source),
-    }, ctx.redactor);
-  }));
-}
-
-function cacheKind(record: ToolCallRecord): CacheKind {
-  if (record.error) return 'error';
-  if (record.tool === 'read' && record.filePath) return 'file_read';
-  return 'tool_output';
-}
-
-function summarizeRecord(record: ToolCallRecord, source: string): string {
-  const subject = record.filePath ?? String(record.args.command ?? record.tool);
-  const summary = source.replace(/\s+/g, ' ').trim().slice(0, 100);
-  return `${record.tool} ${subject}: ${summary}`.slice(0, 180);
+function recordSnapshot(records: ToolCallRecord[]): { chars: number; tokens: number } {
+  const text = records.map((record) => JSON.stringify({
+    tool: record.tool,
+    args: record.args,
+    output: record.output,
+    error: record.error,
+  })).join('\n');
+  return { chars: text.length, tokens: estimateTokens(text) };
 }
 
 function cloneForGovernorAudit(messages: TransformMessage[]): TransformMessage[] {

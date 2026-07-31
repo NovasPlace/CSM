@@ -40,7 +40,7 @@ describe('Codex MCP stdio transport', () => {
     })}\n`);
     child.stdin.write(`${JSON.stringify({
       jsonrpc: '2.0', id: 2, method: 'tools/call',
-      params: { name: 'csm_runtime_status', arguments: {} },
+      params: { name: 'csm_runtime_status', arguments: { projectRoot: directory } },
     })}\n`);
     child.stdin.end();
 
@@ -51,8 +51,8 @@ describe('Codex MCP stdio transport', () => {
       const records = lines.map((line) => JSON.parse(line) as JsonRpcRecord);
       assert.equal(records.length, 3, stdout);
       assert.equal(records.find((record) => record.error?.code === -32700)?.id, null);
-      assert.ok(records.some((record) => record.id === 1 && record.result));
-      assert.ok(records.some((record) => record.id === 2 && record.result));
+      assert.ok(records.some((record) => record.id === 1 && record.result), stdout);
+      assert.ok(records.some((record) => record.id === 2 && record.result), stdout);
       assert.doesNotMatch(stdout, /\[(?:INFO|WARN|ERROR|DEBUG)\]/u);
       assert.match(stderr, /Connected to SQLite/u);
       assert.match(stderr, /tool:csm_runtime_status correlation:2/u);
