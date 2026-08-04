@@ -1,8 +1,10 @@
 import { describe, it } from 'node:test';
-import { ok, strictEqual } from 'node:assert/strict';
+import { deepStrictEqual, ok, strictEqual } from 'node:assert/strict';
 import { ContextCompactor } from '../dist/context-compactor.js';
 import { createMessagesTransformHook } from '../dist/hooks/messages-transform.js';
+import { runCompactionPipeline } from '../dist/hooks/messages-transform-pipeline.js';
 import type { PluginContext } from '../src/plugin-context.js';
+import type { ToolCallRecord } from '../src/types.js';
 
 const SESSION_ID = 'compaction-safety';
 
@@ -219,6 +221,29 @@ describe('messages transform compaction safety', () => {
 
     strictEqual(messages[0].parts[0].state.output, failedOriginal);
     ok(messages[0].parts[1].state.output.startsWith('TOOL_REF id=call-ok'));
+  });
+
+  it('returns cache-write failures for retry on a later native turn', async () => {
+    const ctx = runtimeContext();
+    ctx.config = { contextCache: { enabled: true } } as PluginContext['config'];
+    const pool = {
+      getDialect: () => 'pg' as const,
+      query: async (sql: string, params?: unknown[]) => {
+        if (sql.includes('INSERT INTO context_cache') && params?.[1] === 'call-fail') {
+          throw new Error('retry this record');
+        }
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    ctx.database = { getPool: () => pool } as PluginContext['database'];
+    const records: ToolCallRecord[] = [
+      { tool: 'read', output: 'f'.repeat(500), timestamp: Date.now() - 120_000, sessionId: SESSION_ID, toolCallId: 'call-fail' },
+      { tool: 'read', output: 's'.repeat(500), timestamp: Date.now() - 120_000, sessionId: SESSION_ID, toolCallId: 'call-ok' },
+    ];
+
+    const result = await runCompactionPipeline(ctx, pool, records);
+
+    deepStrictEqual(result.retainedRecords, records);
   });
 
 });

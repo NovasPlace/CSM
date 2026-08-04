@@ -103,7 +103,7 @@ export async function autoPromoteLessons(
     // Gate 3: Content quality
     if (!isLessonWorthy(candidate.content)) {
       reasons['skipped_noise'] = (reasons['skipped_noise'] ?? 0) + 1;
-      await markCandidateStatus(pool, candidate.id, 'applied');
+      await markCandidateStatus(pool, candidate.id, 'dismissed');
       continue;
     }
 
@@ -119,7 +119,7 @@ export async function autoPromoteLessons(
 
     if ((existing.rows as unknown[]).length > 0) {
       reasons['skipped_duplicate'] = (reasons['skipped_duplicate'] ?? 0) + 1;
-      await markCandidateStatus(pool, candidate.id, 'applied');
+      await markCandidateStatus(pool, candidate.id, 'dismissed');
       continue;
     }
 

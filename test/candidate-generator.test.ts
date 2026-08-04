@@ -84,6 +84,18 @@ describe('CandidateGenerator', () => {
     assert.ok(report.candidates[0].reason.includes('Frequently recalled'));
   });
 
+  it('does not regenerate lesson promotion candidates with a terminal queue history', async () => {
+    const { pool, calls } = makePool(() => ({ rows: [], rowCount: 0 }));
+    const gen = makeGenerator(pool);
+
+    await gen.generate({ dryRun: true, types: ['promote_to_lesson'] });
+
+    const sql = calls[0]?.sql ?? '';
+    assert.match(sql, /NOT EXISTS\s*\(\s*SELECT 1 FROM memory_candidate_queue/);
+    assert.match(sql, /existing\.candidate_type = 'promote_to_lesson'/);
+    assert.match(sql, /existing\.memory_id = m\.id/);
+  });
+
   it('detects merge candidates: exact content duplicates', async () => {
     const { pool } = makePool((sql) => {
       if (sql.includes('WITH dups')) {

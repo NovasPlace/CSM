@@ -222,6 +222,22 @@ npx --yes --package=opencode-cross-session-memory@1.0.0 csm-init
 
 This applies the versioned schema safely and can be rerun during an upgrade. Back up production storage before upgrading.
 
+<details>
+<summary>No npm package? Use a source checkout instead</summary>
+
+If the npm package is not yet available or you prefer to build from source:
+
+```bash
+git clone https://github.com/NovasPlace/CSM.git
+cd CSM
+npm ci
+npm run build
+node dist/cli/init-db.js
+node dist/cli/doctor.js --online
+```
+
+</details>
+
 ### 3. Verify before first use
 
 ```bash

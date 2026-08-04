@@ -22,7 +22,7 @@ export class CodexNativeRuntime {
   private readonly transcript: CodexTranscriptClient;
   private readonly input: PluginInput;
   private disposed = false;
-  /** Per-session buffer of tool-call records, flushed at Stop for native compaction. */
+  /** Per-session raw tool calls retained until the compactor reports their outcome. */
   private readonly toolCallBuffer = new Map<string, ToolCallRecord[]>();
 
   private constructor(
@@ -71,12 +71,18 @@ export class CodexNativeRuntime {
     buffer.push(record);
   }
 
-  /** Drain the buffered tool-call records for a session (for compaction at Stop). */
-  drainToolCalls(sessionId: string): ToolCallRecord[] {
-    const buffer = this.toolCallBuffer.get(sessionId);
-    if (!buffer) return [];
-    this.toolCallBuffer.delete(sessionId);
-    return buffer;
+  /** Snapshot a session buffer without discarding records that still need to age or retry. */
+  snapshotToolCalls(sessionId: string): ToolCallRecord[] {
+    return [...(this.toolCallBuffer.get(sessionId) ?? [])];
+  }
+
+  /** Replace a session buffer after the compactor classifies retained records. */
+  replaceToolCalls(sessionId: string, records: ToolCallRecord[]): void {
+    if (records.length === 0) {
+      this.toolCallBuffer.delete(sessionId);
+      return;
+    }
+    this.toolCallBuffer.set(sessionId, [...records]);
   }
 
   tools(): Record<string, ToolDefinition> {

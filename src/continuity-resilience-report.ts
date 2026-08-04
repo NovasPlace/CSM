@@ -237,7 +237,7 @@ async function collectMemoryInventory(pool: DatabasePool, dialect: string): Prom
 // Section 2: Recall Health (shallow cross-dialect, deep PG-only per-field)
 // ============================================================================
 
-async function collectRecallHealth(pool: DatabasePool, dialect: string, windowHours: number): Promise<SectionResult<RecallHealthData>> {
+export async function collectRecallHealth(pool: DatabasePool, dialect: string, windowHours: number): Promise<SectionResult<RecallHealthData>> {
   const windowStart = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
   const degraded: string[] = [];
 
@@ -278,6 +278,7 @@ async function collectRecallHealth(pool: DatabasePool, dialect: string, windowHo
             COUNT(*) FILTER (WHERE memory_id IS NULL) * 100.0 / NULLIF(COUNT(*), 0) as null_rate
           FROM memory_recall_events
           WHERE recalled_at >= $1 AND rank > 0
+            AND source IN ('search', 'vector_only', 'text_only', 'text_fallback')
         `, [windowStart]);
         const d = deepResult.rows[0] as Record<string, string | number | null> | undefined;
         if (d) {
@@ -1000,7 +1001,7 @@ export async function buildContinuityResilienceReportData(
   const systemAdvisories = collectSystemHealthAdvisories(partial);
   const knowledgeSignals = await collectKnowledgeSignals(pool);
   const continuityConfidence = computeContinuityConfidence(partial);
-  const reEntryHealth = await collectReEntryHealth(reEntryInfo);
+  const reEntryHealth = await collectReEntryHealth(reEntryInfo, pool, workspaceDir);
 
   return {
     ...partial,
@@ -1013,14 +1014,21 @@ export async function buildContinuityResilienceReportData(
 
 export async function collectReEntryHealth(
   info?: ReEntryInfo,
+  pool?: DatabasePool,
+  projectId?: string,
 ): Promise<ReEntryHealthData> {
   const config = info?.config;
+  const runtimeInjectedSessions = info?.reentryInjected?.size ?? 0;
+  const durableInjectedSessions = await countDurableReEntrySessions(
+    pool,
+    projectId ?? info?.projectId,
+  );
   const base: ReEntryHealthData = {
     available: false,
     enabled: config?.enabled ?? false,
     previewOnly: config?.previewOnly ?? true,
     wouldInject: false,
-    injectedSessions: info?.reentryInjected?.size ?? 0,
+    injectedSessions: Math.max(runtimeInjectedSessions, durableInjectedSessions),
     budgetChars: config?.maxChars ?? 0,
     minLayerChars: config?.minLayerChars ?? 0,
     originalChars: 0,
@@ -1062,6 +1070,28 @@ export async function collectReEntryHealth(
       ...base,
       degradedReason: `Diagnose failed: ${error instanceof Error ? error.message : String(error)}`,
     };
+  }
+}
+
+async function countDurableReEntrySessions(
+  pool: DatabasePool | undefined,
+  projectId: string | undefined,
+): Promise<number> {
+  if (!pool || !projectId) return 0;
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(DISTINCT session_id) AS cnt
+       FROM context_injection_events
+       WHERE project_id = $1
+         AND injection_kind = 'reentry'
+         AND status = 'injected'
+         AND environment = 'production'`,
+      [projectId],
+    );
+    const row = result.rows[0] as { cnt?: number | string } | undefined;
+    return Number(row?.cnt ?? 0) || 0;
+  } catch {
+    return 0;
   }
 }
 

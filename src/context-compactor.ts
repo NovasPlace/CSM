@@ -28,6 +28,14 @@ interface ToolCallWithState extends ToolCallRecord {
   status?: string;
 }
 
+export interface ContextCompactionOutput {
+  compacted: string;
+  result: CompactionResult;
+  compactedCount: number;
+  compactedRecords: ToolCallRecord[];
+  retainedRecords: ToolCallRecord[];
+}
+
 const DEFAULT_QUALITY_CONFIG = {
   entityRetentionWeight: 0.35,
   decisionRetentionWeight: 0.25,
@@ -79,7 +87,7 @@ export class ContextCompactor {
     toolCalls: ToolCallRecord[],
     inputStr?: string,
     messages?: CompactableMessage[]
-  ): { compacted: string; result: CompactionResult; compactedCount: number } {
+  ): ContextCompactionOutput {
     if (!this.config.enabled || toolCalls.length === 0) {
       const raw = [
         toolCalls.map(tc => this.formatFullToolCall(tc)).join('\n'),
@@ -102,7 +110,13 @@ export class ContextCompactor {
       };
       this.lastResult = result;
       this.lastQuality = null;
-      return { compacted: raw, compactedCount: 0, result };
+      return {
+        compacted: raw,
+        compactedCount: 0,
+        result,
+        compactedRecords: [],
+        retainedRecords: [...toolCalls],
+      };
     }
 
     const now = Date.now();
@@ -306,7 +320,13 @@ export class ContextCompactor {
     // Keep the attempted quality result even when the gate rejected mutation.
     this.lastQuality = attemptedQuality;
 
-    return { compacted, result, compactedCount: compactable.length };
+    return {
+      compacted,
+      result,
+      compactedCount: compactable.length,
+      compactedRecords: [...compactable],
+      retainedRecords: [...keepRaw],
+    };
   }
 
 

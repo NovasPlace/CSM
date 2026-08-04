@@ -40,10 +40,13 @@ export interface CompactionPipelineResult {
   failureStage?: string;
   failureCode?: string;
   failureMessage?: string;
+  /** Raw records that must survive for a later native compaction pass. */
+  retainedRecords: ToolCallRecord[];
 }
 
 interface PersistenceResult {
   recordsForCompaction: ToolCallRecord[];
+  failedRecords: ToolCallRecord[];
   eligibleParts: number;
   persistedParts: number;
   failedParts: number;
@@ -124,6 +127,10 @@ export async function runCompactionPipeline(
     failureStage,
     failureCode,
     failureMessage,
+    retainedRecords: [
+      ...compactOutput.retainedRecords,
+      ...persistence.failedRecords,
+    ],
   };
 }
 
@@ -146,6 +153,7 @@ async function persistExpandableRecords(
   if (candidates.length === 0) {
     return {
       recordsForCompaction: records,
+      failedRecords: [],
       eligibleParts: 0,
       persistedParts: 0,
       failedParts: 0,
@@ -154,6 +162,7 @@ async function persistExpandableRecords(
   if (ctx.config?.contextCache?.enabled === false) {
     return {
       recordsForCompaction: ineligible,
+      failedRecords: candidates,
       eligibleParts: candidates.length,
       persistedParts: 0,
       failedParts: candidates.length,
@@ -186,14 +195,19 @@ async function persistExpandableRecords(
   }));
 
   const persisted: ToolCallRecord[] = [];
+  const failedRecords: ToolCallRecord[] = [];
   let firstFailure: unknown;
-  for (const write of writes) {
+  for (const [index, write] of writes.entries()) {
     if (write.status === 'fulfilled') persisted.push(write.value);
-    else firstFailure ??= write.reason;
+    else {
+      failedRecords.push(candidates[index]);
+      firstFailure ??= write.reason;
+    }
   }
   const failedParts = candidates.length - persisted.length;
   return {
     recordsForCompaction: [...ineligible, ...persisted],
+    failedRecords,
     eligibleParts: candidates.length,
     persistedParts: persisted.length,
     failedParts,

@@ -25,6 +25,7 @@ import {
 
 export interface NativeCompactionResult {
   status: 'compressed' | 'skipped_under_budget' | 'failed' | 'no_records';
+  retainedRecords: ToolCallRecord[];
   result?: {
     compactedParts: number;
     skippedParts: number;
@@ -33,13 +34,18 @@ export interface NativeCompactionResult {
   };
 }
 
+export function nativeCompactionClientKind(hostName: string): CompactionClientKind {
+  if (hostName === 'codex' || hostName === 'claude' || hostName === 'hermes') return hostName;
+  return 'unknown';
+}
+
 /**
  * Run the shared compaction pipeline for a batch of native tool-call records.
  *
  * @param ctx          The active plugin context (must include contextCompactor + database).
  * @param records      Tool-call records accumulated during the native turn.
  * @param sessionId    The native session id.
- * @param clientKind   Host attribution ('codex' for Codex, 'unknown' for others).
+ * @param clientKind   Native host attribution.
  * @returns Summary of the compaction outcome.
  */
 export async function runNativeCompaction(
@@ -49,7 +55,7 @@ export async function runNativeCompaction(
   clientKind: CompactionClientKind = 'unknown',
 ): Promise<NativeCompactionResult> {
   if (!ctx.config.compactor?.enabled || records.length === 0) {
-    return { status: 'no_records' };
+    return { status: 'no_records', retainedRecords: [] };
   }
 
   const pool = ctx.database.getPool();
@@ -90,6 +96,7 @@ export async function runNativeCompaction(
 
     return {
       status: outcome.status,
+      retainedRecords: outcome.retainedRecords,
       result: {
         compactedParts: outcome.compactedParts,
         skippedParts: outcome.skippedParts,
@@ -127,6 +134,6 @@ export async function runNativeCompaction(
         .replace(/\s+/g, ' ').trim().slice(0, 500),
       createdAt,
     });
-    return { status: 'failed' };
+    return { status: 'failed', retainedRecords: records };
   }
 }

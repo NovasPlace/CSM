@@ -2,7 +2,7 @@ import type { DatabasePool } from './types.js';
 import { getLogger } from './logger.js';
 
 export type CompactionStatus = 'compressed' | 'skipped_under_budget' | 'failed';
-export type CompactionClientKind = 'opencode' | 'codex' | 'unknown';
+export type CompactionClientKind = 'opencode' | 'codex' | 'claude' | 'hermes' | 'unknown';
 export type CompactionRuntimeKind = 'plugin' | 'native_hook' | 'mcp' | 'unknown';
 
 export interface CompactionMetricInput {

@@ -46,6 +46,21 @@ describe('ContextCompactor', () => {
     ok(result.compacted.includes('TOOL_REF') && (result.compacted.includes('read') || result.compacted.includes('write')));
   });
 
+  it('returns the records compacted and retained for native cross-turn buffering', () => {
+    contextCompactor = makeCompactor();
+    const toolCalls: ToolCallRecord[] = [
+      makeToolCall({ tool: 'read', args: { filePath: 'old-a.ts' }, ageMs: 10000 }),
+      makeToolCall({ tool: 'write', args: { filePath: 'old-b.ts' }, ageMs: 10000 }),
+      makeToolCall({ tool: 'edit', args: { filePath: 'recent-c.ts' }, ageMs: 500 }),
+      makeToolCall({ tool: 'bash', args: { command: 'status' }, ageMs: 500 }),
+    ];
+
+    const result = contextCompactor.compact(toolCalls);
+
+    deepStrictEqual(new Set(result.compactedRecords), new Set(toolCalls.slice(0, 2)));
+    deepStrictEqual(new Set(result.retainedRecords), new Set(toolCalls.slice(2)));
+  });
+
   it('preserves running/pending tool calls regardless of age', () => {
     contextCompactor = makeCompactor();
     const toolCalls: ToolCallRecord[] = [

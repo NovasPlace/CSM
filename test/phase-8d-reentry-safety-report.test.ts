@@ -129,6 +129,29 @@ describe('Phase 8D — Re-entry Live Validation + Safety Report', () => {
       assert.equal(health.injectedSessions, 3);
     });
 
+    it('uses durable production injection telemetry when the runtime-local set has reset', async () => {
+      const config = { ...DEFAULT_REENTRY_CONFIG };
+      const protocol = new ReEntryProtocol({
+        pool: mockPool(),
+        memoryManager: null as never,
+        selfModel: null as never,
+        beliefStore: null as never,
+        workJournal: null as never,
+        config,
+      });
+      const telemetryPool = {
+        query: async () => ({ rows: [{ cnt: '7' }], rowCount: 1 }),
+      } as unknown as DatabasePool;
+
+      const health = await collectReEntryHealth(
+        { protocol, config, reentryInjected: new Set(['runtime-session']) },
+        telemetryPool,
+        'C:/projects/csm',
+      );
+
+      assert.equal(health.injectedSessions, 7);
+    });
+
     it('degrades gracefully when diagnose throws', async () => {
       const config = { ...DEFAULT_REENTRY_CONFIG, enabled: true, previewOnly: true };
       const badProtocol = {

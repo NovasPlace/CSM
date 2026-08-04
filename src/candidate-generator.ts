@@ -288,6 +288,11 @@ export class CandidateGenerator {
         AND m.archived_at IS NULL
         AND m.memory_type IN ('procedural', 'episodic')
         AND COALESCE(r.recall_count, 0) >= $1
+        AND NOT EXISTS (
+          SELECT 1 FROM memory_candidate_queue existing
+          WHERE existing.candidate_type = 'promote_to_lesson'
+            AND existing.memory_id = m.id
+        )
         ${projectClause}
       ORDER BY r.recall_count DESC NULLS LAST
       LIMIT $${params.length}

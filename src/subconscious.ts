@@ -19,6 +19,9 @@ export class SubconsciousWatcher {
   private interval: number; // seconds
   private timer: ReturnType<typeof setInterval> | null = null;
   private watchedPaths: Map<string, Date> = new Map(); // path -> last checked
+  private initializedPaths = new Set<string>();
+  private knownDirectories = new Set<string>();
+  private scanInProgress = false;
   private currentSessionId: string | null = null;
   private filterBuildArtifacts: boolean;
 
@@ -59,9 +62,15 @@ export class SubconsciousWatcher {
     getLogger().info(`SubconsciousWatcher starting (interval: ${this.interval / 1000}s)`);
     
     this.timer = setInterval(() => {
-      this.watchFiles().catch(error => {
-        getLogger().error('SubconsciousWatcher watch failed', error instanceof Error ? error : undefined);
-      });
+      if (this.scanInProgress) return;
+      this.scanInProgress = true;
+      this.watchFiles()
+        .catch(error => {
+          getLogger().error('SubconsciousWatcher watch failed', error instanceof Error ? error : undefined);
+        })
+        .finally(() => {
+          this.scanInProgress = false;
+        });
     }, this.interval);
   }
 
@@ -127,28 +136,35 @@ export class SubconsciousWatcher {
   private async watchFiles(): Promise<void> {
     for (const [dirPath, lastChecked] of this.watchedPaths) {
       try {
-        const changes = await this.detectChanges(dirPath, lastChecked);
+        const scanStartedAt = new Date();
+        const captureNewDirectories = this.initializedPaths.has(dirPath);
+        const changes = await this.detectChanges(dirPath, lastChecked, captureNewDirectories);
         
         for (const change of changes) {
           await this.captureFileChange(change);
         }
         
-        // Update last checked time
-         this.watchedPaths.set(dirPath, new Date());
-       } catch (error) {
-         getLogger().error(`SubconsciousWatcher failed to watch ${dirPath}`, error instanceof Error ? error : undefined);
-       }
+        // Preserve changes that land while a long scan is in progress for the next pass.
+        this.watchedPaths.set(dirPath, scanStartedAt);
+        this.initializedPaths.add(dirPath);
+      } catch (error) {
+        getLogger().error(`SubconsciousWatcher failed to watch ${dirPath}`, error instanceof Error ? error : undefined);
+      }
      }
    }
 
   /**
    * Detect changes in a directory
    */
-  private async detectChanges(dirPath: string, since: Date): Promise<FileChangeEvent[]> {
+  private async detectChanges(
+    dirPath: string,
+    since: Date,
+    captureNewDirectories: boolean,
+  ): Promise<FileChangeEvent[]> {
     const changes: FileChangeEvent[] = [];
     
      try {
-       await this.walkDirectory(dirPath, since, changes, dirPath);
+       await this.walkDirectory(dirPath, since, changes, dirPath, captureNewDirectories);
      } catch (error) {
        getLogger().error(`SubconsciousWatcher failed to walk ${dirPath}`, error instanceof Error ? error : undefined);
      }
@@ -163,7 +179,8 @@ export class SubconsciousWatcher {
     dirPath: string,
     since: Date,
     changes: FileChangeEvent[],
-    projectRoot: string
+    projectRoot: string,
+    captureNewDirectories: boolean,
   ): Promise<void> {
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -184,15 +201,15 @@ export class SubconsciousWatcher {
         }
         
         if (entry.isDirectory()) {
-          // Check if this is a newly created directory (no previous record)
-          const dirKey = `dir:${fullPath}`;
-          const dirLastChecked = this.watchedPaths.get(dirKey);
-          if (!dirLastChecked) {
-            // New directory detected - auto-generate docs
-            await this.handleNewDirectory(fullPath, projectRoot);
-            this.watchedPaths.set(dirKey, new Date());
+          if (!this.knownDirectories.has(fullPath)) {
+            // Seed existing directories during the first scan; only directories that
+            // appear on later scans are eligible for automatic documentation.
+            if (captureNewDirectories) {
+              await this.handleNewDirectory(fullPath, projectRoot);
+            }
+            this.knownDirectories.add(fullPath);
           }
-          await this.walkDirectory(fullPath, since, changes, projectRoot);
+          await this.walkDirectory(fullPath, since, changes, projectRoot, captureNewDirectories);
         } else if (entry.isFile()) {
           // Skip build artifact files when filtering is enabled
           if (this.filterBuildArtifacts && this.isBuildArtifact(entry.name)) {

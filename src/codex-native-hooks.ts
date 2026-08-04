@@ -6,7 +6,7 @@ import {
   createToolExecuteAfterHook,
   createToolExecuteBeforeHook,
 } from './hooks/tool-execute.js';
-import { runNativeCompaction } from './hooks/native-compaction.js';
+import { nativeCompactionClientKind, runNativeCompaction } from './hooks/native-compaction.js';
 import type { CodexNativeRuntime, CodexNativeRuntimeManager } from './codex-native-runtime.js';
 
 export type CodexHookPayload = Record<string, unknown> & {
@@ -54,11 +54,13 @@ export async function handleCodexNativeHook(
     await createEventHook(runtimeInput(runtime), runtime.context)({
       event: { type: 'session.updated', properties: { info: { id: sessionId } } },
     });
-    // Flush buffered tool calls through the compaction pipeline.
-    const records = runtime.drainToolCalls(sessionId);
+    // Keep fresh/retryable records across turn boundaries; only remove records
+    // after the shared pipeline reports that they were safely compacted.
+    const records = runtime.snapshotToolCalls(sessionId);
     if (records.length > 0) {
-      const clientKind = runtime.profile.hostName === 'codex' ? 'codex' : 'unknown';
-      await runNativeCompaction(runtime.context, records, sessionId, clientKind);
+      const clientKind = nativeCompactionClientKind(runtime.profile.hostName);
+      const outcome = await runNativeCompaction(runtime.context, records, sessionId, clientKind);
+      runtime.replaceToolCalls(sessionId, outcome.retainedRecords);
     }
   }
   return { continue: true };
