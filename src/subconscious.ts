@@ -29,6 +29,12 @@ export class SubconsciousWatcher {
   private static readonly BUILD_DIRS = new Set([
     'node_modules', 'dist', 'out', '.next', '.nuxt', 'build',
     '__pycache__', '.cache', '.parcel-cache', 'coverage',
+    // Python virtualenvs and runtime sandboxes — descending into these can
+    // corrupt the host (auto-docs once injected README.md into
+    // jsonschema_specifications/schemas/, breaking jsonschema's import
+    // and with it the MCP client that loads this very plugin).
+    'venv', '.venv', 'env', '.env', 'Lib', 'lib', 'site-packages',
+    '.tox', '.nox', 'target', '.git', '.hg', '.svn', '.gradle', '.mvn',
   ]);
 
   // Structural directories that should never get an auto-generated README
