@@ -10,6 +10,12 @@ export function createPostgresPool(
   runtime: DatabaseRuntimeConfig = DEFAULT_DATABASE_RUNTIME_CONFIG,
 ): Promise<DatabasePool> {
   const pool = new Pool(buildPostgresPoolConfig(databaseUrl, runtime));
+  // Suppress unhandled 'error' emissions from the raw pg pool. Without a
+  // listener, pg re-emits pool-level errors (e.g. connections terminated by
+  // pg_terminate_backend during test/CI database teardown) as uncaught
+  // exceptions. Operational errors still surface through query() rejections;
+  // this only prevents process-level crashes from expected teardown noise.
+  pool.on('error', () => {});
   let endPromise: Promise<void> | null = null;
   let closed = false;
   const requireOpen = (): void => {
