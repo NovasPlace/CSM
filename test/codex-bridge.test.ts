@@ -48,6 +48,7 @@ describe('Phase 20 - Codex bridge adapter', () => {
   let primingEngine: PrimingEngine;
 
   before(async () => {
+    adminPool.on('error', () => {});
     await adminPool.query(`CREATE DATABASE ${quoteIdentifier(tempDbName)}`);
     bridge = await CodexMemoryBridge.connect(config);
     db = new Database(config);
