@@ -69,6 +69,7 @@ async function cleanupDatabase(
   let databaseCreated = false;
 
   before(async () => {
+    admin.on('error', () => {});
     await admin.query(`CREATE DATABASE ${quoteIdentifier(databaseName)}`);
     databaseCreated = true;
     db = new Database(config);
