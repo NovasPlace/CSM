@@ -219,7 +219,7 @@ describe('Capability provenance migration — PostgreSQL', { skip: !PG_URL }, ()
     });
     await pgPool.query(
       `INSERT INTO memories (memory_type, content, importance, confidence, source, tags, metadata)
-       VALUES ('workspace', '[Promoted from candidate 100] edit used successfully', 0.76, 0.8, 'auto', $2, $1)`,
+       VALUES ('workspace', '[Legacy capability promotion record] edit used successfully', 0.76, 0.8, 'auto', $2, $1)`,
       [meta, ['candidate_capability', 'auto-promoted']],
     );
 
