@@ -31,6 +31,7 @@ function quoteIdentifier(value: string): string {
 describe('Phase 19b — backfill and recall telemetry', () => {
   const tempDbName = `cross_session_memory_phase19b_${Date.now()}`;
   const adminPool = new Pool({ connectionString: buildAdminUrl(BASE_DB_URL) });
+  adminPool.on('error', () => {});
   const config: PluginConfig = {
     databaseUrl: buildTempDbUrl(BASE_DB_URL, tempDbName),
     databaseProvider: 'postgres',

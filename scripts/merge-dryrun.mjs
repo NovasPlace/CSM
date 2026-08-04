@@ -9,6 +9,7 @@ const DATABASE_URL =
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL, max: 4 });
+pool.on('error', () => {});
 
 const MEMORY_TYPE = process.argv.includes('--type')
   ? process.argv.find((a, i) => process.argv[i - 1] === '--type')

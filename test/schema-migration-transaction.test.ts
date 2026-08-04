@@ -8,6 +8,7 @@ const BASE_DB_URL = process.env.CSM_DATABASE_URL
   ?? process.env.DATABASE_URL
   ?? 'postgresql://postgres:postgres@localhost:5432/cross_session_memory';
 const admin = new Pool({ connectionString: databaseUrl('postgres') });
+admin.on('error', () => {});
 
 function databaseUrl(databaseName: string): string {
   const url = new URL(BASE_DB_URL);
@@ -50,6 +51,7 @@ describe('real PostgreSQL migration transaction policy', () => {
     const name = `csm_migration_rollback_${Date.now()}`;
     await createDatabase(name);
     const raw = new Pool({ connectionString: databaseUrl(name) });
+    raw.on('error', () => {});
     try {
       await raw.query("CREATE VIEW sessions AS SELECT 'legacy'::text AS id");
       const database = new Database(config(name));

@@ -14,6 +14,7 @@ const NAME = `csm_work_ledger_new_alias_${Date.now()}`;
 const ROOT = resolve(`.tmp/work-ledger-new-alias-${process.pid}`);
 const FILE = resolve(ROOT, 'new-file.ts');
 const admin = new Pool({ connectionString: databaseUrl('postgres') });
+admin.on('error', () => {});
 let database: Database | undefined;
 let firstLedger: WorkLedger;
 let secondLedger: WorkLedger;

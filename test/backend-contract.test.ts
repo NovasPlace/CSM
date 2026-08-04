@@ -71,6 +71,7 @@ function describePostgres(
 ): void {
   const tempDbName = `csm_contract_${Date.now()}`;
   const adminPool = new Pool({ connectionString: buildAdminUrl(BASE_DB_URL) });
+  adminPool.on('error', () => {});
   const config: PluginConfig = {
     databaseUrl: buildTempDbUrl(BASE_DB_URL, tempDbName),
     databaseProvider: 'postgres',

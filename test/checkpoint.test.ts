@@ -28,6 +28,7 @@ const CFG: CheckpointConfig = {
 
 // Minimal pool for tests — satisfies DatabasePool shape
 const pool = new Pool({ connectionString: DB_URL }) as any;
+pool.on('error', () => {});
 
 function mkUserMsg(text: string, id: string): SessionMessage {
   return { info: { id, role: 'user' }, parts: [{ type: 'text', text }] };

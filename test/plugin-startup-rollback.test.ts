@@ -19,6 +19,7 @@ const DATABASE_NAME = `csm_startup_rollback_${Date.now()}_${randomUUID().slice(0
 const PROJECT_ROOT = resolve(`.tmp/startup-rollback-${process.pid}`);
 const TRACKED_FILE = resolve(PROJECT_ROOT, 'tracked.txt');
 const admin = new Pool({ connectionString: databaseUrl('postgres') });
+admin.on('error', () => {});
 
 before(async () => {
   mkdirSync(PROJECT_ROOT, { recursive: true });

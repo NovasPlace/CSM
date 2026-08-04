@@ -15,6 +15,7 @@ const BASE_URL = process.env.CSM_DATABASE_URL
   ?? 'postgresql://postgres:postgres@localhost:5432/cross_session_memory';
 const DATABASE_NAME = `csm_work_ledger_upgrade_${Date.now()}`;
 const admin = new Pool({ connectionString: databaseUrl('postgres') });
+admin.on('error', () => {});
 const config = {
   ...DEFAULT_CONFIG,
   databaseUrl: databaseUrl(DATABASE_NAME),
@@ -35,6 +36,7 @@ function quoteIdentifier(value: string): string {
 before(async () => {
   await admin.query(`CREATE DATABASE ${quoteIdentifier(DATABASE_NAME)}`);
   const pool = new Pool({ connectionString: config.databaseUrl });
+  pool.on('error', () => {});
   const target = pool as unknown as DatabasePool;
   const database = new Database(config);
   try {
@@ -71,6 +73,7 @@ after(async () => {
 
 it('upgrades csm-postgres-v1 through current migrations', async () => {
   const beforePool = new Pool({ connectionString: config.databaseUrl });
+  beforePool.on('error', () => {});
   const before = await beforePool.query(
     `SELECT COUNT(*)::int AS count,
             to_regclass('public.work_ledger_changes') AS ledger_table

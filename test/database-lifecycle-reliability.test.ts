@@ -20,6 +20,7 @@ before(async () => {
   cleanSqlite();
   postgresName = `csm_lifecycle_${Date.now()}_${randomUUID().slice(0, 8)}`.replace(/-/g, '_');
   admin = new Pool({ connectionString: databaseUrl('postgres') });
+  admin.on('error', () => {});
   await admin.query(`CREATE DATABASE ${quoteIdentifier(postgresName)}`);
 });
 

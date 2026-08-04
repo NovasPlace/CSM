@@ -27,6 +27,7 @@ describe('Codex bridge extra plugin surfaces', () => {
   const dbName = `cross_session_memory_codex_extras_${Date.now()}`;
   const databaseUrl = buildUrl(BASE_DB_URL, dbName);
   const adminPool = new Pool({ connectionString: adminUrl(BASE_DB_URL) });
+  adminPool.on('error', () => {});
   const config: PluginConfig = {
     databaseUrl,
     embeddingModel: 'nomic-embed-text',

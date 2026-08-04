@@ -8,6 +8,7 @@ const DATABASE_URL =
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL, max: 4 });
+pool.on('error', () => {});
 
 function classify(row) {
   const content = row.content;

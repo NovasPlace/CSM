@@ -13,6 +13,7 @@ const APPLY = process.argv.includes('--apply');
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL, max: 4 });
+pool.on('error', () => {});
 
 async function main() {
   const totalBefore = (

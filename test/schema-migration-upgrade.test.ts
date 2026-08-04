@@ -47,6 +47,7 @@ async function cleanupUpgradeDatabase(
 
   const databaseName = `csm_upgrade_${Date.now()}`;
   const admin = new Pool({ connectionString: databaseUrl(BASE_DB_URL, 'postgres') });
+  admin.on('error', () => {});
   const config = {
     databaseUrl: databaseUrl(BASE_DB_URL, databaseName),
     databaseProvider: 'postgres',
@@ -61,6 +62,7 @@ async function cleanupUpgradeDatabase(
     await admin.query(`CREATE DATABASE ${quoteIdentifier(databaseName)}`);
     databaseCreated = true;
     const legacy = new Pool({ connectionString: config.databaseUrl });
+    legacy.on('error', () => {});
     await legacy.query(`CREATE TABLE sessions (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,

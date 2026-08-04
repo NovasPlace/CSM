@@ -17,6 +17,7 @@ const DATABASE_URL =
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL, max: 4 });
+pool.on('error', () => {});
 
 const TEST_SESSION_ID = 'ses_test_phase2c4_1_restore_proof';
 const TEST_BATCH_ID = 'test-restore-proof-phase2c4-1';

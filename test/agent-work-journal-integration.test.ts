@@ -18,6 +18,7 @@ before(async () => {
   mkdirSync(TMP_DIR, { recursive: true });
   cleanSqlite();
   admin = new Pool({ connectionString: databaseUrl('postgres') });
+  admin.on('error', () => {});
   await admin.query(`CREATE DATABASE ${quoteIdentifier(PG_NAME)}`);
 });
 

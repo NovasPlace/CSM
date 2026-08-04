@@ -19,6 +19,7 @@ const CFG: CheckpointConfig = {
 
 describe('buildCheckpointInjection budget compaction', () => {
   const pool = new Pool({ connectionString: DB_URL }) as any;
+  pool.on('error', () => {});
   let store: CheckpointStore;
 
   before(async () => {

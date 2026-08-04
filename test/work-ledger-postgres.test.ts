@@ -16,6 +16,7 @@ const DATABASE_NAME = `csm_work_ledger_${process.pid}_${randomUUID().replaceAll(
 const ROOT = resolve(`.tmp/work-ledger-${process.pid}`);
 const FILE = resolve(ROOT, 'tracked.txt');
 const admin = new Pool({ connectionString: databaseUrl('postgres') });
+admin.on('error', () => {});
 let database: Database | undefined;
 let ledger: WorkLedger;
 let firstChange: WorkLedgerChange;

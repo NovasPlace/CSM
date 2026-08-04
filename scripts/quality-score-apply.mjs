@@ -14,6 +14,7 @@ const DATABASE_URL =
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL, max: 4 });
+pool.on('error', () => {});
 
 function parseNumberArg(prefix, fallback) {
   const arg = process.argv.find((value) => value.startsWith(prefix));

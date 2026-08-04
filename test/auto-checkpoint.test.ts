@@ -30,6 +30,7 @@ const CFG: CheckpointConfig = {
 };
 
 const pool = new Pool({ connectionString: DB_URL }) as any;
+pool.on('error', () => {});
 
 describe('Phase 4B — Auto-Checkpoint Triggers', () => {
 

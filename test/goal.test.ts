@@ -27,6 +27,7 @@ let pool: Pool;
 
 before(async () => {
   pool = new Pool({ connectionString: DB_URL });
+  pool.on('error', () => {});
   await initializeGoalSchema({
     query: (text, params) => pool.query(text, params),
   } as any);

@@ -14,6 +14,7 @@ const NAME = `csm_work_ledger_verify_lock_${Date.now()}`;
 const ROOT = resolve(`.tmp/work-ledger-verify-lock-${process.pid}`);
 const FILE = resolve(ROOT, 'tracked.txt');
 const admin = new Pool({ connectionString: url('postgres') });
+admin.on('error', () => {});
 let database: Database;
 let ledger: WorkLedger;
 

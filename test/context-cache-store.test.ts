@@ -17,6 +17,7 @@ import {
 const DB_URL = process.env.CSM_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://opencode_memory:opencode_memory@localhost:5432/opencode_memory';
 const SID = 'test-cache-store-' + Date.now();
 const pool = new Pool({ connectionString: DB_URL }) as any;
+pool.on('error', () => {});
 
 function mkItem(over: Partial<CacheItemInput> & { displayId: string; kind: CacheKind }): CacheItemInput {
   return {

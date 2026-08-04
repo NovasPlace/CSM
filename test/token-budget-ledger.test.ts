@@ -10,6 +10,7 @@ const SESSION_IDS = [SESSION_ID, SECOND_SESSION_ID];
 
 describe('TokenBudgetLedger', () => {
   const pool = new Pool({ connectionString: DB_URL }) as any;
+  pool.on('error', () => {});
   let ledger: TokenBudgetLedger;
   let baselineWeeklyInput = 0;
   let baselineWeeklyOutput = 0;

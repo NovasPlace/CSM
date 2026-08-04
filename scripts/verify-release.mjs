@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 const baseUrl = requireReleaseDatabaseUrl();
 const databaseName = `csm_release_verify_${Date.now()}_${process.pid}`;
 const admin = new Pool({ connectionString: databaseUrl(baseUrl, 'postgres') });
+admin.on('error', () => {});
 let created = false;
 let operationError;
 

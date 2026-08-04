@@ -17,6 +17,7 @@ const DATABASE_NAME = `csm_bridge_lifecycle_${Date.now()}_${randomUUID().slice(0
 const ROOT = resolve(`.tmp/bridge-lifecycle-${process.pid}`);
 const FILE = resolve(ROOT, 'tracked.txt');
 const admin = new Pool({ connectionString: databaseUrl('postgres') });
+admin.on('error', () => {});
 
 before(async () => {
   mkdirSync(ROOT, { recursive: true });
