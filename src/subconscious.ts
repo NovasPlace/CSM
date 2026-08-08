@@ -35,12 +35,30 @@ export class SubconsciousWatcher {
     // and with it the MCP client that loads this very plugin).
     'venv', '.venv', 'env', '.env', 'Lib', 'lib', 'site-packages',
     '.tox', '.nox', 'target', '.git', '.hg', '.svn', '.gradle', '.mvn',
+    // Host/OS state trees and generic caches — a session rooted at the user
+    // home or inside a host cache must never auto-document these. Missing
+    // entries let the watcher inject README.md into Hermes' own cache tree
+    // (hermes/cache/delegation/live/...), the pip cache, and Unity/Unreal
+    // generated trees (ArenaProject/Library/PackageCache), then echo every
+    // injected README back into the DB as a [modified] README.md memory.
+    'AppData', 'cache', 'logs', 'Logs', 'Temp', 'tmp',
+    'Library', 'obj', 'bin', 'Saved', 'Intermediate', 'Binaries',
+    'DerivedDataCache', 'pip', 'wheels', 'http-v2',
   ]);
 
   // Structural directories that should never get an auto-generated README
   private static readonly STRUCTURAL_DIRS = new Set([
     'src', 'test', 'tests', 'docs', 'plugins', 'migrations', 'scripts',
+    // Game-engine source roots — Unity Assets/ProjectSettings/Packages and
+    // Unreal Content/Source are code roots, not content to auto-document.
+    'Assets', 'ProjectSettings', 'Packages', 'Content', 'Source',
   ]);
+
+  // Substring of the README the watcher itself writes in handleNewDirectory.
+  // Used to break the echo loop: a generated README must not become a
+  // [modified] README.md episodic memory on the next scan.
+  private static readonly AUTO_DOC_SIGNATURE =
+    'This directory was detected by the Cross-Session Memory plugin';
 
   private static readonly BUILD_FILE_PATTERNS = [
     /\.map$/,        // source maps
@@ -93,8 +111,18 @@ export class SubconsciousWatcher {
 
   /**
    * Add a path to watch
+   *
+   * Roots inside the host's own state trees are refused outright — a session
+   * whose cwd lives under `AppData\Local\hermes` or `AppData\Local\pip` must
+   * never be auto-documented (this is what let the watcher walk Hermes' own
+   * venv and cache tree). Legit project roots never contain these segments.
    */
   watchPath(dirPath: string): void {
+    const normalized = dirPath.replace(/\\/g, '/').toLowerCase();
+    if (normalized.includes('/appdata/local/hermes') || normalized.includes('/appdata/local/pip')) {
+      getLogger().warn(`SubconsciousWatcher: refusing to watch host state path: ${dirPath}`);
+      return;
+    }
     this.watchedPaths.set(dirPath, new Date());
     getLogger().info(`SubconsciousWatcher watching: ${dirPath}`);
   }
@@ -112,6 +140,15 @@ export class SubconsciousWatcher {
   async captureFileChange(event: FileChangeEvent): Promise<void> {
     try {
       const content = await this.extractFileContent(event.filePath);
+      // Break the echo loop: a README.md that this watcher itself generated
+      // (handleNewDirectory) must not be re-captured as a [modified] README.md
+      // episodic memory on the next scan. Observed: 10k+ such memories/week.
+      if (
+        path.basename(event.filePath).toLowerCase() === 'readme.md' &&
+        content.includes(SubconsciousWatcher.AUTO_DOC_SIGNATURE)
+      ) {
+        return;
+      }
       const symbols = this.extractSymbols(content, event.filePath);
       
       const memoryContent = this.formatFileChange(event, symbols);
