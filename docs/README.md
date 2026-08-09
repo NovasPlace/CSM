@@ -12,6 +12,7 @@ Start with the product documentation. Use phase documents when you need design h
 | Document | Purpose |
 |---|---|
 | [Main README](../README.md) | Product overview, quick start, database modes, and project status |
+| [AgentBook Version Control](AGENTBOOK_VERSION_CONTROL.md) | Product boundary, current vertical slice, game-development profile, and evolution path |
 | [Feature Map](FEATURES.md) | Complete subsystem and runtime tool inventory |
 | [Product Architecture](PRODUCT_ARCHITECTURE.md) | Stable runtime layers, write paths, read paths, and provider boundaries |
 | [Contributing](https://github.com/NovasPlace/CSM/blob/master/CONTRIBUTING.md) | Development workflow, gates, migration rules, and PR expectations |

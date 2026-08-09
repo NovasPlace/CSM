@@ -70,6 +70,8 @@ describe('commercial package boundary', () => {
     assert.deepEqual(readdirSync(join(process.cwd(), '.codex-plugin')), ['plugin.json']);
     assert.equal(plugin.skills, './skills/');
     assert.equal(plugin.mcpServers, './.mcp.json');
+    assert.equal(plugin.interface.displayName, 'AgentBook');
+    assert.match(plugin.interface.shortDescription, /Version control for agent work/u);
     assert.deepEqual(server.args, ['./runtime/launch-mcp.mjs']);
     assert.equal(server.env.CSM_DATABASE_PROVIDER, 'postgres');
     assert.equal(server.env.CSM_REQUIRE_EXPLICIT_DATABASE_URL, 'true');
@@ -83,6 +85,12 @@ describe('commercial package boundary', () => {
     );
     assert.match(skill, /^---\r?\nname: csm-continuity\r?\n/u);
     assert.doesNotMatch(skill, /\[TODO:/u);
+    const agentBookSkill = readFileSync(
+      join(process.cwd(), 'skills', 'agentbook-version-control', 'SKILL.md'),
+      'utf8',
+    );
+    assert.match(agentBookSkill, /^---\r?\nname: agentbook-version-control\r?\n/u);
+    assert.doesNotMatch(agentBookSkill, /\[TODO:/u);
   });
 
   it('keeps the repo-local native plugin self-contained and aligned', () => {
@@ -95,6 +103,7 @@ describe('commercial package boundary', () => {
     assert.equal(plugin.name, 'cross-session-memory-bridge');
     assert.equal(plugin.skills, './skills/');
     assert.equal(plugin.mcpServers, './.mcp.json');
+    assert.equal(plugin.interface.displayName, 'AgentBook');
     assert.equal(plugin.interface.defaultPrompt.length, 3);
     assert.equal(server.cwd, '.');
     assert.deepEqual(server.args, ['./scripts/launch-mcp.mjs']);
@@ -104,6 +113,10 @@ describe('commercial package boundary', () => {
     assert.equal(
       readFileSync(join(pluginRoot, 'skills', 'csm-continuity', 'SKILL.md'), 'utf8'),
       readFileSync(join(process.cwd(), 'skills', 'csm-continuity', 'SKILL.md'), 'utf8'),
+    );
+    assert.equal(
+      readFileSync(join(pluginRoot, 'skills', 'agentbook-version-control', 'SKILL.md'), 'utf8'),
+      readFileSync(join(process.cwd(), 'skills', 'agentbook-version-control', 'SKILL.md'), 'utf8'),
     );
     const launcher = readFileSync(join(pluginRoot, 'scripts', 'launch-mcp.mjs'), 'utf8');
     assert.match(launcher, /runtime.+package/su);
@@ -134,6 +147,8 @@ describe('commercial package boundary', () => {
       'dist/cli/mcp.js', '.codex-plugin/plugin.json', 'runtime/launch-mcp.mjs', '.mcp.json',
       'hooks/hooks.json', 'scripts/run-hook.mjs',
       'skills/csm-continuity/SKILL.md', 'skills/csm-continuity/agents/openai.yaml',
+      'skills/agentbook-version-control/SKILL.md', 'skills/agentbook-version-control/agents/openai.yaml',
+      'docs/AGENTBOOK_VERSION_CONTROL.md',
       'docs/CODEX_INSTALLATION.md',
       'docs/RELEASE_PROCESS.md', 'docs/SUPPLY_CHAIN_SECURITY.md', 'docs/TROUBLESHOOTING.md',
     ];

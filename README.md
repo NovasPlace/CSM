@@ -1,10 +1,10 @@
 <div align="center">
 
-# Cross-Session Memory
+# AgentBook
 
-**Continuity infrastructure for AI coding agents**
+**Version control for agent work, powered by Cross-Session Memory**
 
-Persistent memory, operational state, re-entry, context governance, and durable lessons across sessions, projects, and model changes.
+Checkpoint, resume, compare, and audit AI work across sessions, projects, and model changes.
 
 <p>
   <a href="https://github.com/NovasPlace/CSM/actions/workflows/ci.yml"><img src="https://github.com/NovasPlace/CSM/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -21,13 +21,30 @@ Persistent memory, operational state, re-entry, context governance, and durable 
 
 ---
 
-> CSM is not a chat-history dump or a thin vector-store wrapper. It is a continuity runtime that records what happened, retrieves what matters, reconstructs working state, and tells a new agent how to continue safely.
+> AgentBook is not a replacement for Git. Git versions files; AgentBook versions the intent, evidence, decisions, tests, and recovery state behind agent work. Cross-Session Memory (CSM) is the runtime underneath it.
 
 ## Why CSM exists
 
 Coding agents are effective inside one context window and unreliable across many of them. Important decisions disappear into old transcripts, project state drifts, mistakes repeat, and every fresh session spends tokens rebuilding a partial understanding of the work.
 
 CSM turns continuity into infrastructure.
+
+## Version control for agent work
+
+AgentBook combines the workspace truth already held by Git with CSM's append-only events,
+checkpoints, goals, provenance, and re-entry compiler:
+
+| AgentBook operation | Current implementation |
+|---|---|
+| Status | Git workspace identity plus AgentBook state, goals, events, and unresolved work |
+| Checkpoint | Durable session summary with source references, files, tests, risks, and next steps |
+| Log | Append-only AgentBook events and bounded summaries |
+| Resume | Project-scoped re-entry, active checkpoint, context cache, and handoff state |
+| Branch and compare | Git branches/worktrees for files; AgentBook records each attempt's goal, evidence, tests, and decision |
+| Game iteration | Baseline → one-variable change → playtest evidence → keep/revert → checkpoint |
+
+Native content-addressed checkpoint DAGs, semantic merge, blame, and bisect are future work. The
+current product uses Git for file authority instead of pretending CSM has already replaced it.
 
 | Failure mode | CSM response |
 |---|---|

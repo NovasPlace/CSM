@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentBook Version Control"
+  short_description: "Checkpoint and compare agent work safely"
+  default_prompt: "Use $agentbook-version-control to run one evidence-backed game-development iteration."
