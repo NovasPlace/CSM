@@ -140,13 +140,16 @@ export class SubconsciousWatcher {
   async captureFileChange(event: FileChangeEvent): Promise<void> {
     try {
       const content = await this.extractFileContent(event.filePath);
-      // Break the echo loop: a README.md that this watcher itself generated
-      // (handleNewDirectory) must not be re-captured as a [modified] README.md
-      // episodic memory on the next scan. Observed: 10k+ such memories/week.
-      if (
-        path.basename(event.filePath).toLowerCase() === 'readme.md' &&
-        content.includes(SubconsciousWatcher.AUTO_DOC_SIGNATURE)
-      ) {
+      const basename = path.basename(event.filePath).toLowerCase();
+      // Break the echo loop: files this system itself writes must not be
+      // re-captured as [modified] ... episodic memories on the next scan.
+      // 1. README.md the auto-doc walker generated (AUTO_DOC_SIGNATURE).
+      // 2. AGENTBOOK_STATE.md, rewritten by the tool_execute hook on every
+      //    tool call (observed: 10k+ [modified] AGENTBOOK_STATE.md memories/week).
+      const isSystemGenerated =
+        (basename === 'readme.md' && content.includes(SubconsciousWatcher.AUTO_DOC_SIGNATURE)) ||
+        basename === 'agentbook_state.md';
+      if (isSystemGenerated) {
         return;
       }
       const symbols = this.extractSymbols(content, event.filePath);

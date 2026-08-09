@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type {
   AgentBookCurrentState,
@@ -108,10 +108,17 @@ export function writeFrontPageFile(
 ): string {
   const outputPath = resolve(projectRoot, AGENTBOOK_STATE_FILENAME);
   const safeMarkdown = redactor.redact(markdown).text;
-  writeFileSync(
-    outputPath,
-    safeMarkdown.endsWith('\n') ? safeMarkdown : `${safeMarkdown}\n`,
-    'utf8',
-  );
+  const content = safeMarkdown.endsWith('\n') ? safeMarkdown : `${safeMarkdown}\n`;
+  // Change-guard: only rewrite when the content actually differs from disk.
+  // Without this, every tool_execute hook rewrites the file even when nothing
+  // changed, and the SubconsciousWatcher records each touch as a
+  // "[modified] AGENTBOOK_STATE.md" episodic memory (10k+ observed/week).
+  try {
+    const existing = readFileSync(outputPath, 'utf8');
+    if (existing === content) return outputPath;
+  } catch {
+    // File absent or unreadable — fall through to write.
+  }
+  writeFileSync(outputPath, content, 'utf8');
   return outputPath;
 }

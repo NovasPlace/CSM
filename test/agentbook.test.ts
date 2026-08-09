@@ -1,12 +1,14 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Database } from '../dist/database.js';
 import { AgentBookEventStore } from '../dist/agentbook-event-store.js';
 import { AgentBookRulesStore } from '../dist/agentbook-rules-store.js';
 import { AgentBookStateProjector } from '../dist/agentbook-state-projector.js';
 import { AgentBookSummaryGenerator } from '../dist/agentbook-summary-generator.js';
-import { generateFrontPage } from '../dist/agentbook-frontpage.js';
+import { generateFrontPage, writeFrontPageFile } from '../dist/agentbook-frontpage.js';
 import type { AgentBookEventInput, AgentBookCurrentState, AgentBookEvent, AgentBookRule, AgentBookEventType } from '../dist/agentbook-types.js';
 
 const SQLITE_DIR = '.tmp/agentbook-test';
@@ -337,7 +339,6 @@ describe('generateFrontPage', () => {
     assert.ok(frontPage.hash.length > 0);
     assert.equal(frontPage.eventCount, 42);
   });
-
   it('handles empty state gracefully', () => {
     const state: AgentBookCurrentState = {
       projectId: 'empty',
@@ -357,5 +358,38 @@ describe('generateFrontPage', () => {
     assert.ok(frontPage.markdown.includes('No recent work'));
     assert.ok(frontPage.markdown.includes('No active blockers'));
     assert.ok(frontPage.markdown.includes('No active AgentBook rules'));
+  });
+
+  it('does not rewrite AGENTBOOK_STATE.md when content is unchanged', () => {
+    const state: AgentBookCurrentState = {
+      projectId: 'write-guard',
+      activeGoal: 'Guard the write',
+      currentPhase: 'Testing',
+      latestSummaryId: null,
+      recentChanges: ['change'],
+      blockers: [],
+      nextSteps: [],
+      rulesVersion: 1,
+      updatedAt: new Date().toISOString(),
+      eventCount: 1,
+      sessionCount: 1,
+    };
+    const frontPage = generateFrontPage(state, null, [], []);
+    const dir = mkdtempSync(join(tmpdir(), 'csm-agentbook-write-'));
+    try {
+      const first = writeFrontPageFile(frontPage.markdown, dir);
+      const firstMtime = statSync(first).mtimeMs;
+      // Identical content: file must NOT be touched (mtime stable).
+      const second = writeFrontPageFile(frontPage.markdown, dir);
+      const secondMtime = statSync(second).mtimeMs;
+      assert.equal(first, second);
+      assert.equal(firstMtime, secondMtime);
+      // Changed content: file IS rewritten.
+      const changed = writeFrontPageFile(`${frontPage.markdown}\n- new bullet`, dir);
+      const changedContent = readFileSync(changed, 'utf8');
+      assert.ok(changedContent.includes('new bullet'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

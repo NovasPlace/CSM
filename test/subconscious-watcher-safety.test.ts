@@ -142,4 +142,35 @@ describe('SubconsciousWatcher host-safety guards', () => {
     });
     assert.equal(saved, 1);
   });
+
+  it('does not record memories for AGENTBOOK_STATE.md the system regenerates', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'csm-subconscious-'));
+    cleanupPaths.push(root);
+
+    const agentBookState = path.join(root, 'AGENTBOOK_STATE.md');
+    await writeFile(agentBookState, '# AgentBook — Current State\r\n\r\n## Project\r\ncross-session-memory\r\n');
+
+    let saved = 0;
+    const memoryManager = {
+      saveMemory: async () => { saved += 1; },
+    } as unknown as MemoryManager;
+    const watcher = new SubconsciousWatcher(memoryManager, 30);
+
+    await watcher.captureFileChange({
+      filePath: agentBookState,
+      eventType: 'modified',
+      timestamp: new Date(),
+    });
+    assert.equal(saved, 0);
+
+    // A sibling, genuinely user-authored file still captures normally
+    const notes = path.join(root, 'AGENTS.md');
+    await writeFile(notes, '# working agreements\n');
+    await watcher.captureFileChange({
+      filePath: notes,
+      eventType: 'modified',
+      timestamp: new Date(),
+    });
+    assert.equal(saved, 1);
+  });
 });
