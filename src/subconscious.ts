@@ -5,7 +5,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { MemoryManager } from './memory-manager.js';
-import { autoDocumentChange } from './hooks/doc-analyzer.js';
 import { getLogger } from './logger.js';
 
 export interface FileChangeEvent {
@@ -285,66 +284,17 @@ export class SubconsciousWatcher {
   /**
    * Handle newly detected directory - auto-generate documentation
    */
-  private async handleNewDirectory(dirPath: string, projectRoot: string): Promise<void> {
-    try {
-      // Skip structural directories and their subdirectories
-      const dirName = path.basename(dirPath);
-      if (SubconsciousWatcher.STRUCTURAL_DIRS.has(dirName)) {
-        return;
-      }
-      // Also skip if any ancestor path segment is a structural directory
-      const relative = path.relative(projectRoot, dirPath);
-      const segments = relative.split(path.sep);
-      if (segments.slice(0, -1).some(s => SubconsciousWatcher.STRUCTURAL_DIRS.has(s))) {
-        return;
-      }
-
-      const readmePath = path.join(dirPath, 'README.md');
-
-      // Check if README already exists
-      try {
-        await fs.access(readmePath);
-        return; // README exists, skip
-      } catch {
-        // README doesn't exist, create it
-      }
-      // Resolve relative to projectRoot, not process.cwd(), so that
-      // all auto-doc producers use one canonical project-relative identity.
-      const resolvedDir = path.resolve(projectRoot, dirPath);
-      const relativePath = path.relative(projectRoot, resolvedDir);
-      // Reject paths that escape the project boundary
-      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-        getLogger().warn(`[SubconsciousWatcher] Directory ${dirPath} escapes project root ${projectRoot}, skipping`);
-        return;
-      }
-      
-      const readmeContent = `# ${dirName}
-
-Auto-generated documentation for \`${relativePath}\`
-
-## Overview
-This directory was detected by the Cross-Session Memory plugin's subconscious watcher.
-
-## Contents
-- Files and subdirectories will be documented here as they are added.
-
-## Auto-Documentation
-This README is maintained by the auto-docs system. When files are added to this directory, they will be automatically documented in the central SYSTEM_MAP.md and CHANGELOG_LIVE.md.
-
-`;
-
-      await fs.writeFile(readmePath, readmeContent, 'utf-8');
-      
-      // Trigger auto-docs to capture this new file.
-      // Pass the project-relative path so SYSTEM_MAP.md entries are consistent
-      // with normal file-change updates (which also use relative paths).
-      const relativeReadmePath = path.join(relativePath, 'README.md');
-      await autoDocumentChange(relativeReadmePath, 'write', undefined, readmeContent, projectRoot);
-
-      getLogger().info(`Auto-generated README for new directory: ${relativePath}`);
-    } catch (error) {
-      getLogger().error(`[SubconsciousWatcher] Failed to auto-document new directory ${dirPath}`, error instanceof Error ? error : undefined);
-    }
+  /**
+   * Auto-doc README injection has been removed entirely.
+   * Previously this wrote a README.md into every newly-discovered directory
+   * (including Downloads, Desktop, arbitrary user folders) and triggered the
+   * auto-doc pipeline to write SYSTEM_MAP.md/CHANGELOG_LIVE.md.  The user
+   * found these injections in brand-new downloads — completely unacceptable.
+   * The entire auto-doc subsystem is now disabled by default (autoDocs.enabled=false)
+   * and this method is a no-op so the watcher never writes files.
+   */
+  private async handleNewDirectory(_dirPath: string, _projectRoot: string): Promise<void> {
+    // Intentional no-op.  All README injection and auto-doc triggers removed.
   }
 
   /**

@@ -65,7 +65,7 @@ function journalDefaults(): PluginConfig['workJournal'] {
 
 function autoDocsDefaults(): PluginConfig['autoDocs'] {
   return {
-    enabled: true,
+    enabled: false,
     ignoredPaths: ['docs/', 'dist/', 'node_modules/', 'coverage/', '.git/'],
     maxChangelogEntriesPerSession: getEnvInteger('CSM_AUTODOCS_MAX_ENTRIES', 50),
     maxEntryLength: getEnvInteger('CSM_AUTODOCS_MAX_LENGTH', 200),
