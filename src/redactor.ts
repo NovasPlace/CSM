@@ -93,8 +93,42 @@ const SECRET_PATTERNS: RegExp[] = [
 // Email addresses
 const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 
-// Phone numbers (US + international basic)
-const PHONE_PATTERN = /\b(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
+// Phone numbers (US + international basic).
+//
+// Every optional element in the original pattern really was optional at once, so a bare,
+// unformatted 10-digit run (a port+ID concatenation, an all-digit commit-SHA fragment, a
+// timestamp, a measurement) matched in full with zero phone-like structure present -- see
+// https://github.com/NovasPlace/CSM/issues/95. Fixed by requiring at least ONE real structural
+// marker of a phone number: parenthesized area code, a country-code prefix followed by an
+// actual separator, or a literal separator between two of the three digit groups. A phone
+// number written with zero punctuation and no country code is genuinely indistinguishable from
+// any other 10-digit identifier, so this trades a small amount of recall on that one unformatted
+// shape for eliminating false positives on the far more common case of arbitrary numeric data.
+//
+// Boundary note: a naive `\b` wrapped around the whole alternation looked right but broke on
+// the parenthesized/plus-prefixed forms -- `\b` needs a word/non-word TRANSITION, and "(" or
+// "+" preceded by a space is non-word-to-non-word, so no boundary exists there and the match
+// silently failed (caught by the existing test suite, not by inspection). A leading
+// `(?<!\d)` lookbehind is used instead: it only blocks starting a match immediately after
+// another digit (preventing a partial match inside a longer digit run), and unlike `\b` it
+// does not care what non-digit character, if any, precedes the match. The trailing `\b` is
+// kept because every alternative ends in a plain digit, where the word/non-word transition
+// `\b` relies on is always well-defined.
+const PHONE_PATTERN = new RegExp(
+  '(?<!\\d)(?:' +
+    [
+      // (555) 123-4567 -- parenthesized area code; the rest may still be unformatted
+      String.raw`\(\d{3}\)[\s.-]?\d{3}[\s.-]?\d{4}`,
+      // +1 555 123 4567 / 1-555-123-4567 -- country code MUST be followed by a real separator,
+      // or "1" blends ambiguously into an 11-digit run
+      String.raw`\+?1[\s.-]\d{3}[\s.-]?\d{3}[\s.-]?\d{4}`,
+      // 555-123-4567 / 555.123.4567 -- no parens, no country code, but at least one literal
+      // separator between the area code and the rest is what actually marks this as phone-shaped
+      String.raw`\d{3}[\s.-]\d{3}[\s.-]?\d{4}`,
+    ].join('|') +
+    ')\\b',
+  'g',
+);
 
 // IP addresses (IPv4 only; IPv6 is rare in code context)
 const IP_PATTERN = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
