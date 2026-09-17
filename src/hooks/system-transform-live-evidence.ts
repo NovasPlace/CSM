@@ -48,6 +48,8 @@ async function fetchMemorySnapshot(
   const result = await ctx.database.getPool().query(
     `SELECT id, content, memory_type, importance, created_at, session_id, tags
      FROM memories
+     WHERE superseded_by IS NULL
+       AND archived_at IS NULL
      ORDER BY created_at DESC
      LIMIT $1`,
     [limit],
@@ -68,7 +70,10 @@ async function fetchRecentSessions(
 ): Promise<string[]> {
   const result = await ctx.database.getPool().query(
     `SELECT s.id, s.created_at, s.updated_at,
-            (SELECT COUNT(*) FROM memories m WHERE m.session_id = s.id) as mem_count
+            (SELECT COUNT(*) FROM memories m
+             WHERE m.session_id = s.id
+               AND m.superseded_by IS NULL
+               AND m.archived_at IS NULL) as mem_count
      FROM sessions s
      ORDER BY s.updated_at DESC
      LIMIT $1`,
@@ -87,6 +92,8 @@ async function fetchLessons(
     `SELECT id, content, importance, created_at, session_id
      FROM memories
      WHERE memory_type = 'lesson'
+       AND superseded_by IS NULL
+       AND archived_at IS NULL
      ORDER BY importance DESC, created_at DESC
      LIMIT $1`,
     [limit],
@@ -106,7 +113,11 @@ async function loadMemoryEvidence(ctx: PluginContext): Promise<MemoryEvidence> {
   let totalRecords = 0;
   try {
     const pool = ctx.database.getPool();
-    const countResult = await pool.query('SELECT COUNT(*) as cnt FROM memories');
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as cnt FROM memories
+       WHERE superseded_by IS NULL
+         AND archived_at IS NULL`,
+    );
     totalRecords = parseInt(
       String((countResult.rows[0] as CountRow)?.cnt ?? '0'),
       10,
@@ -179,4 +190,3 @@ export async function injectMemoryGovernance(
     // Governance injection is non-critical.
   }
 }
-
