@@ -77,7 +77,7 @@ export class DedupCandidateDetector {
   ): Promise<DedupMemoryRef[]> {
     let sql = `SELECT id, content, memory_type, COALESCE(${jsonExtractText(dialectFromPool(this.pool), 'metadata', 'title')}, '') AS title,
                       created_at::text AS created_at
-               FROM memories WHERE embedding IS NOT NULL`;
+               FROM memories WHERE embedding IS NOT NULL AND superseded_by IS NULL`;
     const params: unknown[] = [];
     let paramIdx = 0;
 
@@ -248,6 +248,7 @@ export class DedupCandidateDetector {
       CROSS JOIN (SELECT embedding FROM memory_chunks WHERE memory_id = $1 LIMIT 1) source
       JOIN memories m ON m.id = mc.memory_id
       WHERE mc.memory_id != $1
+        AND m.superseded_by IS NULL
         AND 1 - (mc.embedding <=> source.embedding) >= $2
         ${typeClause}
       ORDER BY mc.embedding <=> source.embedding
