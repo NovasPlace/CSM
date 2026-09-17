@@ -183,23 +183,22 @@ export class MemoryManager {
    * Save a memory with dual-write (structured data + embeddings)
    */
 async saveMemory(options: MemorySaveOptions): Promise<Memory> {
-      // Apply default provenance metadata so all memories are governance-trackable
+      // Complete provenance field-by-field so direct base-class callers get the
+      // same guarantees as the public MemoryManager facade. Caller-supplied
+      // values win; only missing fields receive defaults.
       const currentMeta = options.metadata ?? {};
-      const hasProvenance = currentMeta.source_kind || currentMeta.evidence_strength;
-      if (!hasProvenance) {
-        options = {
-          ...options,
-          metadata: {
-            source_kind: options.source === 'auto' ? 'transcript' : 'user_supplied',
-            evidence_strength: 'direct_original',
-            source_session_id: options.sessionId,
-            source_agent_id: 'opencode',
-            source_model_id: 'default',
-            source_surface: 'opencode',
-            ...currentMeta,
-          },
-        };
-      }
+      options = {
+        ...options,
+        metadata: {
+          source_kind: options.source === 'auto' ? 'transcript' : 'user_supplied',
+          evidence_strength: 'direct_original',
+          source_session_id: options.sessionId,
+          source_agent_id: 'opencode',
+          source_model_id: 'default',
+          source_surface: 'opencode',
+          ...currentMeta,
+        },
+      };
 
       const pool = this.database.getPool();
 
