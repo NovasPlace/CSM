@@ -48,11 +48,12 @@ async function fetchMemorySnapshot(
   const result = await ctx.database.getPool().query(
     `SELECT id, content, memory_type, importance, created_at, session_id, tags
      FROM memories
-     WHERE superseded_by IS NULL
+     WHERE project_id = $1
+       AND superseded_by IS NULL
        AND archived_at IS NULL
      ORDER BY created_at DESC
-     LIMIT $1`,
-    [limit],
+     LIMIT $2`,
+    [ctx.directory, limit],
   );
   return (result.rows as MemorySnapshotRow[]).map((row) => {
     const preview = row.content?.substring(0, 180)?.replace(/\n/g, ' ') ?? '(empty)';
@@ -72,12 +73,14 @@ async function fetchRecentSessions(
     `SELECT s.id, s.created_at, s.updated_at,
             (SELECT COUNT(*) FROM memories m
              WHERE m.session_id = s.id
+               AND m.project_id = $1
                AND m.superseded_by IS NULL
                AND m.archived_at IS NULL) as mem_count
      FROM sessions s
+     WHERE s.project_id = $1
      ORDER BY s.updated_at DESC
-     LIMIT $1`,
-    [limit],
+     LIMIT $2`,
+    [ctx.directory, limit],
   );
   return (result.rows as RecentSessionRow[]).map((row) => (
     `  Session ${row.id.slice(0, 8)} — ${String(row.mem_count)} memories — updated ${new Date(row.updated_at).toLocaleString()}`
@@ -91,12 +94,13 @@ async function fetchLessons(
   const result = await ctx.database.getPool().query(
     `SELECT id, content, importance, created_at, session_id
      FROM memories
-     WHERE memory_type = 'lesson'
+     WHERE project_id = $1
+       AND memory_type = 'lesson'
        AND superseded_by IS NULL
        AND archived_at IS NULL
      ORDER BY importance DESC, created_at DESC
-     LIMIT $1`,
-    [limit],
+     LIMIT $2`,
+    [ctx.directory, limit],
   );
   return (result.rows as LessonRow[]).map((row) => {
     const preview = row.content?.substring(0, 200)?.replace(/\n/g, ' ') ?? '(empty)';
@@ -115,8 +119,10 @@ async function loadMemoryEvidence(ctx: PluginContext): Promise<MemoryEvidence> {
     const pool = ctx.database.getPool();
     const countResult = await pool.query(
       `SELECT COUNT(*) as cnt FROM memories
-       WHERE superseded_by IS NULL
+       WHERE project_id = $1
+         AND superseded_by IS NULL
          AND archived_at IS NULL`,
+      [ctx.directory],
     );
     totalRecords = parseInt(
       String((countResult.rows[0] as CountRow)?.cnt ?? '0'),
@@ -174,7 +180,7 @@ export async function injectMemoryGovernance(
 ): Promise<void> {
   if (ctx.config.databaseProvider !== 'postgres') return;
   try {
-    const governance = new MemoryGovernance(ctx.database.getPool());
+    const governance = new MemoryGovernance(ctx.database.getPool(), ctx.directory);
     const result = await governance.evaluate();
     if (result.vetoes.length === 0) return;
     const injection = governance.buildVetoInjection(result.vetoes);
