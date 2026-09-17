@@ -98,6 +98,32 @@ describe('Redactor — phone numbers', () => {
     const result = r.redact(input);
     assert.ok(result.text.includes('[REDACTED_PHONE]'));
   });
+
+  it('redacts unspaced US numbers with a dash separator', () => {
+    const input = 'Call 555-123-4567';
+    const result = r.redact(input);
+    assert.ok(result.text.includes('[REDACTED_PHONE]'));
+    assert.equal(result.audit.byCategory.phone, 1);
+  });
+
+  // Regression test for https://github.com/NovasPlace/CSM/issues/95: a bare, unformatted
+  // 10-digit number (no parens, no country code, no separators) is indistinguishable from any
+  // other numeric identifier and must NOT be redacted as a phone number. Before the fix, every
+  // one of these was silently and irreversibly rewritten to [REDACTED_PHONE].
+  it('does NOT redact a bare unformatted 10-digit number', () => {
+    const input = 'Measured 4021568734 total tokens this run.';
+    const result = r.redact(input);
+    assert.ok(!result.text.includes('[REDACTED_PHONE]'), `expected no redaction, got: ${result.text}`);
+    assert.ok(result.text.includes('4021568734'));
+    assert.equal(result.audit.byCategory.phone, 0);
+  });
+
+  it('does NOT redact a bare 10-digit port+session-ID concatenation', () => {
+    const input = 'gateway :4000 session 4021568734 returned 200';
+    const result = r.redact(input);
+    assert.equal(result.audit.byCategory.phone, 0);
+    assert.ok(result.text.includes('4021568734'));
+  });
 });
 
 describe('Redactor — IP addresses', () => {
