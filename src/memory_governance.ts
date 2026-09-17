@@ -47,6 +47,7 @@ const STALENESS_MAX_MS = 7 * STALENESS_WARNING_MS;
 export class MemoryGovernance {
   constructor(
     private readonly pool: DatabasePool,
+    private readonly projectId?: string,
   ) {}
 
   async evaluate(): Promise<GovernanceEvaluateResult> {
@@ -54,16 +55,20 @@ export class MemoryGovernance {
     let accessed = false;
 
     try {
+      const projectClause = this.projectId ? 'AND project_id = $1' : '';
+      const params = this.projectId ? [this.projectId] : [];
       const result = await this.pool.query(
         `SELECT id, content, importance, metadata, session_id, created_at, confidence
          FROM memories
          WHERE memory_type = 'lesson'
            AND superseded_by IS NULL
            AND archived_at IS NULL
+           ${projectClause}
            AND importance >= 0.7
            AND metadata ? 'governance'
          ORDER BY importance DESC, created_at DESC
          LIMIT 50`,
+        params,
       );
 
       accessed = true;
