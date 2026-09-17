@@ -58,7 +58,11 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
     artifact('src/schema/sqlite/core.ts', '93a0ec5f7966106be96a8691c62649b8457e3d62d608dcce5a33d0ea22fd7611'),
     artifact('src/schema/sqlite/memory-support.ts', 'e18608e690523604f32c71f6280db0e90d34afe75406c6496c7ee611299c823e'),
     artifact('src/schema/sqlite/events.ts', 'b8cfcd01a12298659648d0dc0a521e1f327846659f67c17b7935bf6ca8c6cb83'),
-    artifact('src/schema/sqlite/living-state.ts', '84a1c55325084a6e99fd885e1e9c2afc7fa063ed2957db049a0921e61aca6ce0'),
+    artifact(
+      'src/schema/sqlite/living-state.ts',
+      '84a1c55325084a6e99fd885e1e9c2afc7fa063ed2957db049a0921e61aca6ce0',
+      'bb392013f3dd7dcf28cfd274251e47e963efb908423f540a881e7adb27463b7c',
+    ),
   ],
   '20260711-002-sqlite-work-journal': [
     artifact('src/schema/sqlite/work-journal.ts', 'e7ec43457c0f8909dd50ee131effbe10111fc24d8881c72b86d04b42849d789e'),

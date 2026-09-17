@@ -1,12 +1,11 @@
 import type { DatabasePool } from '../../types.js';
 
-const CANDIDATES_SQL = `
-  CREATE TABLE IF NOT EXISTS memory_candidate_queue (
+const CANDIDATE_TABLE_COLUMNS = `(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     candidate_type TEXT NOT NULL CHECK (candidate_type IN (
       'prune', 'promote_to_lesson', 'merge', 'stale_preference', 'refresh_summary',
       'candidate_belief', 'candidate_preference', 'candidate_worldview', 'candidate_drift_warning',
-      'candidate_opinion'
+      'candidate_opinion', 'candidate_capability'
     )),
     memory_id INTEGER REFERENCES memories(id) ON DELETE CASCADE,
     reason TEXT NOT NULL,
@@ -24,8 +23,9 @@ const CANDIDATES_SQL = `
     promotion_ready INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT
-  )
-`;
+  )`;
+
+const CANDIDATES_SQL = `CREATE TABLE IF NOT EXISTS memory_candidate_queue ${CANDIDATE_TABLE_COLUMNS}`;
 
 const SELF_MODEL_SQL = `
   CREATE TABLE IF NOT EXISTS self_model_capabilities (
@@ -72,9 +72,29 @@ const CANDIDATE_COLUMNS = [
   ['updated_at', 'updated_at TEXT'],
 ] as const;
 
+const CANDIDATE_COPY_COLUMNS = [
+  'id',
+  'candidate_type',
+  'memory_id',
+  'reason',
+  'confidence',
+  'source_signals',
+  'status',
+  'dedup_key',
+  'event_count',
+  'reinforcement_count',
+  'contradicted_count',
+  'last_reinforced_at',
+  'source_packet_ids',
+  'promotion_ready',
+  'created_at',
+  'updated_at',
+].join(', ');
+
 export async function initializeSqliteLivingState(pool: DatabasePool): Promise<void> {
   await pool.query(CANDIDATES_SQL);
   await upgradeCandidateColumns(pool);
+  await upgradeCandidateTypeCheck(pool);
   await createCandidateIndexes(pool);
   await pool.query(SELF_MODEL_SQL);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_self_model_capability ON self_model_capabilities(capability)');
@@ -94,6 +114,30 @@ async function upgradeCandidateColumns(pool: DatabasePool): Promise<void> {
     if (!existing.has(name)) {
       await pool.query(`ALTER TABLE memory_candidate_queue ADD COLUMN ${definition}`);
     }
+  }
+}
+
+async function upgradeCandidateTypeCheck(pool: DatabasePool): Promise<void> {
+  const result = await pool.query(
+    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_candidate_queue'`,
+  );
+  const tableSql = String((result.rows[0] as { sql?: unknown } | undefined)?.sql ?? '');
+  if (!tableSql || tableSql.includes("'candidate_capability'")) return;
+
+  await pool.query('BEGIN');
+  try {
+    await pool.query('DROP TABLE IF EXISTS memory_candidate_queue_upgrade');
+    await pool.query(`CREATE TABLE memory_candidate_queue_upgrade ${CANDIDATE_TABLE_COLUMNS}`);
+    await pool.query(
+      `INSERT INTO memory_candidate_queue_upgrade (${CANDIDATE_COPY_COLUMNS})
+       SELECT ${CANDIDATE_COPY_COLUMNS} FROM memory_candidate_queue`,
+    );
+    await pool.query('DROP TABLE memory_candidate_queue');
+    await pool.query('ALTER TABLE memory_candidate_queue_upgrade RENAME TO memory_candidate_queue');
+    await pool.query('COMMIT');
+  } catch (error) {
+    await pool.query('ROLLBACK').catch(() => undefined);
+    throw error;
   }
 }
 
