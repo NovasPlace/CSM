@@ -72,7 +72,10 @@ export class ContextRecallSelector {
       ? `AND NOT (id = ANY($${push(params, excluded)}::bigint[]))`
       : '';
     const result = await this.pool.query(
-      `SELECT * FROM memories WHERE ${predicate} ${project} ${rotation}
+      `SELECT * FROM memories
+       WHERE superseded_by IS NULL
+         AND archived_at IS NULL
+         AND ${predicate} ${project} ${rotation}
        ORDER BY ${orderBy} LIMIT ${limit}`,
       params,
     );
