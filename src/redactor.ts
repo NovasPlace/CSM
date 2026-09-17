@@ -105,17 +105,14 @@ const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 // any other 10-digit identifier, so this trades a small amount of recall on that one unformatted
 // shape for eliminating false positives on the far more common case of arbitrary numeric data.
 //
-// Boundary note: a naive `\b` wrapped around the whole alternation looked right but broke on
-// the parenthesized/plus-prefixed forms -- `\b` needs a word/non-word TRANSITION, and "(" or
-// "+" preceded by a space is non-word-to-non-word, so no boundary exists there and the match
-// silently failed (caught by the existing test suite, not by inspection). A leading
-// `(?<!\d)` lookbehind is used instead: it only blocks starting a match immediately after
-// another digit (preventing a partial match inside a longer digit run), and unlike `\b` it
-// does not care what non-digit character, if any, precedes the match. The trailing `\b` is
-// kept because every alternative ends in a plain digit, where the word/non-word transition
-// `\b` relies on is always well-defined.
+// Boundary note: a naive `\b` wrapped around the whole alternation breaks parenthesized and
+// plus-prefixed forms because "(" or "+" preceded by a space is non-word-to-non-word. Use a
+// leading negative lookbehind instead. It blocks starts immediately after an ASCII word
+// character, preventing phone-shaped fragments inside identifiers such as `abc555-123-4567`,
+// while still allowing punctuation, whitespace, and start-of-string boundaries. The trailing
+// `\b` remains safe because every alternative ends in a digit.
 const PHONE_PATTERN = new RegExp(
-  '(?<!\\d)(?:' +
+  '(?<![A-Za-z0-9_])(?:' +
     [
       // (555) 123-4567 -- parenthesized area code; the rest may still be unformatted
       String.raw`\(\d{3}\)[\s.-]?\d{3}[\s.-]?\d{4}`,
