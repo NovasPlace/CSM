@@ -19,7 +19,10 @@ function buildWhereClause(
   minImportance?: number,
   searchMode: MemorySearchMode = 'project',
 ): string {
-  const clauses: string[] = [];
+  const clauses: string[] = [
+    'superseded_by IS NULL',
+    'archived_at IS NULL',
+  ];
   appendProjectScope(clauses, params, projectId, searchMode);
   appendFilter(clauses, params, 'memory_type', type);
   if (tags?.length) {
