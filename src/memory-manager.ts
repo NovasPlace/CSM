@@ -1,4 +1,4 @@
-﻿// Memory Manager - CRUD operations with dual-write pattern
+// Memory Manager - CRUD operations with dual-write pattern
 // Inspired by Agent Atlas memory_bridge.py
 
 import { Database } from './database.js';
@@ -263,7 +263,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         }
       }
 
-      // Phase 18 â€” Redact content BEFORE any processing (concepts, embeddings, storage)
+      // Phase 18 — Redact content BEFORE any processing (concepts, embeddings, storage)
       let contentToProcess = options.content;
       if (this.redactor) {
         const redactionResult = this.redactor.redact(options.content);
@@ -281,7 +281,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         if (transcriptMsgId != null) metadataToPersist.messageId = transcriptMsgId;
       }
 
-      // Phase 5 â€” Apply per-type content quota (compress success/episodic, preserve errors/lessons)
+      // Phase 5 — Apply per-type content quota (compress success/episodic, preserve errors/lessons)
       const quotaResult = applyTypeQuota(contentToProcess, options.type, options.emotion);
       if (quotaResult.compressed) {
         // The summary is what gets embedded and stored; the original never reaches the DB.
@@ -565,7 +565,10 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
       const memories: { memory: Memory; score: number }[] = [];
       for (const r of results) {
         const row = await pool.query(
-          `SELECT * FROM memories WHERE id = $1`,
+          `SELECT * FROM memories
+           WHERE id = $1
+             AND superseded_by IS NULL
+             AND archived_at IS NULL`,
           [r.id],
         );
         if (row.rows.length > 0) {
@@ -587,7 +590,8 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         1 - (mc.embedding <=> $1::vector) AS similarity
       FROM memories m
       JOIN memory_chunks mc ON m.id = mc.memory_id
-      WHERE 1=1
+      WHERE m.superseded_by IS NULL
+        AND m.archived_at IS NULL
     `;
     const params: unknown[] = [embeddingString];
     let paramIndex = 2;
@@ -670,7 +674,9 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
   ): Promise<Memory[]> {
     const pool = this.database.getPool();
     
-    let query = 'SELECT * FROM memories WHERE 1=1';
+    let query = `SELECT * FROM memories
+      WHERE superseded_by IS NULL
+        AND archived_at IS NULL`;
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -806,7 +812,9 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
     let sql = `
       SELECT *
       FROM memories
-      WHERE (${queryConditions.join(' OR ')})
+      WHERE superseded_by IS NULL
+        AND archived_at IS NULL
+        AND (${queryConditions.join(' OR ')})
     `;
     const params: unknown[] = queryVariants.map((query) => `%${query}%`);
     let paramIndex = params.length + 1;
@@ -1046,7 +1054,6 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
         safePayload[identifier] = payload[identifier];
       }
     }
-    
     try {
       await pool.query(
         `INSERT INTO memory_events (channel, payload, session_id)
