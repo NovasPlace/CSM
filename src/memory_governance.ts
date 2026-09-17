@@ -58,6 +58,8 @@ export class MemoryGovernance {
         `SELECT id, content, importance, metadata, session_id, created_at, confidence
          FROM memories
          WHERE memory_type = 'lesson'
+           AND superseded_by IS NULL
+           AND archived_at IS NULL
            AND importance >= 0.7
            AND metadata ? 'governance'
          ORDER BY importance DESC, created_at DESC
