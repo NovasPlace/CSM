@@ -138,7 +138,8 @@ export async function buildLinksForMemory(
   const entityValues = concepts.map(c => c.value);
 
   const sourceResult = await pool.query(
-    'SELECT content, created_at, project_id FROM memories WHERE id = $1',
+    `SELECT content, created_at, project_id FROM memories
+     WHERE id = $1 AND superseded_by IS NULL AND archived_at IS NULL`,
     [memoryId],
   );
   const source = (sourceResult.rows as SourceRow[])[0];
@@ -155,6 +156,8 @@ export async function buildLinksForMemory(
     `SELECT m.id, m.content, m.created_at, ${jsonExtractValue(d, 'm.metadata', 'extracted_concepts')} AS concepts
      FROM memories m
      WHERE m.id != $1
+       AND m.superseded_by IS NULL
+       AND m.archived_at IS NULL
        ${projectClause}
        AND ${jsonExtractValue(d, 'm.metadata', 'extracted_concepts')} IS NOT NULL
      ORDER BY m.created_at DESC
@@ -220,13 +223,21 @@ export async function getRelatedMemories(
 ): Promise<RelatedMemory[]> {
   const pool = db.getPool();
   const d = db.dialect;
-  const projectFilter = telemetry?.projectId
+  const sourceFilter = telemetry?.projectId
     ? `AND m.project_id = $2
        AND EXISTS (
          SELECT 1 FROM memories source_memory
-         WHERE source_memory.id = $1 AND source_memory.project_id = $2
+         WHERE source_memory.id = $1
+           AND source_memory.project_id = $2
+           AND source_memory.superseded_by IS NULL
+           AND source_memory.archived_at IS NULL
        )`
-    : '';
+    : `AND EXISTS (
+         SELECT 1 FROM memories source_memory
+         WHERE source_memory.id = $1
+           AND source_memory.superseded_by IS NULL
+           AND source_memory.archived_at IS NULL
+       )`;
   const limitParam = telemetry?.projectId ? '$3' : '$2';
   const params = telemetry?.projectId
     ? [memoryId, telemetry.projectId, limit]
@@ -244,7 +255,9 @@ export async function getRelatedMemories(
        ELSE ml.source_id
      END
      WHERE (ml.source_id = $1 OR ml.target_id = $1)
-     ${projectFilter}
+       AND m.superseded_by IS NULL
+       AND m.archived_at IS NULL
+     ${sourceFilter}
      ORDER BY ml.strength DESC
      LIMIT ${limitParam}`,
     params,
