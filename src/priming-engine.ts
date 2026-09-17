@@ -125,12 +125,15 @@ export class PrimingEngine {
   }
 
   /**
-   * Get a single memory by ID
+   * Get a single active memory by ID for cascade traversal.
    */
   private async getMemory(id: number, scope: MemoryCascadeScope): Promise<Memory | null> {
     const pool = this.database.getPool();
     const searchMode = scope.searchMode ?? 'global';
-    let query = 'SELECT * FROM memories WHERE id = $1';
+    let query = `SELECT * FROM memories
+      WHERE id = $1
+        AND superseded_by IS NULL
+        AND archived_at IS NULL`;
     const params: unknown[] = [id];
     if (searchMode === 'project') {
       if (!scope.projectId) return null;
@@ -155,14 +158,16 @@ export class PrimingEngine {
   }
 
   /**
-   * Find memories linked to a specific memory
+   * Find active memories linked to a specific memory
    */
   async getLinkedMemories(memoryId: number): Promise<Memory[]> {
     const pool = this.database.getPool();
     
     const result = await pool.query(
-      `SELECT * FROM memories 
-       WHERE ${paramInColArray(this.database.dialect, 1, 'linked_memory_ids')}
+      `SELECT * FROM memories
+       WHERE superseded_by IS NULL
+         AND archived_at IS NULL
+         AND ${paramInColArray(this.database.dialect, 1, 'linked_memory_ids')}
        ORDER BY importance DESC, accessed_at DESC`,
       [memoryId]
     );
