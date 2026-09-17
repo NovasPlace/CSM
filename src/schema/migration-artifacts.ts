@@ -32,14 +32,17 @@ export const MIGRATION_ARTIFACTS: Readonly<Record<string, readonly MigrationArti
   '20260709-015-graph': [artifact(
     'src/memory-graph.ts',
     '6abbdc0df6f4de9f37a51125f6202c86b46a13abd39a6346338cf33d3d631e26',
-    'fb8a21204dac9ae10318dcc5db67b59bd67755e10fa38d9cd41565012452f8aa',
-    ['8de93a2776d7c92aed43c4095f288e63c9809d00496e8df86a518e124ef58a40'],
+    '77e3187b2f4c81c54c4b3f665a04e8482280e41d54bc4cd124ffe2bec4cf6796',
+    [
+      '8de93a2776d7c92aed43c4095f288e63c9809d00496e8df86a518e124ef58a40',
+      'fb8a21204dac9ae10318dcc5db67b59bd67755e10fa38d9cd41565012452f8aa',
+    ],
   )],
   '20260709-016-work-journal': [artifact('src/work-journal-schema.ts', '0ee97be5f1d22dc1e7cc28c89f506ad9ff935ee3bab188cd2f5b285ca049cc7b', 'e32fda1eddacbd23fb220263f808efee6dd1eafc07663035f1a3d9658943aaec')],
   '20260709-017-candidate-queue': [artifact('src/candidate-schema.ts', 'dfef177f0163f995838f6a0b4543bd91b1e38da55d7c304a681b97b1dbc93237', '0b596e6e330c0bb8303ad329df4c176d8d8071febcbd51e14fac82d9410c7446')],
   '20260709-018-experience-packet': [artifact('src/experience-packet-schema.ts', 'da1d7c15373e6d66663c8c0549b76ca0860c443b2e378244a1390147961b0e41', '5f935f3dd043057d2620ef70ae417bea496f3095d4dac23e790de5b3837ce1ff')],
   '20260709-019-self-model': [artifact('src/self-model-schema.ts', 'abbfd6058a9607382d975d08bd570126c87b2a7dda1c33b7fd2fbde5a69a0a0a', '0570333a3fb3606bfe49e9b6e3fa01c09a42e85a1debbcb5ab4f921240181f63')],
-  '20260709-020-belief-knowledge': [artifact('src/belief-knowledge-schema.ts', 'f03c4b3e654d9a933687a8a9a9e165318d916d43b3c7a6db040d0dc8f552356d', 'eb6ece31a2579e7c0edbdfbc6cb181357da792ed9deb7b17e84a6c500f94089d')],
+  '20260709-020-belief-knowledge': [artifact('src/belief-knowledge-schema.ts', 'f03c4b3e654d9a933687a8a9e165318d916d43b3c7a6db040d0dc8f552356d', 'eb6ece31a2579e7c0edbdfbc6cb181357da792ed9deb7b17e84a6c500f94089d')],
   '20260710-021-work-ledger': [artifact('src/work-ledger-schema.ts', '2c8c256dbb6ad19e2db47a07ccd1b16397eebb3f8eae039eb92ace1fc203670e')],
   '20260710-022-coordination-persistence': [
     artifact('src/coordination-persistence/schema.ts', '5f3416106cd2bc6a9ac79885be9f7eb5106712b13aa36581e68c931b9b6da3fa'),
