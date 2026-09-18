@@ -61,6 +61,7 @@ describe('memory provenance audit', () => {
     assert.equal(report.completeProvenance, 20);
     assert.equal(report.rowsWithAnyGap, 40);
     assert.equal(report.activeRowsWithAnyGap, 26);
+    assert.equal(report.activeCompleteProvenance, 18);
     assert.deepEqual(report.missingByField, {
       source_kind: 3,
       evidence_strength: 4,
