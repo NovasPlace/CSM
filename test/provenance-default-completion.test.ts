@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryManager } from '../src/memory-manager.js';
+import { MemoryManager as BaseMemoryManager } from '../src/memory-manager-base.js';
 
 function makeHarness() {
   const pool = {
@@ -62,6 +63,10 @@ async function saveWith(metadata: Record<string, unknown>, source: 'manual' | 'a
 }
 
 describe('MemoryManager provenance default completion', () => {
+  it('inherits the base saveMemory implementation instead of duplicating persistence policy', () => {
+    assert.equal(MemoryManager.prototype.saveMemory, BaseMemoryManager.prototype.saveMemory);
+  });
+
   it('fills missing provenance fields when only source_kind is supplied', async () => {
     const governance = {
       failure_mode: 'repeat mistake',
