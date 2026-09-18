@@ -193,7 +193,7 @@ async saveMemory(options: MemorySaveOptions): Promise<Memory> {
           evidence_strength: 'direct_original',
           source_session_id: options.sessionId,
           source_agent_id: 'opencode',
-          source_model_id: 'default',
+          source_model_id: 'unknown',
           source_surface: 'opencode',
           ...currentMeta,
         },
