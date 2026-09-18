@@ -19,6 +19,7 @@ export interface MemoryProvenanceAuditReport {
   completeProvenance: number;
   rowsWithAnyGap: number;
   activeRowsWithAnyGap: number;
+  activeCompleteProvenance: number;
   missingByField: Record<RequiredMemoryProvenanceField, number>;
   unknownModelIdRows: number;
   defaultModelIdRows: number;
@@ -101,6 +102,8 @@ export async function auditMemoryProvenance(
     completeProvenance: count(row, 'complete_provenance'),
     rowsWithAnyGap: count(row, 'rows_with_any_gap'),
     activeRowsWithAnyGap: count(row, 'active_rows_with_any_gap'),
+    activeCompleteProvenance:
+      count(row, 'active_memories') - count(row, 'active_rows_with_any_gap'),
     missingByField,
     unknownModelIdRows: count(row, 'unknown_model_id_rows'),
     defaultModelIdRows: count(row, 'default_model_id_rows'),
