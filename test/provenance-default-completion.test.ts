@@ -82,7 +82,7 @@ describe('MemoryManager provenance default completion', () => {
     assert.equal(memory.metadata.evidence_strength, 'direct_original');
     assert.equal(memory.metadata.source_session_id, 'session-a');
     assert.equal(memory.metadata.source_agent_id, 'opencode');
-    assert.equal(memory.metadata.source_model_id, 'default');
+    assert.equal(memory.metadata.source_model_id, 'unknown');
     assert.equal(memory.metadata.source_surface, 'opencode');
     assert.deepEqual(memory.metadata.governance, governance);
   });
@@ -97,7 +97,7 @@ describe('MemoryManager provenance default completion', () => {
     assert.equal(memory.metadata.evidence_strength, 'direct_original');
     assert.equal(memory.metadata.source_session_id, 'session-a');
     assert.equal(memory.metadata.source_agent_id, 'opencode');
-    assert.equal(memory.metadata.source_model_id, 'default');
+    assert.equal(memory.metadata.source_model_id, 'unknown');
     assert.equal(memory.metadata.source_surface, 'opencode');
     assert.equal(memory.metadata.marker, 'preserve-me');
   });
