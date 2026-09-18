@@ -183,9 +183,8 @@ export class MemoryManager {
    * Save a memory with dual-write (structured data + embeddings)
    */
 async saveMemory(options: MemorySaveOptions): Promise<Memory> {
-      // Complete provenance field-by-field so direct base-class callers get the
-      // same guarantees as the public MemoryManager facade. Caller-supplied
-      // values win; only missing fields receive defaults.
+      // Complete provenance field-by-field at the shared persistence boundary.
+      // Caller-supplied values win; only missing fields receive defaults.
       const currentMeta = options.metadata ?? {};
       options = {
         ...options,
