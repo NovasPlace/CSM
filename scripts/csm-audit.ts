@@ -3,6 +3,7 @@ import { MemoryManager } from '../src/memory-manager.js';
 import { EmbeddingGenerator } from '../src/embeddings.js';
 import { Redactor } from '../src/redactor.js';
 import { validateAndReturnConfig } from '../src/config.js';
+import { auditMemoryProvenance, REQUIRED_MEMORY_PROVENANCE_FIELDS } from '../src/memory-provenance-audit.js';
 
 const config = validateAndReturnConfig();
 const database = new Database(config);
@@ -62,13 +63,26 @@ async function main() {
   const arch = await pool.query(`SELECT COUNT(*) FILTER (WHERE superseded_by IS NOT NULL) as superseded, COUNT(*) FILTER (WHERE archived_at IS NOT NULL) as archived FROM memories`);
   console.log(`  Superseded: ${arch.rows[0].superseded}, Archived: ${arch.rows[0].archived}`);
 
-  // 9. Search smoke test
+  // 9. Historical provenance coverage (read-only)
+  console.log('\n--- Memory Provenance ---');
+  const provenance = await auditMemoryProvenance(pool, database.dialect);
+  console.log(`  Complete effective provenance: ${provenance.completeProvenance} / ${provenance.totalMemories}`);
+  console.log(`  Active complete provenance: ${provenance.activeCompleteProvenance} / ${provenance.activeMemories}`);
+  console.log(`  Rows with any gap: ${provenance.rowsWithAnyGap} total, ${provenance.activeRowsWithAnyGap} active`);
+  for (const field of REQUIRED_MEMORY_PROVENANCE_FIELDS) {
+    const suffix = field === 'source_session_id' ? ' (after session_id fallback)' : '';
+    console.log(`  Missing ${field}${suffix}: ${provenance.missingByField[field]}`);
+  }
+  console.log(`  Model ID placeholders: unknown=${provenance.unknownModelIdRows}, default=${provenance.defaultModelIdRows}`);
+  console.log(`  Active model placeholders: unknown=${provenance.activeUnknownModelIdRows}, default=${provenance.activeDefaultModelIdRows}`);
+
+  // 10. Search smoke test
   console.log('\n--- Search Smoke Test ---');
   const searchResults = await memoryManager.searchMemories({ query: 'sqlite database', limit: 3 });
   console.log(`  Query "sqlite database": ${searchResults.length} results`);
   for (const r of searchResults.slice(0, 2)) console.log(`    #${r.memory.id} score=${r.score.toFixed(2)} | ${r.memory.content.substring(0, 80).replace(/\n/g, ' ')}`);
 
-  // 10. Embedding generation test
+  // 11. Embedding generation test
   console.log('\n--- Embedding Generation Test ---');
   try {
     const vec = await embeddings.generate('test embedding generation');
