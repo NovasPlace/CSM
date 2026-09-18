@@ -67,6 +67,7 @@ async function main() {
   console.log('\n--- Memory Provenance ---');
   const provenance = await auditMemoryProvenance(pool, database.dialect);
   console.log(`  Complete effective provenance: ${provenance.completeProvenance} / ${provenance.totalMemories}`);
+  console.log(`  Active complete provenance: ${provenance.activeCompleteProvenance} / ${provenance.activeMemories}`);
   console.log(`  Rows with any gap: ${provenance.rowsWithAnyGap} total, ${provenance.activeRowsWithAnyGap} active`);
   for (const field of REQUIRED_MEMORY_PROVENANCE_FIELDS) {
     const suffix = field === 'source_session_id' ? ' (after session_id fallback)' : '';
